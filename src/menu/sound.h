@@ -28,6 +28,20 @@ typedef enum {
     SFX_SETTING, /**< Sound effect for changing a setting */
 } sound_effect_t;
 
+/** @brief Order in which background music tracks from the SD card play. */
+typedef enum {
+    SOUND_BGM_ORDER_SHUFFLE = 0,    /**< Random track each time */
+    SOUND_BGM_ORDER_IN_ORDER = 1,   /**< Alphabetical, then loop the list */
+    SOUND_BGM_ORDER_REPEAT_ONE = 2, /**< Loop the current track */
+} sound_bgm_order_t;
+
+/** @brief Background music volume levels. */
+typedef enum {
+    SOUND_BGM_VOLUME_LOW = 0,       /**< The stock menu's level */
+    SOUND_BGM_VOLUME_MEDIUM = 1,
+    SOUND_BGM_VOLUME_HIGH = 2,
+} sound_bgm_volume_t;
+
 /**
  * @brief Initialize the default sound system.
  * 
@@ -74,6 +88,40 @@ void sound_init_bgm(void);
  * @param enable True to enable background music, false to disable.
  */
 void sound_use_bgm(bool enable);
+
+/**
+ * @brief Use the .wav64 files in a folder as the background music playlist.
+ *
+ * Files that are not playable wav64 (wrong header or compression) are skipped.
+ * With no playable files, the built-in track is used.
+ *
+ * @param path Folder to scan, e.g. "sd:/menu/music".
+ */
+void sound_bgm_load_folder(char *path);
+
+/**
+ * @brief Set the playlist order.
+ *
+ * @param order One of sound_bgm_order_t.
+ */
+void sound_bgm_set_order(int order);
+
+/**
+ * @brief Set the background music volume.
+ *
+ * @param level One of sound_bgm_volume_t.
+ */
+void sound_bgm_set_volume(int level);
+
+/**
+ * @brief Skip to the next track in the playlist.
+ */
+void sound_bgm_next(void);
+
+/**
+ * @brief Number of playable tracks found in the music folder.
+ */
+int sound_bgm_track_count(void);
 
 /**
  * @brief Play a specified sound effect.

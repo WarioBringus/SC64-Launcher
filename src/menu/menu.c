@@ -32,6 +32,7 @@
 #define MENU_CUSTOM_FONT_FILE       "custom.font64"
 #define MENU_CUSTOM_BGM_FILE        "custom.wav64"
 #define MENU_ROM_LOAD_HISTORY_FILE  "history.ini"
+#define MENU_MUSIC_DIRECTORY        "music"
 
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
@@ -90,6 +91,14 @@ static void menu_init (boot_params_t *boot_params) {
     bookkeeping_load(&menu->bookkeeping);
     menu->load.load_history_id = -1;
     menu->load.load_favorite_id = -1;
+    path_pop(path);
+
+    // Background music: tracks are the .wav64 files in /menu/music (created if missing).
+    path_push(path, MENU_MUSIC_DIRECTORY);
+    directory_create(path_get(path));
+    sound_bgm_set_order(menu->settings.bgm_order);
+    sound_bgm_set_volume(menu->settings.bgm_volume);
+    sound_bgm_load_folder(path_get(path));
     path_pop(path);
 
     // Force interlacing off in VI settings for TVs and other devices that struggle with interlaced video input.

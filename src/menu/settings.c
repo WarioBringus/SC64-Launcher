@@ -36,6 +36,8 @@ static settings_t init = {
     .wrap_file_list_scrolling = false,
     .rumble_enabled = false,
     .theme = "Castle Sky",
+    .bgm_order = 0,
+    .bgm_volume = 1,
     /* Launcher */
     .launcher_enabled = true,
     .launcher_library_root = "/",
@@ -79,6 +81,14 @@ void settings_load (settings_t *settings) {
     settings->bgm_enabled = ini_get_bool(ini, "menu", "bgm_enabled", init.bgm_enabled);
     free(settings->theme);
     settings->theme = strdup(ini_get_string(ini, "menu", "theme", init.theme));
+    settings->bgm_order = ini_get_int(ini, "menu", "bgm_order", init.bgm_order);
+    if (settings->bgm_order < 0 || settings->bgm_order > 2) {
+        settings->bgm_order = init.bgm_order;
+    }
+    settings->bgm_volume = ini_get_int(ini, "menu", "bgm_volume", init.bgm_volume);
+    if (settings->bgm_volume < 0 || settings->bgm_volume > 2) {
+        settings->bgm_volume = init.bgm_volume;
+    }
 
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     settings->rom_autoload_enabled = ini_get_bool(ini, "menu", "autoload_rom_enabled", init.rom_autoload_enabled);
@@ -133,6 +143,8 @@ void settings_save (settings_t *settings) {
     ini_set_bool(ini, "menu", "soundfx_enabled", settings->soundfx_enabled);
     ini_set_bool(ini, "menu", "bgm_enabled", settings->bgm_enabled);
     ini_set_string(ini, "menu", "theme", settings->theme);
+    ini_set_int(ini, "menu", "bgm_order", settings->bgm_order);
+    ini_set_int(ini, "menu", "bgm_volume", settings->bgm_volume);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     ini_set_bool(ini, "menu", "autoload_rom_enabled", settings->rom_autoload_enabled);
     ini_set_string(ini, "autoload", "rom_path", settings->rom_autoload_path);

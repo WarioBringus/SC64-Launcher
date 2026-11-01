@@ -66,6 +66,24 @@ static void set_bgm_enabled_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_bgm_order_type (menu_t *menu, void *arg) {
+    menu->settings.bgm_order = (int)(uintptr_t)(arg);
+    sound_bgm_set_order(menu->settings.bgm_order);
+    settings_save(&menu->settings);
+}
+
+static void set_bgm_volume_type (menu_t *menu, void *arg) {
+    menu->settings.bgm_volume = (int)(uintptr_t)(arg);
+    sound_bgm_set_volume(menu->settings.bgm_volume);
+    settings_save(&menu->settings);
+}
+
+static void next_bgm_track (menu_t *menu, void *arg) {
+    (void)arg;
+    (void)menu;
+    sound_bgm_next();
+}
+
 static void set_pal60_type (menu_t *menu, void *arg) {
     bool pal60_try_enable = (bool)(uintptr_t)(arg);
     tv_type_t tv_type = get_tv_type();
@@ -237,6 +255,32 @@ static component_context_menu_t set_bgm_enabled_type_context_menu = {
     .list = {
         {.text = "On", .action = set_bgm_enabled_type, .arg = (void *)(uintptr_t)(true) },
         {.text = "Off", .action = set_bgm_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_bgm_order_current_selection (menu_t *menu) {
+    return menu->settings.bgm_order;
+}
+
+static component_context_menu_t set_bgm_order_context_menu = {
+    .get_default_selection = get_bgm_order_current_selection,
+    .list = {
+        {.text = "Shuffle", .action = set_bgm_order_type, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_SHUFFLE) },
+        {.text = "In Order", .action = set_bgm_order_type, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_IN_ORDER) },
+        {.text = "Repeat One", .action = set_bgm_order_type, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_REPEAT_ONE) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_bgm_volume_current_selection (menu_t *menu) {
+    return menu->settings.bgm_volume;
+}
+
+static component_context_menu_t set_bgm_volume_context_menu = {
+    .get_default_selection = get_bgm_volume_current_selection,
+    .list = {
+        {.text = "Low", .action = set_bgm_volume_type, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_LOW) },
+        {.text = "Medium", .action = set_bgm_volume_type, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_MEDIUM) },
+        {.text = "High", .action = set_bgm_volume_type, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_HIGH) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -499,6 +543,9 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Show Hidden Files", .submenu = &set_protected_entries_type_context_menu },
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
     { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
+    { .text = "Music Order", .submenu = &set_bgm_order_context_menu },
+    { .text = "Music Volume", .submenu = &set_bgm_volume_context_menu },
+    { .text = "Next Track", .action = next_bgm_track },
     { .text = "Use Saves Folder", .submenu = &set_use_saves_folder_type_context_menu },
     { .text = "Show Saves Folder", .submenu = &set_show_saves_folder_type_context_menu },
     { .text = "Show Save Files", .submenu = &set_show_save_files_type_context_menu },

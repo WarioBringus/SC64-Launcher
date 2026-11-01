@@ -77,6 +77,12 @@ typedef struct {
     /** @brief Name of the color theme (see theme.c) */
     char *theme;
 
+    /** @brief Background music playlist order (sound_bgm_order_t) */
+    int bgm_order;
+
+    /** @brief Background music volume (sound_bgm_volume_t) */
+    int bgm_volume;
+
     /** @brief Use the console-style launcher instead of the file browser */
     bool launcher_enabled;
 
