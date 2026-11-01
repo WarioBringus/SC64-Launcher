@@ -111,7 +111,12 @@ void launcher_draw_cover_scaled(surface_t *image, int x, int y, int w, int h);
  */
 void launcher_leave(menu_t *menu, menu_mode_t next_mode);
 
-/** @brief Open the Start menu (file browser, settings, info screens). */
+/**
+ * @brief Switch to a theme now and save it: re-colors fonts and re-tints any background image.
+ */
+void launcher_apply_theme(menu_t *menu, int index);
+
+/** @brief Open the Start menu (quick settings, file browser, settings, info screens). */
 void launcher_menu_show(void);
 
 /** @brief Handle input for the Start menu. Returns true while it is open. */

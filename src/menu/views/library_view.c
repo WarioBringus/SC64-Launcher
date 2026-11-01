@@ -179,6 +179,16 @@ static void process (menu_t *menu) {
         return;
     }
 
+    if (menu->actions.go_fast && (menu->actions.go_left || menu->actions.go_right)) {
+        int size = menu->settings.launcher_tile_size + (menu->actions.go_right ? 1 : -1);
+        if (size >= LAUNCHER_TILE_SMALL && size <= LAUNCHER_TILE_LARGE) {
+            menu->settings.launcher_tile_size = size;
+            settings_save(&menu->settings);
+            sound_play_effect(SFX_SETTING);
+        }
+        return;
+    }
+
     grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
     int step = menu->actions.go_fast ? (g.cols * g.rows) : g.cols;
 

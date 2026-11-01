@@ -10,7 +10,10 @@
 #include <string.h>
 #include <time.h>
 
+#include <stdlib.h>
+
 #include "../launcher_ui.h"
+#include "../settings.h"
 #include "../sound.h"
 #include "../theme.h"
 #include "../ui_components.h"
@@ -168,8 +171,106 @@ static void open_file_browser (menu_t *menu, void *arg) {
     menu->next_mode = MENU_MODE_BROWSER;
 }
 
+void launcher_apply_theme (menu_t *menu, int index) {
+    theme_set(index);
+    fonts_apply_theme();
+    if (ui_components_background_get_image()) {
+        // The background is tinted with the theme when loaded, so reload it from cache.
+        ui_components_background_image_free_only();
+        ui_components_background_reload();
+    }
+    free(menu->settings.theme);
+    menu->settings.theme = strdup(theme_current()->name);
+    settings_save(&menu->settings);
+}
+
+static void set_theme (menu_t *menu, void *arg) {
+    launcher_apply_theme(menu, (int)(uintptr_t)(arg));
+}
+
+static int get_theme_selection (menu_t *menu) {
+    return theme_current_index();
+}
+
+// Labels are filled from theme.c in launcher_menu_init.
+static component_context_menu_t theme_menu = {
+    .get_default_selection = get_theme_selection,
+    .list = {
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(0) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(1) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(2) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(3) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(4) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(5) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(6) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(7) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(8) },
+        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(9) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static void set_tile_size (menu_t *menu, void *arg) {
+    menu->settings.launcher_tile_size = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_tile_size_selection (menu_t *menu) {
+    return menu->settings.launcher_tile_size;
+}
+
+static component_context_menu_t tile_size_menu = {
+    .get_default_selection = get_tile_size_selection,
+    .list = {
+        { .text = "Small", .action = set_tile_size, .arg = (void *)(uintptr_t)(LAUNCHER_TILE_SMALL) },
+        { .text = "Medium", .action = set_tile_size, .arg = (void *)(uintptr_t)(LAUNCHER_TILE_MEDIUM) },
+        { .text = "Large", .action = set_tile_size, .arg = (void *)(uintptr_t)(LAUNCHER_TILE_LARGE) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static void set_layout (menu_t *menu, void *arg) {
+    menu->settings.launcher_layout = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_layout_selection (menu_t *menu) {
+    return menu->settings.launcher_layout;
+}
+
+static component_context_menu_t layout_menu = {
+    .get_default_selection = get_layout_selection,
+    .list = {
+        { .text = "Grid", .action = set_layout, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_GRID) },
+        { .text = "Carousel", .action = set_layout, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_CAROUSEL) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static void set_titles (menu_t *menu, void *arg) {
+    menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_titles_selection (menu_t *menu) {
+    return menu->settings.launcher_titles_highlight_only ? 0 : 1;
+}
+
+static component_context_menu_t titles_menu = {
+    .get_default_selection = get_titles_selection,
+    .list = {
+        { .text = "Highlighted only", .action = set_titles, .arg = (void *)(uintptr_t)(true) },
+        { .text = "Always", .action = set_titles, .arg = (void *)(uintptr_t)(false) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t start_menu = {
     .list = {
+        { .text = "Theme", .submenu = &theme_menu },
+        { .text = "Tile size", .submenu = &tile_size_menu },
+        { .text = "Layout", .submenu = &layout_menu },
+        { .text = "Game titles", .submenu = &titles_menu },
         { .text = "File browser", .action = open_file_browser },
         { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Menu settings", .action = open_screen, .arg = (void *)(MENU_MODE_SETTINGS_EDITOR) },
@@ -182,6 +283,10 @@ static component_context_menu_t start_menu = {
 };
 
 void launcher_menu_init (void) {
+    for (int i = 0; i < 10; i++) {
+        const theme_t *theme = theme_at(i);
+        theme_menu.list[i].text = theme ? theme->name : "-";
+    }
     ui_components_context_menu_init(&start_menu);
 }
 

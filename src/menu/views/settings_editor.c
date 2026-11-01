@@ -2,6 +2,7 @@
 #include "../sound.h"
 #include "../settings.h"
 #include "../fonts.h"
+#include "../launcher_ui.h"
 #include "../theme.h"
 #include "views.h"
 
@@ -189,17 +190,7 @@ static void set_launcher_tile_size_type (menu_t *menu, void *arg) {
 }
 
 static void set_theme_type (menu_t *menu, void *arg) {
-    int index = (int)(uintptr_t)(arg);
-    theme_set(index);
-    fonts_apply_theme();
-    if (ui_components_background_get_image()) {
-        // The background is tinted with the theme when loaded, so reload it from cache.
-        ui_components_background_image_free_only();
-        ui_components_background_reload();
-    }
-    free(menu->settings.theme);
-    menu->settings.theme = strdup(theme_current()->name);
-    settings_save(&menu->settings);
+    launcher_apply_theme(menu, (int)(uintptr_t)(arg));
 }
 
 static void remove_background_image (menu_t *menu, void *arg) {
