@@ -74,6 +74,9 @@ typedef struct {
     /** @brief Enable rumble feedback within the menu */
     bool rumble_enabled;
 
+    /** @brief Name of the color theme (see theme.c) */
+    char *theme;
+
     /** @brief Use the console-style launcher instead of the file browser */
     bool launcher_enabled;
 

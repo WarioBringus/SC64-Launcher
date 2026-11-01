@@ -1,10 +1,10 @@
 /**
  * @file theme.h
- * @brief Menu color theme.
+ * @brief Menu color themes.
  * @ingroup menu
  *
- * Every color used by the menu is defined here, so the whole look can be
- * swapped by editing this one file. All values are RGBA8888.
+ * Every color used by the menu comes from the active theme. The palettes
+ * live in theme.c; add or tweak one there. All values are RGBA8888.
  */
 
 #ifndef THEME_H__
@@ -12,37 +12,78 @@
 
 #include <libdragon.h>
 
-/* Backgrounds */
-#define THEME_BACKGROUND_EMPTY          RGBA32(0x00, 0x00, 0x00, 0xFF) /**< Screen color when no background image is set */
-#define THEME_BACKGROUND_OVERLAY        RGBA32(0x00, 0x00, 0x00, 0xA0) /**< Tint drawn over the background image */
-#define THEME_DIALOG_BG                 RGBA32(0x00, 0x00, 0x00, 0xFF) /**< Dialog and message box fill */
-#define THEME_FAULT_BG                  RGBA32(0x7F, 0x00, 0x00, 0xFF) /**< Unrecoverable error screen */
+/** @brief One color palette. */
+typedef struct {
+    const char *name;       /**< Name shown in settings and saved in config.ini */
 
-/* Lines and highlights */
-#define THEME_BORDER                    RGBA32(0xFF, 0xFF, 0xFF, 0xFF) /**< UI borders */
-#define THEME_HIGHLIGHT                 RGBA32(0x7F, 0x7F, 0x7F, 0xFF) /**< Selected row in lists and context menus */
+    color_t bg;             /**< Screen background */
+    color_t panel;          /**< Cards, dialogs, empty cover tiles */
+    color_t line;           /**< Borders and separators */
+    color_t highlight;      /**< Selected row behind text */
+    color_t accent;         /**< Selection ring, progress fill */
+    color_t accent2;        /**< Active tab, secondary accent */
+    color_t on_accent;      /**< Text drawn on the accent color */
 
-/* Progress, scroll and loading */
-#define THEME_PROGRESSBAR_BG            RGBA32(0x00, 0x00, 0x00, 0xFF) /**< Progress bar track */
-#define THEME_PROGRESSBAR_DONE          RGBA32(0x3B, 0x7C, 0xF5, 0xFF) /**< Progress bar fill */
-#define THEME_SCROLLBAR_BG              RGBA32(0x3F, 0x3F, 0x3F, 0xFF) /**< Scrollbar track */
-#define THEME_SCROLLBAR_INACTIVE        RGBA32(0x5F, 0x5F, 0x5F, 0xFF) /**< Scrollbar thumb when everything fits */
-#define THEME_SCROLLBAR_POSITION        RGBA32(0x7F, 0x7F, 0x7F, 0xFF) /**< Scrollbar thumb */
-#define THEME_BOXART_LOADING            RGBA32(0x00, 0x00, 0x00, 0xFF) /**< Placeholder while box art loads */
+    color_t text;           /**< Main text */
+    color_t text_muted;     /**< Secondary text, hints */
+    color_t text_green;     /**< STL_GREEN */
+    color_t text_blue;      /**< STL_BLUE */
+    color_t text_yellow;    /**< STL_YELLOW */
+    color_t text_orange;    /**< STL_ORANGE */
+    color_t text_red;       /**< STL_RED */
+} theme_t;
 
-/* Tabs */
-#define THEME_TAB_INACTIVE_BORDER       RGBA32(0x5F, 0x5F, 0x5F, 0xFF) /**< Inactive tab outline */
-#define THEME_TAB_ACTIVE_BORDER         RGBA32(0xFF, 0xFF, 0xFF, 0xFF) /**< Active tab outline */
-#define THEME_TAB_INACTIVE_BG           RGBA32(0x3F, 0x3F, 0x3F, 0xFF) /**< Inactive tab fill */
-#define THEME_TAB_ACTIVE_BG             RGBA32(0x6F, 0x6F, 0x6F, 0xFF) /**< Active tab fill */
+/** @brief Number of built-in themes. */
+int theme_count(void);
 
-/* Text styles (see menu_font_style_t) */
-#define THEME_TEXT_DEFAULT              RGBA32(0xFF, 0xFF, 0xFF, 0xFF) /**< STL_DEFAULT */
-#define THEME_TEXT_GREEN                RGBA32(0x70, 0xFF, 0x70, 0xFF) /**< STL_GREEN */
-#define THEME_TEXT_BLUE                 RGBA32(0x70, 0xBC, 0xFF, 0xFF) /**< STL_BLUE */
-#define THEME_TEXT_YELLOW               RGBA32(0xFF, 0xFF, 0x70, 0xFF) /**< STL_YELLOW */
-#define THEME_TEXT_ORANGE               RGBA32(0xFF, 0x99, 0x00, 0xFF) /**< STL_ORANGE */
-#define THEME_TEXT_RED                  RGBA32(0xFF, 0x40, 0x40, 0xFF) /**< STL_RED */
-#define THEME_TEXT_GRAY                 RGBA32(0xA0, 0xA0, 0xA0, 0xFF) /**< STL_GRAY */
+/** @brief Theme by index, or NULL when out of range. */
+const theme_t *theme_at(int index);
+
+/** @brief Index of the theme with this name, or 0 (the default) when not found. */
+int theme_find(const char *name);
+
+/** @brief Make a theme active. Out-of-range indexes select the default. */
+void theme_set(int index);
+
+/** @brief Index of the active theme. */
+int theme_current_index(void);
+
+/** @brief The active theme. */
+const theme_t *theme_current(void);
+
+/** @brief A color with its alpha replaced. */
+static inline color_t theme_with_alpha(color_t c, uint8_t a) {
+    c.a = a;
+    return c;
+}
+
+/* Roles used by the stock menu screens, mapped onto the active theme. */
+#define THEME_BACKGROUND_EMPTY          (theme_current()->bg)
+#define THEME_BACKGROUND_OVERLAY        (theme_with_alpha(theme_current()->bg, 0xA0))
+#define THEME_DIALOG_BG                 (theme_current()->panel)
+#define THEME_FAULT_BG                  RGBA32(0x7F, 0x00, 0x00, 0xFF)
+
+#define THEME_BORDER                    (theme_current()->line)
+#define THEME_HIGHLIGHT                 (theme_current()->highlight)
+
+#define THEME_PROGRESSBAR_BG            (theme_current()->panel)
+#define THEME_PROGRESSBAR_DONE          (theme_current()->accent)
+#define THEME_SCROLLBAR_BG              (theme_current()->panel)
+#define THEME_SCROLLBAR_INACTIVE        (theme_current()->line)
+#define THEME_SCROLLBAR_POSITION        (theme_current()->text_muted)
+#define THEME_BOXART_LOADING            (theme_current()->panel)
+
+#define THEME_TAB_INACTIVE_BORDER       (theme_current()->line)
+#define THEME_TAB_ACTIVE_BORDER         (theme_current()->accent2)
+#define THEME_TAB_INACTIVE_BG           (theme_current()->panel)
+#define THEME_TAB_ACTIVE_BG             (theme_current()->highlight)
+
+#define THEME_TEXT_DEFAULT              (theme_current()->text)
+#define THEME_TEXT_GREEN                (theme_current()->text_green)
+#define THEME_TEXT_BLUE                 (theme_current()->text_blue)
+#define THEME_TEXT_YELLOW               (theme_current()->text_yellow)
+#define THEME_TEXT_ORANGE               (theme_current()->text_orange)
+#define THEME_TEXT_RED                  (theme_current()->text_red)
+#define THEME_TEXT_GRAY                 (theme_current()->text_muted)
 
 #endif /* THEME_H__ */

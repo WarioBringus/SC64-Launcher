@@ -22,6 +22,7 @@
 #include "png_decoder.h"
 #include "settings.h"
 #include "sound.h"
+#include "theme.h"
 #include "usb_comm.h"
 #include "utils/fs.h"
 #include "views/views.h"
@@ -81,6 +82,7 @@ static void menu_init (boot_params_t *boot_params) {
     path_push(path, MENU_SETTINGS_FILE);
     settings_init(path_get(path));
     settings_load(&menu->settings);
+    theme_set(theme_find(menu->settings.theme));
     path_pop(path);
 
     path_push(path, MENU_ROM_LOAD_HISTORY_FILE);

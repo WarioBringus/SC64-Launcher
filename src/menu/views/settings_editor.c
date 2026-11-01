@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include "../sound.h"
 #include "../settings.h"
+#include "../fonts.h"
+#include "../theme.h"
 #include "views.h"
 
 static bool show_message_reset_settings = false;
@@ -165,6 +167,20 @@ static void set_launcher_layout_type (menu_t *menu, void *arg) {
 
 static void set_launcher_tile_size_type (menu_t *menu, void *arg) {
     menu->settings.launcher_tile_size = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_theme_type (menu_t *menu, void *arg) {
+    int index = (int)(uintptr_t)(arg);
+    theme_set(index);
+    fonts_apply_theme();
+    if (ui_components_background_get_image()) {
+        // The background is tinted with the theme when loaded, so reload it from cache.
+        ui_components_background_image_free_only();
+        ui_components_background_reload();
+    }
+    free(menu->settings.theme);
+    menu->settings.theme = strdup(theme_current()->name);
     settings_save(&menu->settings);
 }
 
@@ -457,7 +473,29 @@ static component_context_menu_t launcher_context_menu = { .list = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_theme_current_selection (menu_t *menu) {
+    return theme_current_index();
+}
+
+// Labels are filled from theme.c in view_settings_init.
+static component_context_menu_t set_theme_context_menu = {
+    .get_default_selection = get_theme_current_selection,
+    .list = {
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(0) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(1) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(2) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(3) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(4) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(5) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(6) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(7) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(8) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(9) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t options_context_menu = { .list = {
+    { .text = "Theme", .submenu = &set_theme_context_menu },
     { .text = "Show Hidden Files", .submenu = &set_protected_entries_type_context_menu },
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
     { .text = "Background Music", .submenu = &set_bgm_enabled_type_context_menu },
@@ -606,6 +644,10 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_settings_init (menu_t *menu) {
+    for (int i = 0; i < 10; i++) {
+        const theme_t *theme = theme_at(i);
+        set_theme_context_menu.list[i].text = theme ? theme->name : "-";
+    }
     ui_components_context_menu_init(&options_context_menu);
 
 }

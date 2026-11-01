@@ -43,4 +43,9 @@ typedef enum {
  */
 void fonts_init(char *custom_font_path);
 
+/**
+ * @brief Re-color the font styles from the active theme.
+ */
+void fonts_apply_theme(void);
+
 #endif /* FONTS_H__ */
