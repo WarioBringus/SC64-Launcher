@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "views.h"
 #include "../launcher_ui.h"
@@ -53,6 +54,7 @@ static const launcher_hint_t hints_empty[] = {
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
 static int category_index = 0;
+static bool category_restored = false;
 static int selections[MAX_REMEMBERED_CATEGORIES];
 static int top_row = 0;
 static float carousel_position = 0.0f;
@@ -100,7 +102,7 @@ static int *current_selection (void) {
     return &selections[category_index % MAX_REMEMBERED_CATEGORIES];
 }
 
-static void switch_category (int delta) {
+static void switch_category (menu_t *menu, int delta) {
     int count = library_category_count();
     if (count < 2) {
         return;
@@ -109,6 +111,14 @@ static void switch_category (int delta) {
     top_row = 0;
     carousel_position = (float)(*current_selection());
     sound_play_effect(SFX_CURSOR);
+
+    // Remember it, so the library opens here next time.
+    const char *name = library_category_name(category_index);
+    if (name) {
+        free(menu->settings.launcher_category);
+        menu->settings.launcher_category = strdup(name);
+        settings_save(&menu->settings);
+    }
 }
 
 static void launch (menu_t *menu, library_game_t *game) {
@@ -165,11 +175,11 @@ static void process (menu_t *menu) {
         return;
     }
     if (menu->actions.shoulder_l) {
-        switch_category(-1);
+        switch_category(menu, -1);
         return;
     }
     if (menu->actions.shoulder_r) {
-        switch_category(1);
+        switch_category(menu, 1);
         return;
     }
 
@@ -256,6 +266,57 @@ static void draw_category_tabs (void) {
     }
 }
 
+/**
+ * @brief The first game shown when returning to a category in the grid (top_row resets on switch).
+ */
+static int grid_first_visible (grid_geometry_t *g, int sel) {
+    int row = sel / g->cols;
+    int top = (row >= g->rows) ? row - g->rows + 1 : 0;
+    return top * g->cols;
+}
+
+/**
+ * @brief Load the covers a neighbouring category will show first, so switching to it is instant.
+ */
+static void preload_category (menu_t *menu, int index, int *lookups_left) {
+    if (index == category_index || !library_category_is_quick(index)) {
+        return;
+    }
+    library_category_t *c = library_category(index);
+    if (!c || c->count == 0) {
+        return;
+    }
+    int sel = selections[index % MAX_REMEMBERED_CATEGORIES];
+    if (sel >= c->count) {
+        sel = c->count - 1;
+    }
+    bool pending;
+    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+        int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
+        int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+        for (int i = sel - 2; i <= sel + 2; i++) {
+            if (i >= 0 && i < c->count) {
+                game_cover(menu, &c->games[i], cw, ch, lookups_left, &pending);
+            }
+        }
+        return;
+    }
+    grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
+    int first = grid_first_visible(&g, sel);
+    for (int i = first; i < first + g.cols * g.rows && i < c->count; i++) {
+        game_cover(menu, &c->games[i], g.w, g.h, lookups_left, &pending);
+    }
+}
+
+static void preload_neighbours (menu_t *menu, int *lookups_left) {
+    int count = library_category_count();
+    if (count < 2) {
+        return;
+    }
+    preload_category(menu, (category_index + 1) % count, lookups_left);
+    preload_category(menu, (category_index + count - 1) % count, lookups_left);
+}
+
 static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
     bool highlight_only = menu->settings.launcher_titles_highlight_only;
@@ -305,8 +366,15 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     }
 
     // Preload the row below so scrolling down shows covers straight away.
-    for (int i = last; i < last + g.cols && i < c->count; i++) {
+    bool any_pending = false;
+    for (int i = first; i < last + g.cols && i < c->count; i++) {
         game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
+        any_pending |= pending;
+    }
+
+    // Once this screen is complete, get the categories either side ready.
+    if (!any_pending) {
+        preload_neighbours(menu, &lookups_left);
     }
 }
 
@@ -376,6 +444,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 
     char position[64];
     snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->count);
+    if (!pending && carousel_position == (float)sel) {
+        preload_neighbours(menu, &lookups_left);
+    }
+
     launcher_title(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
     launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y + 32, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, position);
 }
@@ -426,6 +498,13 @@ static void draw (menu_t *menu, surface_t *d) {
 void view_library_init (menu_t *menu) {
     library_init(menu);
     launcher_menu_init();
+    if (!category_restored) {
+        int found = library_category_find(menu->settings.launcher_category);
+        if (found >= 0) {
+            category_index = found;
+        }
+        category_restored = true;
+    }
     if (category_index >= library_category_count()) {
         category_index = 0;
         top_row = 0;
@@ -434,6 +513,12 @@ void view_library_init (menu_t *menu) {
 }
 
 void view_library_display (menu_t *menu, surface_t *display) {
+    // "Rescan folders" in the Start menu can change the number of categories.
+    if (category_index >= library_category_count()) {
+        category_index = 0;
+        top_row = 0;
+    }
+
     process(menu);
 
     draw(menu, display);

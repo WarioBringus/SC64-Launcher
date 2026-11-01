@@ -12,6 +12,7 @@
 #include <time.h>
 
 #include "../launcher_ui.h"
+#include "../library.h"
 #include "../settings.h"
 #include "../sound.h"
 #include "../theme.h"
@@ -421,12 +422,19 @@ static component_context_menu_t titles_menu = {
     }
 };
 
+static void rescan_folders (menu_t *menu, void *arg) {
+    (void)arg;
+    launcher_covers_reset();
+    library_rescan(menu);
+}
+
 static component_context_menu_t start_menu = {
     .list = {
         { .text = "Theme", .submenu = &theme_menu },
         { .text = "Tile size", .submenu = &tile_size_menu },
         { .text = "Layout", .submenu = &layout_menu },
         { .text = "Game titles", .submenu = &titles_menu },
+        { .text = "Rescan folders", .action = rescan_folders },
         { .text = "File browser", .action = open_file_browser },
         { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Menu settings", .action = open_screen, .arg = (void *)(MENU_MODE_SETTINGS_EDITOR) },

@@ -54,6 +54,7 @@ static int index_cover_count = 0;
 static index_rom_t *index_roms = NULL;
 static int index_rom_count = 0;
 static bool index_tried = false;
+static bool index_lists_disabled = false;
 
 
 static int index_rom_cover (path_t *rom_path);
@@ -408,7 +409,65 @@ static bool detect_portrait (library_category_t *c) {
     return sampled > 0 && (japan * 2 > sampled);
 }
 
+/**
+ * @brief Make the full path of an indexed cover.
+ */
+static char *index_cover_path (int id) {
+    path_t *path = path_init(storage_prefix, "menu");
+    path_push(path, (char *)index_covers[id]);
+    char *full = strdup(path_get(path));
+    path_free(path);
+    return full;
+}
+
+/**
+ * @brief List a folder's games from the cover index: no SD card access, covers already known.
+ */
+static void load_index_games (library_category_t *c) {
+    int first = (c->index_first >= 0) ? c->index_first : 0;
+    int last = (c->index_first >= 0) ? c->index_first + c->index_count : index_rom_count;
+    c->games = malloc(((last - first) > 0 ? (last - first) : 1) * sizeof(library_game_t));
+    c->count = 0;
+    int japan = 0;
+    int with_cover = 0;
+
+    for (int k = first; k < last; k++) {
+        const char *rel = index_roms[k].rom;
+        const char *slash = strchr(rel, '/');
+        if (c->index_first < 0 && slash) {
+            continue;   // The root category takes only files directly in the root.
+        }
+        const char *file = slash ? slash + 1 : rel;
+        library_game_t *g = &c->games[c->count++];
+        memset(g, 0, sizeof(*g));
+        g->file_name = strdup(file);
+        g->title = title_from_file_name(file);
+        g->directory = c->directory;
+
+        int id = index_roms[k].cover;
+        if (id >= 0 && id < index_cover_count) {
+            g->cover_path = index_cover_path(id);
+            g->cover_state = LIBRARY_COVER_FOUND;
+            // metadata/C/I/D/J/... is a Japanese box, which is portrait.
+            const char *cover = index_covers[id];
+            with_cover++;
+            if (strncmp(cover, "metadata/", 9) == 0 && strlen(cover) > 16 && cover[15] == 'J' && cover[16] == '/') {
+                japan++;
+            }
+        }
+    }
+
+    qsort(c->games, c->count, sizeof(library_game_t), compare_games);
+    c->portrait = with_cover > 0 && (japan * 2 > with_cover);
+    c->loaded = true;
+}
+
 static void load_folder_games (library_category_t *c) {
+    if (c->from_index) {
+        load_index_games(c);
+        return;
+    }
+
     int capacity = 64;
     c->games = malloc(capacity * sizeof(library_game_t));
     c->count = 0;
@@ -451,8 +510,11 @@ static void load_all_games (void) {
         for (int j = 0; j < folders[i].count; j++) {
             library_game_t *g = &all_games.games[all_games.count++];
             *g = folders[i].games[j];
-            g->cover_state = LIBRARY_COVER_UNKNOWN;
-            g->cover_path = NULL;
+            // Each list owns its cover paths.
+            g->cover_path = g->cover_path ? strdup(g->cover_path) : NULL;
+            if (g->cover_state == LIBRARY_COVER_FOUND && !g->cover_path) {
+                g->cover_state = LIBRARY_COVER_UNKNOWN;
+            }
         }
     }
     qsort(all_games.games, all_games.count, sizeof(library_game_t), compare_games);
@@ -548,6 +610,69 @@ static void scan_folders (path_t *root) {
     }
 }
 
+/**
+ * @brief Build the categories from the cover index (folders are the first part of each ROM path).
+ *
+ * @return false when there is no usable index.
+ */
+static bool scan_from_index (void) {
+    index_load();
+    if (!index_roms || index_rom_count == 0 || index_lists_disabled) {
+        return false;
+    }
+
+    int capacity = 8;
+    folders = malloc(capacity * sizeof(library_category_t));
+    folder_count = 0;
+    bool root_files = false;
+    path_t *root = path_init(storage_prefix, "/");
+
+    // Entries are sorted byte-wise, so each folder's ROMs are one contiguous run.
+    for (int i = 0; i < index_rom_count; ) {
+        const char *rel = index_roms[i].rom;
+        const char *slash = strchr(rel, '/');
+        if (!slash) {
+            root_files = true;
+            i++;
+            continue;
+        }
+        size_t len = slash - rel;
+        int j = i + 1;
+        while (j < index_rom_count && strncmp(index_roms[j].rom, rel, len + 1) == 0) {
+            j++;
+        }
+        if (folder_count == capacity) {
+            capacity *= 2;
+            folders = realloc(folders, capacity * sizeof(library_category_t));
+        }
+        library_category_t *c = &folders[folder_count++];
+        memset(c, 0, sizeof(*c));
+        c->name = malloc(len + 1);
+        memcpy(c->name, rel, len);
+        c->name[len] = '\0';
+        c->directory = path_clone_push(root, c->name);
+        c->from_index = true;
+        c->index_first = i;
+        c->index_count = j - i;
+        i = j;
+    }
+
+    qsort(folders, folder_count, sizeof(library_category_t), compare_categories);
+    strip_common_prefix();
+
+    if (root_files) {
+        folders = realloc(folders, (folder_count + 1) * sizeof(library_category_t));
+        library_category_t *c = &folders[folder_count++];
+        memset(c, 0, sizeof(*c));
+        c->name = strdup(ROOT_CATEGORY_NAME);
+        c->directory = path_clone(root);
+        c->from_index = true;
+        c->index_first = -1;
+    }
+    path_free(root);
+    return true;
+}
+
 void library_init (menu_t *menu) {
     const char *root_setting = menu->settings.launcher_library_root;
     if (!root_setting || root_setting[0] == '\0') {
@@ -564,9 +689,13 @@ void library_init (menu_t *menu) {
     categories_enabled = menu->settings.launcher_categories_enabled;
     scanned_root = strdup(root_setting);
 
-    path_t *root = path_init(storage_prefix, scanned_root);
-    scan_folders(root);
-    path_free(root);
+    // The cover index lists ROMs relative to the card root, so it only stands in for a root library.
+    bool indexed = (strcmp(scanned_root, "/") == 0) && scan_from_index();
+    if (!indexed) {
+        path_t *root = path_init(storage_prefix, scanned_root);
+        scan_folders(root);
+        path_free(root);
+    }
 
     memset(&all_games, 0, sizeof(all_games));
     all_games.name = ALL_GAMES_NAME;
@@ -585,6 +714,34 @@ const char *library_category_name (int index) {
         return (index == 0 && folder_count > 0) ? ALL_GAMES_NAME : NULL;
     }
     return (index >= 0 && index < folder_count) ? folders[index].name : NULL;
+}
+
+int library_category_find (const char *name) {
+    if (!name) {
+        return -1;
+    }
+    if (!categories_enabled) {
+        return folder_count > 0 ? 0 : -1;
+    }
+    for (int i = 0; i < folder_count; i++) {
+        if (strcasecmp(folders[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool library_category_is_quick (int index) {
+    if (!categories_enabled) {
+        return all_games.loaded;
+    }
+    return index >= 0 && index < folder_count && (folders[index].loaded || folders[index].from_index);
+}
+
+void library_rescan (menu_t *menu) {
+    index_lists_disabled = true;
+    scanned = false;
+    library_init(menu);
 }
 
 library_category_t *library_category (int index) {

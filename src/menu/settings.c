@@ -42,6 +42,7 @@ static settings_t init = {
     .launcher_enabled = true,
     .launcher_library_root = "/",
     .launcher_categories_enabled = true,
+    .launcher_category = "USA",
     .launcher_layout = LAUNCHER_LAYOUT_GRID,
     .launcher_tile_size = LAUNCHER_TILE_MEDIUM,
     .launcher_titles_highlight_only = true,
@@ -110,6 +111,8 @@ void settings_load (settings_t *settings) {
     free(settings->launcher_library_root);
     settings->launcher_library_root = strdup(ini_get_string(ini, "launcher", "library_root", init.launcher_library_root));
     settings->launcher_categories_enabled = ini_get_bool(ini, "launcher", "categories_enabled", init.launcher_categories_enabled);
+    free(settings->launcher_category);
+    settings->launcher_category = strdup(ini_get_string(ini, "launcher", "category", init.launcher_category));
     settings->launcher_layout = ini_get_int(ini, "launcher", "layout", init.launcher_layout);
     settings->launcher_tile_size = ini_get_int(ini, "launcher", "tile_size", init.launcher_tile_size);
     settings->launcher_titles_highlight_only = ini_get_bool(ini, "launcher", "titles_highlight_only", init.launcher_titles_highlight_only);
@@ -163,6 +166,7 @@ void settings_save (settings_t *settings) {
     ini_set_bool(ini, "launcher", "enabled", settings->launcher_enabled);
     ini_set_string(ini, "launcher", "library_root", settings->launcher_library_root);
     ini_set_bool(ini, "launcher", "categories_enabled", settings->launcher_categories_enabled);
+    ini_set_string(ini, "launcher", "category", settings->launcher_category);
     ini_set_int(ini, "launcher", "layout", settings->launcher_layout);
     ini_set_int(ini, "launcher", "tile_size", settings->launcher_tile_size);
     ini_set_bool(ini, "launcher", "titles_highlight_only", settings->launcher_titles_highlight_only);

@@ -92,6 +92,9 @@ typedef struct {
     /** @brief Show folders as switchable categories rather than one list */
     bool launcher_categories_enabled;
 
+    /** @brief Category the library opens on (the last one used) */
+    char *launcher_category;
+
     /** @brief Library layout (launcher_layout_t) */
     int launcher_layout;
 

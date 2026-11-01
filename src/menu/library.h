@@ -34,6 +34,9 @@ typedef struct {
     path_t *directory;          /**< Folder path */
     bool loaded;                /**< games[] has been listed */
     bool portrait;              /**< Covers in this folder are mostly portrait (Japanese boxes) */
+    bool from_index;            /**< Games come from the cover index rather than a folder listing */
+    int index_first;            /**< First index entry of this folder (-1: root files) */
+    int index_count;            /**< Number of index entries of this folder */
     library_game_t *games;
     int count;
 } library_category_t;
@@ -52,6 +55,19 @@ int library_category_count(void);
 
 /** @brief Name of a category without listing its games. */
 const char *library_category_name(int index);
+
+/** @brief Index of the category with this name (case-insensitive), or -1. */
+int library_category_find(const char *name);
+
+/** @brief Whether getting a category's games is quick (already listed, or listed from the index). */
+bool library_category_is_quick(int index);
+
+/**
+ * @brief Re-list the folders on the SD card, ignoring the cover index's game lists until reboot.
+ *
+ * For ROMs added since the cover tool last ran.
+ */
+void library_rescan(menu_t *menu);
 
 /**
  * @brief Get a category, listing its games on first use.
