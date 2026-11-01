@@ -31,6 +31,8 @@ typedef enum {
     STL_ORANGE,      /**< Orange font style */
     STL_RED,         /**< Red font style */
     STL_GRAY,        /**< Gray font style */
+    STL_ACCENT,      /**< Theme accent color */
+    STL_ON_ACCENT,   /**< Text drawn on the accent color */
 } menu_font_style_t;
 
 /**

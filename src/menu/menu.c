@@ -16,6 +16,8 @@
 #include "fonts.h"
 #include "background_music.h"
 #include "hdmi.h"
+#include "launcher_ui.h"
+#include "library.h"
 #include "menu_state.h"
 #include "menu.h"
 #include "audio_player.h"
@@ -91,6 +93,7 @@ static void menu_init (boot_params_t *boot_params) {
     bookkeeping_load(&menu->bookkeeping);
     menu->load.load_history_id = -1;
     menu->load.load_favorite_id = -1;
+    menu->launcher_return_mode = MENU_MODE_NONE;
     path_pop(path);
 
     // Background music: tracks are the .wav64 files in /menu/music (created if missing).
@@ -163,6 +166,10 @@ static void menu_deinit (menu_t *menu) {
 
     sound_deinit();
     
+    launcher_covers_reset();
+    library_free();
+    path_free(menu->load.launcher_rom_path);
+
     ui_components_background_free();
     ui_components_file_list_free();
     rspq_wait();  // Execute deferred callbacks (e.g., display list freeing) before closing RSPQ
@@ -222,8 +229,16 @@ static view_t menu_views[] = {
     { MENU_MODE_FAVORITE, view_favorite_init, view_favorite_display },
     { MENU_MODE_HISTORY, view_history_init, view_history_display },
     { MENU_MODE_DATEL_CODE_EDITOR, view_datel_code_editor_init, view_datel_code_editor_display },
-    { MENU_MODE_EXTRACT_FILE, view_extract_file_init, view_extract_file_display }
+    { MENU_MODE_EXTRACT_FILE, view_extract_file_init, view_extract_file_display },
+    { MENU_MODE_LIBRARY, view_library_init, view_library_display }
 };
+
+/**
+ * @brief Whether a mode is one of the launcher's own views.
+ */
+static bool menu_mode_is_launcher (menu_mode_t mode) {
+    return mode == MENU_MODE_LIBRARY;
+}
 
 /**
  * @brief Get the view structure for the specified menu mode.
@@ -268,6 +283,15 @@ void menu_run (boot_params_t *boot_params) {
             }
 
             while (menu->mode != menu->next_mode) {
+                // Screens opened from the launcher go back to it rather than to the file browser.
+                if (menu->next_mode == MENU_MODE_BROWSER && menu->launcher_return_mode != MENU_MODE_NONE && menu->settings.launcher_enabled) {
+                    menu->next_mode = menu->launcher_return_mode;
+                }
+                // Free cover images when leaving the launcher (other screens need the memory and the PNG decoder).
+                if (menu_mode_is_launcher(menu->mode) && !menu_mode_is_launcher(menu->next_mode)) {
+                    launcher_covers_reset();
+                }
+
                 menu->mode = menu->next_mode;
 
                 view_t *next_view = menu_get_view(menu->next_mode);

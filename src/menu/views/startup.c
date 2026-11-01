@@ -59,6 +59,9 @@ void view_startup_init (menu_t *menu) {
         settings_save(&menu->settings);
         menu->next_mode = MENU_MODE_CREDITS;
     }
+    else if (menu->settings.launcher_enabled) {
+        menu->next_mode = MENU_MODE_LIBRARY;
+    }
     else {
         menu->next_mode = MENU_MODE_BROWSER;
     }

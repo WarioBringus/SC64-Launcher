@@ -16,6 +16,8 @@ static void apply_font_styles (void) {
     rdpq_font_style(default_font, STL_ORANGE, &((rdpq_fontstyle_t) { .color = THEME_TEXT_ORANGE }));
     rdpq_font_style(default_font, STL_RED, &((rdpq_fontstyle_t) { .color = THEME_TEXT_RED }));
     rdpq_font_style(default_font, STL_GRAY, &((rdpq_fontstyle_t) { .color = THEME_TEXT_GRAY }));
+    rdpq_font_style(default_font, STL_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->accent }));
+    rdpq_font_style(default_font, STL_ON_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->on_accent }));
 }
 
 static void load_default_font (char *custom_font_path) {

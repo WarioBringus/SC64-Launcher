@@ -56,6 +56,7 @@ SRCS = \
 	menu/disk_info.c \
 	menu/fonts.c \
 	menu/hdmi.c \
+	menu/library.c \
 	menu/id3_parser.c \
 	menu/jpeg_decoder.c \
 	menu/menu.c \
@@ -70,8 +71,10 @@ SRCS = \
 	menu/ui_components/boxart.c \
 	menu/ui_components/common.c \
 	menu/ui_components/context_menu.c \
+	menu/ui_components/covers.c \
 	menu/ui_components/file_info.c \
 	menu/ui_components/file_list.c \
+	menu/ui_components/launcher.c \
 	menu/ui_components/tabs.c \
 	menu/usb_comm.c \
 	menu/views/browser.c \
@@ -82,6 +85,7 @@ SRCS = \
 	menu/views/fault.c \
 	menu/views/file_info.c \
 	menu/views/history_favorites.c \
+	menu/views/library_view.c \
 	menu/views/image_viewer.c \
 	menu/views/text_viewer.c \
 	menu/views/load_disk.c \
