@@ -1,10 +1,11 @@
 #include "views.h"
+#include "../theme.h"
 
 
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
-    rdpq_clear(RGBA32(0x7F, 0x00, 0x00, 0xFF));
+    rdpq_clear(THEME_FAULT_BG);
 
     const char *firmware_message = (
         "Minimum supported firmware versions:\n"
