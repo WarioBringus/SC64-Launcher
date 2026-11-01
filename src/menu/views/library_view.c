@@ -5,6 +5,7 @@
  */
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "views.h"
@@ -27,8 +28,8 @@
 #define CAROUSEL_TITLE_Y            (330)
 
 /* Button hints: ^02 = blue (A), ^01 = green (B), ^05 = red (Start), ^03 = yellow (L/R/Z) */
-#define HINTS_LIBRARY   "^02A^00 Open    ^03L/R^00 Category    ^03Z^00 Layout    ^05Start^00 Menu"
-#define HINTS_EMPTY     "^05Start^00 Menu"
+#define HINTS_LIBRARY   "^02A^00 Open    ^01B^00 Home    ^03L/R^00 Category    ^03Z^00 Layout    ^05Start^00 Menu"
+#define HINTS_EMPTY     "^01B^00 Home    ^05Start^00 Menu"
 
 static int category_index = 0;
 static int selections[MAX_REMEMBERED_CATEGORIES];
@@ -127,6 +128,11 @@ static void process (menu_t *menu) {
         launcher_menu_show();
         return;
     }
+    if (menu->actions.back) {
+        sound_play_effect(SFX_EXIT);
+        menu->next_mode = MENU_MODE_HOME;
+        return;
+    }
     if (menu->actions.trigger_z) {
         menu->settings.launcher_layout = (menu->settings.launcher_layout == LAUNCHER_LAYOUT_GRID)
             ? LAUNCHER_LAYOUT_CAROUSEL
@@ -209,14 +215,14 @@ static void draw_category_tabs (void) {
     if (count < 2) {
         const char *name = library_category_name(0);
         if (name) {
-            launcher_text(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, 0, ALIGN_LEFT, STL_GRAY, "%s", name);
+            launcher_name(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, 0, ALIGN_LEFT, STL_GRAY, name);
         }
         return;
     }
     int x = LAUNCHER_X0;
     for (int i = 0; i < count && x < LAUNCHER_X1 - 40; i++) {
         bool on = (i == category_index);
-        int w = launcher_text(x, LAUNCHER_SUBHEADER_Y, 0, ALIGN_LEFT, on ? STL_ACCENT : STL_GRAY, "%s", library_category_name(i));
+        int w = launcher_name(x, LAUNCHER_SUBHEADER_Y, 0, ALIGN_LEFT, on ? STL_ACCENT : STL_GRAY, library_category_name(i));
         if (on) {
             ui_components_box_draw(x, LAUNCHER_SUBHEADER_Y + 20, x + w, LAUNCHER_SUBHEADER_Y + 22, theme_current()->accent);
         }
@@ -268,7 +274,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
             if (tx + tw > LAUNCHER_X1) {
                 tw = LAUNCHER_X1 - tx;
             }
-            launcher_text(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, "%s", c->games[i].title);
+            launcher_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
         }
     }
 }
@@ -337,9 +343,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
         }
     }
 
-    launcher_text(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, "%s", c->games[sel].title);
-    launcher_text(LAUNCHER_X0, CAROUSEL_TITLE_Y + 24, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "%s  -  %d of %d",
-        c->name, sel + 1, c->count);
+    char position[64];
+    snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->count);
+    launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
+    launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y + 24, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, position);
 }
 
 static void draw (menu_t *menu, surface_t *d) {
@@ -350,8 +357,9 @@ static void draw (menu_t *menu, surface_t *d) {
 
     library_category_t *c = library_category(category_index);
     if (!c) {
-        launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY,
-            "No games found in %s", menu->settings.launcher_library_root);
+        char message[128];
+        snprintf(message, sizeof(message), "No games found in %s", menu->settings.launcher_library_root);
+        launcher_name(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, message);
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY,
             "Use Start > File browser to find your ROMs");
         launcher_draw_footer(HINTS_EMPTY);

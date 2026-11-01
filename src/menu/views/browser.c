@@ -664,7 +664,7 @@ static void process (menu_t *menu) {
         }
     } else if (menu->settings.launcher_enabled && (menu->actions.lz_context || (menu->actions.back && path_is_root(menu->browser.directory)))) {
         sound_play_effect(SFX_EXIT);
-        menu->next_mode = MENU_MODE_LIBRARY;
+        menu->next_mode = MENU_MODE_HOME;
     } else if (menu->actions.back && !path_is_root(menu->browser.directory)) {
         if (pop_directory(menu)) {
             menu->browser.valid = false;

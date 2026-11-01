@@ -67,6 +67,13 @@ void launcher_covers_reset(void);
  */
 int launcher_text(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *fmt, ...);
 
+/**
+ * @brief Draw a file or folder name as plain text ('$' and '^' are not treated as text codes).
+ *
+ * @return Width of the drawn text in pixels.
+ */
+int launcher_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name);
+
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 

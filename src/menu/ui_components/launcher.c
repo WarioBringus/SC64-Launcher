@@ -45,6 +45,27 @@ int launcher_text (int x, int y, int width, rdpq_align_t align, menu_font_style_
     return (int)(metrics.advance_x);
 }
 
+/**
+ * @brief Copy text, doubling '$' and '^' so rdpq prints them instead of reading them as font/style codes.
+ */
+static const char *escape_text_codes (const char *text, char *buffer, size_t size) {
+    size_t o = 0;
+    for (size_t i = 0; text[i] != '\0' && o + 2 < size; i++) {
+        if (text[i] == '$' || text[i] == '^') {
+            buffer[o++] = text[i];
+        }
+        buffer[o++] = text[i];
+    }
+    buffer[o] = '\0';
+    return buffer;
+}
+
+int launcher_name (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name) {
+    char escaped[256];
+    escape_text_codes(name, escaped, sizeof(escaped));
+    return launcher_text(x, y, width, align, style, "%s", escaped);
+}
+
 void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     ui_components_background_draw();
 
@@ -93,6 +114,8 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
     } else {
         ui_components_box_draw(x, y, x + w, y + h, theme_current()->panel);
         if (!pending && title) {
+            char escaped[256];
+            escape_text_codes(title, escaped, sizeof(escaped));
             rdpq_text_printn(
                 &(rdpq_textparms_t) {
                     .style_id = STL_GRAY,
@@ -105,8 +128,8 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
                 FNT_DEFAULT,
                 x + 4,
                 y + 4,
-                title,
-                strlen(title)
+                escaped,
+                strlen(escaped)
             );
         }
     }

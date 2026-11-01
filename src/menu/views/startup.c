@@ -60,7 +60,7 @@ void view_startup_init (menu_t *menu) {
         menu->next_mode = MENU_MODE_CREDITS;
     }
     else if (menu->settings.launcher_enabled) {
-        menu->next_mode = MENU_MODE_LIBRARY;
+        menu->next_mode = MENU_MODE_HOME;
     }
     else {
         menu->next_mode = MENU_MODE_BROWSER;

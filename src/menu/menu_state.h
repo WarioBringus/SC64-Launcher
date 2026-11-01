@@ -48,7 +48,8 @@ typedef enum {
     MENU_MODE_HISTORY,
     MENU_MODE_DATEL_CODE_EDITOR,
     MENU_MODE_EXTRACT_FILE,
-    MENU_MODE_LIBRARY
+    MENU_MODE_LIBRARY,
+    MENU_MODE_HOME
 } menu_mode_t;
 
 /** @brief File entry type enumeration */

@@ -85,6 +85,7 @@ SRCS = \
 	menu/views/fault.c \
 	menu/views/file_info.c \
 	menu/views/history_favorites.c \
+	menu/views/home.c \
 	menu/views/library_view.c \
 	menu/views/image_viewer.c \
 	menu/views/text_viewer.c \

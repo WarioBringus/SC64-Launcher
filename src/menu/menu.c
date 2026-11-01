@@ -230,14 +230,15 @@ static view_t menu_views[] = {
     { MENU_MODE_HISTORY, view_history_init, view_history_display },
     { MENU_MODE_DATEL_CODE_EDITOR, view_datel_code_editor_init, view_datel_code_editor_display },
     { MENU_MODE_EXTRACT_FILE, view_extract_file_init, view_extract_file_display },
-    { MENU_MODE_LIBRARY, view_library_init, view_library_display }
+    { MENU_MODE_LIBRARY, view_library_init, view_library_display },
+    { MENU_MODE_HOME, view_home_init, view_home_display }
 };
 
 /**
  * @brief Whether a mode is one of the launcher's own views.
  */
 static bool menu_mode_is_launcher (menu_mode_t mode) {
-    return mode == MENU_MODE_LIBRARY;
+    return mode == MENU_MODE_LIBRARY || mode == MENU_MODE_HOME;
 }
 
 /**
