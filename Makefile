@@ -106,7 +106,8 @@ SRCS = \
 	utils/utf_converter.c \
 
 FONTS = \
-	Firple-Bold.ttf
+	Firple-Bold.ttf \
+	Inter.ttf
 
 SOUNDS_WAV = \
 	cursorsound.wav \
@@ -125,6 +126,7 @@ DEPS = $(OBJS:.o=.d)
 
 FILESYSTEM = \
 	$(addprefix $(FILESYSTEM_DIR)/menu/fonts/, $(notdir $(FONTS:%.ttf=%.font64))) \
+	$(FILESYSTEM_DIR)/menu/fonts/InterTitle.font64 \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_WAV:%.wav=%.wav64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_XM:%.xm=%.xm64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sprites/, $(notdir $(IMAGES:%.png=%.sprite)))
@@ -135,6 +137,15 @@ $(FILESYSTEM_DIR)/menu/fonts/Firple-Bold.font64: MKFONT_FLAGS+=--compress 1 --ou
 $(FILESYSTEM_DIR)/menu/sounds/%.wav64: AUDIOCONV_FLAGS=--wav-compress 1
 
 $(@info $(shell mkdir -p ./$(FILESYSTEM_DIR) &> /dev/null))
+
+# Inter (SIL OFL, see assets/fonts/Inter-OFL.txt) is the launcher's typeface: body text and larger titles.
+$(FILESYSTEM_DIR)/menu/fonts/Inter.font64: MKFONT_FLAGS+=--compress 1 --size 15 --var-axis wght=600 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1
+
+$(FILESYSTEM_DIR)/menu/fonts/InterTitle.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterTitle.ttf
+	@$(N64_MKFONT) --compress 1 --size 22 --var-axis wght=700 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterTitle.ttf
 
 $(FILESYSTEM_DIR)/menu/fonts/%.font64: $(ASSETS_DIR)/fonts/%.ttf
 	@echo " [FONT] $@"

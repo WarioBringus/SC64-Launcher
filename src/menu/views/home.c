@@ -267,8 +267,8 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
     launcher_text(RESUME_TEXT_X, y + 28, text_w, ALIGN_LEFT, STL_ACCENT, "Resume");
     char where[96];
     snprintf(where, sizeof(where), "Last played  -  %s", folder);
-    launcher_name(RESUME_TEXT_X, y + 52, text_w, ALIGN_LEFT, STL_DEFAULT, h->title);
-    launcher_name(RESUME_TEXT_X, y + 76, text_w, ALIGN_LEFT, STL_GRAY, where);
+    launcher_title(RESUME_TEXT_X, y + 50, text_w, ALIGN_LEFT, STL_DEFAULT, h->title);
+    launcher_name(RESUME_TEXT_X, y + 84, text_w, ALIGN_LEFT, STL_GRAY, where);
     return y + RESUME_CARD_H + ROW_GAP;
 }
 

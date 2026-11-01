@@ -6,19 +6,31 @@
 
 
 static rdpq_font_t *default_font = NULL;
+static rdpq_font_t *launcher_font = NULL;
+static rdpq_font_t *title_font = NULL;
 
+
+static void apply_styles (rdpq_font_t *font) {
+    rdpq_font_style(font, STL_DEFAULT, &((rdpq_fontstyle_t) { .color = THEME_TEXT_DEFAULT }));
+    rdpq_font_style(font, STL_GREEN, &((rdpq_fontstyle_t) { .color = THEME_TEXT_GREEN }));
+    rdpq_font_style(font, STL_BLUE, &((rdpq_fontstyle_t) { .color = THEME_TEXT_BLUE }));
+    rdpq_font_style(font, STL_YELLOW, &((rdpq_fontstyle_t) { .color = THEME_TEXT_YELLOW }));
+    rdpq_font_style(font, STL_ORANGE, &((rdpq_fontstyle_t) { .color = THEME_TEXT_ORANGE }));
+    rdpq_font_style(font, STL_RED, &((rdpq_fontstyle_t) { .color = THEME_TEXT_RED }));
+    rdpq_font_style(font, STL_GRAY, &((rdpq_fontstyle_t) { .color = THEME_TEXT_GRAY }));
+    rdpq_font_style(font, STL_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->accent }));
+    rdpq_font_style(font, STL_ON_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->on_accent }));
+    rdpq_font_style(font, STL_ON_BUTTON, &((rdpq_fontstyle_t) { .color = RGBA32(0xFF, 0xFF, 0xFF, 0xFF) }));
+}
 
 static void apply_font_styles (void) {
-    rdpq_font_style(default_font, STL_DEFAULT, &((rdpq_fontstyle_t) { .color = THEME_TEXT_DEFAULT }));
-    rdpq_font_style(default_font, STL_GREEN, &((rdpq_fontstyle_t) { .color = THEME_TEXT_GREEN }));
-    rdpq_font_style(default_font, STL_BLUE, &((rdpq_fontstyle_t) { .color = THEME_TEXT_BLUE }));
-    rdpq_font_style(default_font, STL_YELLOW, &((rdpq_fontstyle_t) { .color = THEME_TEXT_YELLOW }));
-    rdpq_font_style(default_font, STL_ORANGE, &((rdpq_fontstyle_t) { .color = THEME_TEXT_ORANGE }));
-    rdpq_font_style(default_font, STL_RED, &((rdpq_fontstyle_t) { .color = THEME_TEXT_RED }));
-    rdpq_font_style(default_font, STL_GRAY, &((rdpq_fontstyle_t) { .color = THEME_TEXT_GRAY }));
-    rdpq_font_style(default_font, STL_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->accent }));
-    rdpq_font_style(default_font, STL_ON_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->on_accent }));
-    rdpq_font_style(default_font, STL_ON_BUTTON, &((rdpq_fontstyle_t) { .color = RGBA32(0xFF, 0xFF, 0xFF, 0xFF) }));
+    apply_styles(default_font);
+    if (launcher_font) {
+        apply_styles(launcher_font);
+    }
+    if (title_font) {
+        apply_styles(title_font);
+    }
 }
 
 static void load_default_font (char *custom_font_path) {
@@ -32,10 +44,14 @@ static void load_default_font (char *custom_font_path) {
     }
 
     default_font = rdpq_font_load(font_path);
+    launcher_font = rdpq_font_load("rom:/menu/fonts/Inter.font64");
+    title_font = rdpq_font_load("rom:/menu/fonts/InterTitle.font64");
 
     apply_font_styles();
 
     rdpq_text_register_font(FNT_DEFAULT, default_font);
+    rdpq_text_register_font(FNT_LAUNCHER, launcher_font);
+    rdpq_text_register_font(FNT_TITLE, title_font);
 }
 
 

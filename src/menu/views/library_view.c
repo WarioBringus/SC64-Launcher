@@ -376,8 +376,8 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 
     char position[64];
     snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->count);
-    launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
-    launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y + 24, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, position);
+    launcher_title(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
+    launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y + 32, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, position);
 }
 
 static void draw (menu_t *menu, surface_t *d) {

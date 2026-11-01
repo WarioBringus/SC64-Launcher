@@ -20,6 +20,7 @@
 #define HEADER_TAB_SPACING      (24)
 #define HEADER_UNDERLINE_Y      (LAUNCHER_HEADER_Y + 21)
 #define TEXT_HEIGHT             (20)
+#define TITLE_HEIGHT            (30)
 #define TILE_RADIUS             (6)
 #define PILL_HEIGHT             (24)
 #define PILL_PADDING            (12)
@@ -50,7 +51,7 @@ static const char *escape_text_codes (const char *text, char *buffer, size_t siz
 /**
  * @brief Draw already-escaped text inside a box.
  */
-static int text_box (int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
+static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     rdpq_textmetrics_t metrics = rdpq_text_printn(
         &(rdpq_textparms_t) {
             .style_id = style,
@@ -60,7 +61,7 @@ static int text_box (int x, int y, int w, int h, rdpq_align_t align, rdpq_valign
             .valign = valign,
             .wrap = (w > 0) ? WRAP_ELLIPSES : WRAP_NONE,
         },
-        FNT_DEFAULT,
+        font,
         x,
         y,
         text,
@@ -70,11 +71,27 @@ static int text_box (int x, int y, int w, int h, rdpq_align_t align, rdpq_valign
 }
 
 /**
+ * @brief Inter has no CJK glyphs; text with characters from U+0800 up (3-byte UTF-8) uses the stock font.
+ */
+static uint8_t font_for (const char *text, uint8_t preferred) {
+    for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
+        if (*p >= 0xE0) {
+            return FNT_DEFAULT;
+        }
+    }
+    return preferred;
+}
+
+static int text_box (int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
+    return text_box_font(font_for(text, FNT_LAUNCHER), x, y, w, h, align, valign, style, text);
+}
+
+/**
  * @brief Width of already-escaped text in pixels.
  */
 static int text_width (const char *text) {
     int nbytes = strlen(text);
-    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, FNT_DEFAULT, text, &nbytes);
+    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, font_for(text, FNT_LAUNCHER), text, &nbytes);
     int width = (int)(layout->bbox.x1 - layout->bbox.x0);
     rdpq_paragraph_free(layout);
     return width;
@@ -93,6 +110,12 @@ int launcher_name (int x, int y, int width, rdpq_align_t align, menu_font_style_
     char escaped[256];
     escape_text_codes(name, escaped, sizeof(escaped));
     return text_box(x, y, width, TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
+}
+
+int launcher_title (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name) {
+    char escaped[256];
+    escape_text_codes(name, escaped, sizeof(escaped));
+    return text_box_font(font_for(escaped, FNT_TITLE), x, y, width, TITLE_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
 /** @brief Horizontal inset of row i (from the top or bottom edge) of a rounded corner. */
@@ -254,7 +277,7 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
                 .valign = VALIGN_CENTER,
                 .wrap = WRAP_WORD,
             },
-            FNT_DEFAULT,
+            font_for(escaped, FNT_LAUNCHER),
             x + 4,
             y + 4,
             escaped,
