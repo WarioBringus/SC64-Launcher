@@ -19,12 +19,14 @@
 
 #define HEADER_TAB_SPACING      (24)
 #define HEADER_UNDERLINE_Y      (LAUNCHER_HEADER_Y + 21)
-#define TEXT_HEIGHT             (20)
+#define TEXT_HEIGHT             (24)
 #define TITLE_HEIGHT            (30)
 #define TILE_RADIUS             (6)
 #define PILL_HEIGHT             (24)
 #define PILL_PADDING            (12)
-#define HINT_BUTTON_SIZE        (18)
+#define HINT_BUTTON_SIZE        (20)
+/* rdpq drops a line taller than its text box, and Inter needs about 19px, so text boxes get headroom. */
+#define HINT_TEXT_HEIGHT        (24)
 #define HINT_GAP                (18)
 
 /* Button colors match the N64 controller. */
@@ -225,7 +227,8 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     }
 
     int x = LAUNCHER_X1 - total;
-    int y = LAUNCHER_FOOTER_Y + 11;
+    int y = LAUNCHER_FOOTER_Y + 10;
+    int text_y = y - (HINT_TEXT_HEIGHT - HINT_BUTTON_SIZE) / 2;
     for (int i = 0; i < count; i++) {
         color_t color;
         switch (hints[i].kind) {
@@ -235,9 +238,9 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             default: color = theme_current()->text_muted; break;
         }
         launcher_fill_rounded(x, y, x + button_w[i], y + HINT_BUTTON_SIZE, HINT_BUTTON_SIZE / 2, color);
-        text_box(x, y, button_w[i], HINT_BUTTON_SIZE, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
+        text_box(x, text_y, button_w[i], HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
         x += button_w[i] + 6;
-        text_box(x, y, label_w[i] + 2, HINT_BUTTON_SIZE, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
+        text_box(x, text_y, label_w[i] + 4, HINT_TEXT_HEIGHT, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
         x += label_w[i] + HINT_GAP;
     }
 }
