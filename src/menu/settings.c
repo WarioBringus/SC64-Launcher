@@ -35,6 +35,16 @@ static settings_t init = {
     .show_browser_rom_tags = true,
     .wrap_file_list_scrolling = false,
     .rumble_enabled = false,
+    /* Launcher */
+    .launcher_enabled = true,
+    .launcher_library_root = "/",
+    .launcher_categories_enabled = true,
+    .launcher_layout = LAUNCHER_LAYOUT_GRID,
+    .launcher_tile_size = LAUNCHER_TILE_MEDIUM,
+    .launcher_titles_highlight_only = true,
+    .launcher_home_resume = true,
+    .launcher_home_recent = true,
+    .launcher_home_favorites = true,
 };
 
 
@@ -83,6 +93,23 @@ void settings_load (settings_t *settings) {
     settings->wrap_file_list_scrolling = ini_get_bool(ini, "menu", "wrap_file_list_scrolling", init.wrap_file_list_scrolling);
     settings->rumble_enabled = ini_get_bool(ini, "menu_beta_flag", "rumble_enabled", init.rumble_enabled);
 
+    settings->launcher_enabled = ini_get_bool(ini, "launcher", "enabled", init.launcher_enabled);
+    free(settings->launcher_library_root);
+    settings->launcher_library_root = strdup(ini_get_string(ini, "launcher", "library_root", init.launcher_library_root));
+    settings->launcher_categories_enabled = ini_get_bool(ini, "launcher", "categories_enabled", init.launcher_categories_enabled);
+    settings->launcher_layout = ini_get_int(ini, "launcher", "layout", init.launcher_layout);
+    settings->launcher_tile_size = ini_get_int(ini, "launcher", "tile_size", init.launcher_tile_size);
+    settings->launcher_titles_highlight_only = ini_get_bool(ini, "launcher", "titles_highlight_only", init.launcher_titles_highlight_only);
+    settings->launcher_home_resume = ini_get_bool(ini, "launcher", "home_resume", init.launcher_home_resume);
+    settings->launcher_home_recent = ini_get_bool(ini, "launcher", "home_recent", init.launcher_home_recent);
+    settings->launcher_home_favorites = ini_get_bool(ini, "launcher", "home_favorites", init.launcher_home_favorites);
+    if (settings->launcher_layout < LAUNCHER_LAYOUT_GRID || settings->launcher_layout > LAUNCHER_LAYOUT_CAROUSEL) {
+        settings->launcher_layout = init.launcher_layout;
+    }
+    if (settings->launcher_tile_size < LAUNCHER_TILE_SMALL || settings->launcher_tile_size > LAUNCHER_TILE_LARGE) {
+        settings->launcher_tile_size = init.launcher_tile_size;
+    }
+
     ini_free(ini);
 }
 
@@ -116,6 +143,16 @@ void settings_save (settings_t *settings) {
     // ini_set_bool(ini, "menu", "show_browser_rom_tags", settings->show_browser_rom_tags);
     ini_set_bool(ini, "menu", "wrap_file_list_scrolling", settings->wrap_file_list_scrolling);
     // ini_set_bool(ini, "menu_beta_flag", "rumble_enabled", settings->rumble_enabled);
+
+    ini_set_bool(ini, "launcher", "enabled", settings->launcher_enabled);
+    ini_set_string(ini, "launcher", "library_root", settings->launcher_library_root);
+    ini_set_bool(ini, "launcher", "categories_enabled", settings->launcher_categories_enabled);
+    ini_set_int(ini, "launcher", "layout", settings->launcher_layout);
+    ini_set_int(ini, "launcher", "tile_size", settings->launcher_tile_size);
+    ini_set_bool(ini, "launcher", "titles_highlight_only", settings->launcher_titles_highlight_only);
+    ini_set_bool(ini, "launcher", "home_resume", settings->launcher_home_resume);
+    ini_set_bool(ini, "launcher", "home_recent", settings->launcher_home_recent);
+    ini_set_bool(ini, "launcher", "home_favorites", settings->launcher_home_favorites);
 
     if (!ini_save(ini, settings_path)) {
         debugf("[SETTINGS] Failed to save settings to %s\n", settings_path);

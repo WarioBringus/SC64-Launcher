@@ -8,6 +8,19 @@
 #define SETTINGS_H__
 
 
+/** @brief Launcher library layout */
+typedef enum {
+    LAUNCHER_LAYOUT_GRID = 0, /**< Grid of cover tiles */
+    LAUNCHER_LAYOUT_CAROUSEL = 1, /**< Horizontal carousel of covers */
+} launcher_layout_t;
+
+/** @brief Launcher grid tile size */
+typedef enum {
+    LAUNCHER_TILE_SMALL = 0, /**< Most tiles on screen */
+    LAUNCHER_TILE_MEDIUM = 1, /**< Default */
+    LAUNCHER_TILE_LARGE = 2, /**< Fewest tiles, covers at full size */
+} launcher_tile_size_t;
+
 /** @brief Settings Structure */
 typedef struct {
     /** @brief Settings version */
@@ -60,6 +73,33 @@ typedef struct {
 
     /** @brief Enable rumble feedback within the menu */
     bool rumble_enabled;
+
+    /** @brief Use the console-style launcher instead of the file browser */
+    bool launcher_enabled;
+
+    /** @brief Folder whose subfolders become launcher categories */
+    char *launcher_library_root;
+
+    /** @brief Show folders as switchable categories rather than one list */
+    bool launcher_categories_enabled;
+
+    /** @brief Library layout (launcher_layout_t) */
+    int launcher_layout;
+
+    /** @brief Grid tile size (launcher_tile_size_t) */
+    int launcher_tile_size;
+
+    /** @brief Show a game's title only while it is highlighted */
+    bool launcher_titles_highlight_only;
+
+    /** @brief Show the "resume last game" row on the home screen */
+    bool launcher_home_resume;
+
+    /** @brief Show the recently played row on the home screen */
+    bool launcher_home_recent;
+
+    /** @brief Show the favorites row on the home screen */
+    bool launcher_home_favorites;
 
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     /** @brief Enable the ability to bypass the menu and instantly load a ROM on power and reset button */

@@ -128,6 +128,46 @@ static void set_rumble_enabled_type (menu_t *menu, void *arg) {
 // }
 #endif
 
+static void set_launcher_enabled_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_enabled = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_categories_enabled_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_categories_enabled = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_titles_highlight_only_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_home_resume_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_home_resume = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_home_recent_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_home_recent = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_home_favorites_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_home_favorites = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_layout_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_layout = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static void set_launcher_tile_size_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_tile_size = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void remove_background_image (menu_t *menu, void *arg) {
     (void)arg;
     (void)menu;
@@ -308,6 +348,115 @@ static component_context_menu_t set_rumble_enabled_type_context_menu = {
 }};
 #endif
 
+static int get_launcher_enabled_current_selection (menu_t *menu) {
+    return menu->settings.launcher_enabled ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_enabled_context_menu = {
+    .get_default_selection = get_launcher_enabled_current_selection,
+    .list = {
+        {.text = "On", .action = set_launcher_enabled_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_launcher_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_categories_enabled_current_selection (menu_t *menu) {
+    return menu->settings.launcher_categories_enabled ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_categories_enabled_context_menu = {
+    .get_default_selection = get_launcher_categories_enabled_current_selection,
+    .list = {
+        {.text = "On", .action = set_launcher_categories_enabled_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_launcher_categories_enabled_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_titles_highlight_only_current_selection (menu_t *menu) {
+    return menu->settings.launcher_titles_highlight_only ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_titles_highlight_only_context_menu = {
+    .get_default_selection = get_launcher_titles_highlight_only_current_selection,
+    .list = {
+        {.text = "Highlighted Only", .action = set_launcher_titles_highlight_only_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Always", .action = set_launcher_titles_highlight_only_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_home_resume_current_selection (menu_t *menu) {
+    return menu->settings.launcher_home_resume ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_home_resume_context_menu = {
+    .get_default_selection = get_launcher_home_resume_current_selection,
+    .list = {
+        {.text = "On", .action = set_launcher_home_resume_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_launcher_home_resume_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_home_recent_current_selection (menu_t *menu) {
+    return menu->settings.launcher_home_recent ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_home_recent_context_menu = {
+    .get_default_selection = get_launcher_home_recent_current_selection,
+    .list = {
+        {.text = "On", .action = set_launcher_home_recent_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_launcher_home_recent_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_home_favorites_current_selection (menu_t *menu) {
+    return menu->settings.launcher_home_favorites ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_home_favorites_context_menu = {
+    .get_default_selection = get_launcher_home_favorites_current_selection,
+    .list = {
+        {.text = "On", .action = set_launcher_home_favorites_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_launcher_home_favorites_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_layout_current_selection (menu_t *menu) {
+    return menu->settings.launcher_layout;
+}
+
+static component_context_menu_t set_launcher_layout_context_menu = {
+    .get_default_selection = get_launcher_layout_current_selection,
+    .list = {
+        {.text = "Grid", .action = set_launcher_layout_type, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_GRID) },
+        {.text = "Carousel", .action = set_launcher_layout_type, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_CAROUSEL) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static int get_launcher_tile_size_current_selection (menu_t *menu) {
+    return menu->settings.launcher_tile_size;
+}
+
+static component_context_menu_t set_launcher_tile_size_context_menu = {
+    .get_default_selection = get_launcher_tile_size_current_selection,
+    .list = {
+        {.text = "Small", .action = set_launcher_tile_size_type, .arg = (void *)(uintptr_t)(LAUNCHER_TILE_SMALL) },
+        {.text = "Medium", .action = set_launcher_tile_size_type, .arg = (void *)(uintptr_t)(LAUNCHER_TILE_MEDIUM) },
+        {.text = "Large", .action = set_launcher_tile_size_type, .arg = (void *)(uintptr_t)(LAUNCHER_TILE_LARGE) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
+static component_context_menu_t launcher_context_menu = { .list = {
+    { .text = "Launcher", .submenu = &set_launcher_enabled_context_menu },
+    { .text = "Folder Categories", .submenu = &set_launcher_categories_enabled_context_menu },
+    { .text = "Library Layout", .submenu = &set_launcher_layout_context_menu },
+    { .text = "Tile Size", .submenu = &set_launcher_tile_size_context_menu },
+    { .text = "Game Titles", .submenu = &set_launcher_titles_highlight_only_context_menu },
+    { .text = "Home: Resume", .submenu = &set_launcher_home_resume_context_menu },
+    { .text = "Home: Recent", .submenu = &set_launcher_home_recent_context_menu },
+    { .text = "Home: Favorites", .submenu = &set_launcher_home_favorites_context_menu },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t options_context_menu = { .list = {
     { .text = "Show Hidden Files", .submenu = &set_protected_entries_type_context_menu },
     { .text = "Sound Effects", .submenu = &set_soundfx_enabled_type_context_menu },
@@ -329,6 +478,7 @@ static component_context_menu_t options_context_menu = { .list = {
     { .text = "Rumble Feedback", .submenu = &set_rumble_enabled_type_context_menu },
     // { .text = "Restore Defaults", .action = set_use_default_settings },
 #endif
+    { .text = "Launcher Settings", .submenu = &launcher_context_menu },
     { .text = "Remove Background", .action = remove_background_image },
 
     COMPONENT_CONTEXT_MENU_LIST_END,
