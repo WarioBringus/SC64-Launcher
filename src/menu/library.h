@@ -88,6 +88,14 @@ char *library_find_cover(menu_t *menu, path_t *rom_path, const char *title);
  */
 char *library_title_from_path(path_t *rom_path);
 
+/**
+ * @brief Id of a cover in the PC-built cover index (menu/cache/launcher/covers.idx).
+ *
+ * @param cover_rel Cover path relative to the menu folder, e.g. "metadata/N/G/E/E/boxart_front.png".
+ * @return Its id (its position in the thumbnail packs), or -1 when not indexed.
+ */
+int library_cover_id(const char *cover_rel);
+
 /** @brief Free everything. */
 void library_free(void);
 

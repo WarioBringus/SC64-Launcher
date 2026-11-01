@@ -5,6 +5,7 @@
  */
 
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -23,6 +24,8 @@
 #define ROOT_CATEGORY_NAME      "SD Card"
 #define FALLBACK_REGIONS        "EPJUADFIS"
 #define PORTRAIT_SAMPLE_SIZE    (8)
+#define COVER_INDEX_FILE        "menu/cache/launcher/covers.idx"
+#define COVER_INDEX_MAGIC       "LCIDX1"
 
 static const char *rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
 static const char *skipped_folders[] = { "System Volume Information", "menu", NULL };
@@ -39,9 +42,29 @@ static bool scanned = false;
 static char *scanned_root = NULL;
 static const char *storage_prefix = NULL;
 
+/* Cover index written by pc-tools/coverpack/coverpack.py: which cover each ROM uses. */
+typedef struct {
+    const char *rom;            /**< ROM path relative to the SD card root */
+    int cover;                  /**< Index into index_covers, or -1 */
+} index_rom_t;
+
+static char *index_text = NULL;
+static const char **index_covers = NULL;
+static int index_cover_count = 0;
+static index_rom_t *index_roms = NULL;
+static int index_rom_count = 0;
+static bool index_tried = false;
+
+
+static int index_rom_cover (path_t *rom_path);
+
 
 static bool is_rom_name (const char *name) {
-    return (name[0] != '.') && file_has_extensions((char *)name, rom_extensions);
+    // Flashcart menu files (sc64menu.n64 and its backups, EverDrive OS64*.v64) are not games.
+    if (name[0] == '.' || strncasecmp(name, "sc64menu", 8) == 0 || strncasecmp(name, "OS64", 4) == 0) {
+        return false;
+    }
+    return file_has_extensions((char *)name, rom_extensions);
 }
 
 static bool is_skipped_folder (const char *name) {
@@ -210,6 +233,17 @@ static char *find_cover (path_t *rom_path, const char *title) {
     char raw_title[21];
     char *found = NULL;
 
+    // The PC-built index answers without touching the ROM; games it has no cover for
+    // still get a live lookup, so art added since the index was built is found.
+    int indexed = index_rom_cover(rom_path);
+    if (indexed >= 0) {
+        path_t *path = path_init(storage_prefix, "menu");
+        path_push(path, (char *)index_covers[indexed]);
+        found = strdup(path_get(path));
+        path_free(path);
+        return found;
+    }
+
     if (read_rom_header(path_get(rom_path), code, raw_title) && code_is_valid(code)) {
         found = find_cover_by_code(code, raw_title);
     }
@@ -217,6 +251,126 @@ static char *find_cover (path_t *rom_path, const char *title) {
         found = find_cover_by_name(title);
     }
     return found;
+}
+
+static void index_free (void) {
+    free(index_text);
+    free(index_covers);
+    free(index_roms);
+    index_text = NULL;
+    index_covers = NULL;
+    index_roms = NULL;
+    index_cover_count = 0;
+    index_rom_count = 0;
+    index_tried = false;
+}
+
+/**
+ * @brief Load the cover index once. Without it, covers are looked up on the SD card as before.
+ */
+static void index_load (void) {
+    if (index_tried || !storage_prefix) {
+        return;
+    }
+    index_tried = true;
+
+    path_t *path = path_init(storage_prefix, COVER_INDEX_FILE);
+    FILE *f = fopen(path_get(path), "rb");
+    path_free(path);
+    if (!f) {
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size <= 0) {
+        fclose(f);
+        return;
+    }
+    index_text = malloc(size + 1);
+    if (!index_text || fread(index_text, 1, size, f) != (size_t)size) {
+        fclose(f);
+        index_free();
+        index_tried = true;
+        return;
+    }
+    fclose(f);
+    index_text[size] = '\0';
+    if (strncmp(index_text, COVER_INDEX_MAGIC, strlen(COVER_INDEX_MAGIC)) != 0) {
+        index_free();
+        index_tried = true;
+        return;
+    }
+
+    int lines = 1;
+    for (char *p = index_text; *p; p++) {
+        if (*p == '\n') {
+            lines++;
+        }
+    }
+    index_covers = malloc(lines * sizeof(char *));
+    index_roms = malloc(lines * sizeof(index_rom_t));
+
+    // Lines are already sorted byte-wise by the PC tool, so both lists can be binary searched.
+    char *line = index_text;
+    while (line && *line) {
+        char *end = strchr(line, '\n');
+        if (end) {
+            *end = '\0';
+        }
+        if (line[0] == 'C' && line[1] == '\t') {
+            index_covers[index_cover_count++] = line + 2;
+        } else if (line[0] == 'R' && line[1] == '\t') {
+            char *tab = strrchr(line + 2, '\t');
+            if (tab) {
+                *tab = '\0';
+                index_roms[index_rom_count].rom = line + 2;
+                index_roms[index_rom_count].cover = atoi(tab + 1);
+                index_rom_count++;
+            }
+        }
+        line = end ? end + 1 : NULL;
+    }
+}
+
+static int compare_index_cover (const void *key, const void *element) {
+    return strcmp((const char *)key, *(const char * const *)element);
+}
+
+static int compare_index_rom (const void *key, const void *element) {
+    return strcmp((const char *)key, ((const index_rom_t *)element)->rom);
+}
+
+/**
+ * @brief Cover id for a ROM from the index: >= 0 for a cover, -1 when the index has none or no entry.
+ */
+static int index_rom_cover (path_t *rom_path) {
+    index_load();
+    if (!index_roms) {
+        return -1;
+    }
+    const char *rel = path_get(rom_path);
+    size_t prefix_len = strlen(storage_prefix);
+    if (strncmp(rel, storage_prefix, prefix_len) == 0) {
+        rel += prefix_len;
+    }
+    while (*rel == '/') {
+        rel++;
+    }
+    index_rom_t *hit = bsearch(rel, index_roms, index_rom_count, sizeof(index_rom_t), compare_index_rom);
+    if (!hit || hit->cover < 0 || hit->cover >= index_cover_count) {
+        return -1;
+    }
+    return hit->cover;
+}
+
+int library_cover_id (const char *cover_rel) {
+    index_load();
+    if (!index_covers) {
+        return -1;
+    }
+    const char **hit = bsearch(cover_rel, index_covers, index_cover_count, sizeof(char *), compare_index_cover);
+    return hit ? (int)(hit - index_covers) : -1;
 }
 
 static bool folder_has_roms (path_t *directory) {
@@ -504,4 +658,6 @@ void library_free (void) {
     free(scanned_root);
     scanned_root = NULL;
     scanned = false;
+
+    index_free();
 }

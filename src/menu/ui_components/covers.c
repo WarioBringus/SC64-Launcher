@@ -4,13 +4,29 @@
  * @ingroup ui_components
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "../launcher_ui.h"
+#include "../library.h"
 #include "../png_decoder.h"
 
-#define COVER_SLOTS (24)
+#define COVER_SLOTS             (64)    /* With an Expansion Pak */
+#define COVER_SLOTS_4MB         (24)    /* Without one */
+#define PACK_READS_PER_FRAME    (6)
+#define MAX_PACKS               (12)
+#define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d.pak"
+
+/* Pre-scaled covers built on the PC by pc-tools/coverpack (one file per tile size). */
+typedef struct {
+    int w;
+    int h;
+    bool tried;
+    FILE *f;
+    uint32_t count;
+    uint32_t *offsets;
+} cover_pack_t;
 
 typedef struct {
     char *path;
@@ -23,8 +39,130 @@ typedef struct {
 } cover_slot_t;
 
 static cover_slot_t slots[COVER_SLOTS];
+static int slot_count = 0;
 static uint32_t frame = 0;
 static bool decoding = false;
+static cover_pack_t packs[MAX_PACKS];
+static int pack_reads_left = PACK_READS_PER_FRAME;
+
+
+static uint32_t read_u32_be (const uint8_t *p) {
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+/**
+ * @brief The pack for a tile size, opened on first use. path is any cover path, for its "sd:" prefix.
+ */
+static cover_pack_t *pack_for (const char *path, int w, int h) {
+    cover_pack_t *free_entry = NULL;
+    for (int i = 0; i < MAX_PACKS; i++) {
+        if (packs[i].tried && packs[i].w == w && packs[i].h == h) {
+            return packs[i].f ? &packs[i] : NULL;
+        }
+        if (!packs[i].tried && !free_entry) {
+            free_entry = &packs[i];
+        }
+    }
+    if (!free_entry) {
+        return NULL;
+    }
+
+    cover_pack_t *p = free_entry;
+    memset(p, 0, sizeof(*p));
+    p->tried = true;
+    p->w = w;
+    p->h = h;
+
+    const char *colon = strchr(path, ':');
+    if (!colon) {
+        return NULL;
+    }
+    char file[96];
+    snprintf(file, sizeof(file), PACK_FILE_FORMAT, (int)(colon - path + 1), path, w, h);
+    p->f = fopen(file, "rb");
+    if (!p->f) {
+        return NULL;
+    }
+    uint8_t head[8];
+    if (fread(head, 1, sizeof(head), p->f) != sizeof(head) || memcmp(head, "CVP1", 4) != 0) {
+        fclose(p->f);
+        p->f = NULL;
+        return NULL;
+    }
+    p->count = read_u32_be(head + 4);
+    p->offsets = malloc(p->count * sizeof(uint32_t));
+    uint8_t *raw = malloc(p->count * 4);
+    if (!p->offsets || !raw || fread(raw, 4, p->count, p->f) != p->count) {
+        free(raw);
+        free(p->offsets);
+        p->offsets = NULL;
+        fclose(p->f);
+        p->f = NULL;
+        return NULL;
+    }
+    for (uint32_t i = 0; i < p->count; i++) {
+        p->offsets[i] = read_u32_be(raw + i * 4);
+    }
+    free(raw);
+    return p;
+}
+
+/**
+ * @brief Read a pre-scaled cover from its pack: one seek and one read, no PNG decoding.
+ */
+static surface_t *pack_read (const char *path, int w, int h) {
+    const char *rel = strstr(path, ":/menu/");
+    if (!rel) {
+        return NULL;
+    }
+    int id = library_cover_id(rel + strlen(":/menu/"));
+    if (id < 0) {
+        return NULL;
+    }
+    cover_pack_t *p = pack_for(path, w, h);
+    if (!p || (uint32_t)id >= p->count || p->offsets[id] == 0) {
+        return NULL;
+    }
+
+    uint8_t head[8];
+    if (fseek(p->f, p->offsets[id], SEEK_SET) != 0 || fread(head, 1, sizeof(head), p->f) != sizeof(head) ||
+        memcmp(head, "CVR1", 4) != 0) {
+        return NULL;
+    }
+    int iw = (head[4] << 8) | head[5];
+    int ih = (head[6] << 8) | head[7];
+    if (iw <= 0 || ih <= 0 || iw > w || ih > h) {
+        return NULL;
+    }
+    surface_t *image = calloc(1, sizeof(surface_t));
+    if (!image) {
+        return NULL;
+    }
+    *image = surface_alloc(FMT_RGBA16, iw, ih);
+    if (!image->buffer) {
+        free(image);
+        return NULL;
+    }
+    // Pixels are stored big-endian RGBA5551, the N64's own format; rows may be padded in memory.
+    for (int y = 0; y < ih; y++) {
+        if (fread((uint8_t *)image->buffer + y * image->stride, 2, iw, p->f) != (size_t)iw) {
+            surface_free(image);
+            free(image);
+            return NULL;
+        }
+    }
+    return image;
+}
+
+static void packs_close (void) {
+    for (int i = 0; i < MAX_PACKS; i++) {
+        if (packs[i].f) {
+            fclose(packs[i].f);
+        }
+        free(packs[i].offsets);
+        memset(&packs[i], 0, sizeof(packs[i]));
+    }
+}
 
 
 static void decode_done (png_err_t err, surface_t *decoded_image, void *callback_data) {
@@ -57,6 +195,10 @@ static void slot_free (cover_slot_t *slot) {
 
 void launcher_covers_begin_frame (void) {
     frame++;
+    pack_reads_left = PACK_READS_PER_FRAME;
+    if (slot_count == 0) {
+        slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
+    }
 }
 
 surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pending) {
@@ -67,7 +209,11 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
         return NULL;
     }
 
-    for (int i = 0; i < COVER_SLOTS; i++) {
+    if (slot_count == 0) {
+        slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
+    }
+
+    for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];
         if (s->path && s->max_w == max_w && s->max_h == max_h && strcmp(s->path, path) == 0) {
             s->last_used = frame;
@@ -81,13 +227,14 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     if (pending) {
         *pending = true;
     }
-    if (decoding) {
+    bool can_read_pack = (pack_reads_left > 0);
+    if (decoding && !can_read_pack) {
         return NULL;
     }
 
     // Reuse an empty slot, or the one unused for longest (never one drawn this frame).
     cover_slot_t *victim = NULL;
-    for (int i = 0; i < COVER_SLOTS; i++) {
+    for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];
         if (!s->path) {
             victim = s;
@@ -106,6 +253,24 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     victim->max_w = max_w;
     victim->max_h = max_h;
     victim->last_used = frame;
+
+    if (can_read_pack) {
+        pack_reads_left--;
+        victim->image = pack_read(path, max_w, max_h);
+        if (victim->image) {
+            if (pending) {
+                *pending = false;
+            }
+            return victim->image;
+        }
+    }
+    if (decoding) {
+        // Not in a pack and the decoder is busy: try again next frame.
+        free(victim->path);
+        memset(victim, 0, sizeof(*victim));
+        return NULL;
+    }
+
     victim->loading = true;
 
     png_err_t err = png_decoder_start(victim->path, max_w, max_h, decode_done, victim);
@@ -130,4 +295,5 @@ void launcher_covers_reset (void) {
         slot_free(&slots[i]);
     }
     decoding = false;
+    packs_close();
 }

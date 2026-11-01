@@ -277,6 +277,11 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
             launcher_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
         }
     }
+
+    // Preload the row below so scrolling down shows covers straight away.
+    for (int i = last; i < last + g.cols && i < c->count; i++) {
+        game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
+    }
 }
 
 /**
