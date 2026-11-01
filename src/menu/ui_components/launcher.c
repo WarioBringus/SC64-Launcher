@@ -171,6 +171,11 @@ static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t be
     flat_end();
 }
 
+void launcher_draw_page_title (const char *title) {
+    int w = launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, STL_DEFAULT, "%s", title);
+    launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
+}
+
 void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     ui_components_background_draw();
 

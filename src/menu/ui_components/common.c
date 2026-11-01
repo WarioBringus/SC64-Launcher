@@ -9,6 +9,10 @@
 #include "../ui_components.h"
 #include "../fonts.h"
 #include "constants.h"
+#include "../launcher_ui.h"
+
+#define DIALOG_RADIUS   (10)
+#define DIALOG_OUTLINE  (2)
 
 /**
  * @brief Draw a box with the specified color.
@@ -206,8 +210,9 @@ void ui_components_dialog_draw (int width, int height) {
     int x1 = DISPLAY_CENTER_X + (width / 2);
     int y1 = DISPLAY_CENTER_Y + (height / 2);
 
-    ui_components_border_draw(x0, y0, x1, y1);
-    ui_components_box_draw(x0, y0, x1, y1, DIALOG_BG_COLOR);
+    launcher_fill_rounded(x0 - DIALOG_OUTLINE, y0 - DIALOG_OUTLINE, x1 + DIALOG_OUTLINE, y1 + DIALOG_OUTLINE,
+        DIALOG_RADIUS + DIALOG_OUTLINE, BORDER_COLOR);
+    launcher_fill_rounded(x0, y0, x1, y1, DIALOG_RADIUS, DIALOG_BG_COLOR);
 }
 
 /**

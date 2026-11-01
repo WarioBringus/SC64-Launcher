@@ -587,19 +587,29 @@ static void process (menu_t *menu) {
     }
 }
 
+static const launcher_hint_t settings_hints[] = {
+    { LAUNCHER_BUTTON_A, "A", "Change" },
+    { LAUNCHER_BUTTON_B, "B", "Back" },
+    { LAUNCHER_BUTTON_OTHER, "R", "Reset settings" },
+};
+
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
     ui_components_background_draw();
 
-    ui_components_layout_draw();
+    if (menu->settings.launcher_enabled) {
+        launcher_draw_page_title("Settings");
+    } else {
+        ui_components_layout_draw();
 
-	ui_components_main_text_draw(
-        STL_DEFAULT,
-        ALIGN_CENTER, VALIGN_TOP,
-        "MENU SETTINGS EDITOR\n"
-        "\n"
-    );
+        ui_components_main_text_draw(
+            STL_DEFAULT,
+            ALIGN_CENTER, VALIGN_TOP,
+            "MENU SETTINGS EDITOR\n"
+            "\n"
+        );
+    }
 
     ui_components_main_text_draw(
         STL_DEFAULT,
@@ -654,19 +664,23 @@ static void draw (menu_t *menu, surface_t *d) {
 #endif
     );
 
-    ui_components_actions_bar_text_draw(
-        STL_DEFAULT,
-        ALIGN_LEFT, VALIGN_TOP,
-        "A: Change\n"
-        "B: Back"
-    );
+    if (menu->settings.launcher_enabled) {
+        launcher_draw_footer(settings_hints, (int)(sizeof(settings_hints) / sizeof(settings_hints[0])));
+    } else {
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_LEFT, VALIGN_TOP,
+            "A: Change\n"
+            "B: Back"
+        );
 
-    ui_components_actions_bar_text_draw(
-        STL_DEFAULT,
-        ALIGN_RIGHT, VALIGN_TOP,
-        "R: Reset settings\n"
-        "\n"
-    );
+        ui_components_actions_bar_text_draw(
+            STL_DEFAULT,
+            ALIGN_RIGHT, VALIGN_TOP,
+            "R: Reset settings\n"
+            "\n"
+        );
+    }
 
     ui_components_context_menu_draw(&options_context_menu);
 

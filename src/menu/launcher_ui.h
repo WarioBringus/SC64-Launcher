@@ -96,6 +96,9 @@ int launcher_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t
  */
 int launcher_title(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name);
 
+/** @brief Draw a page title in the header (for screens opened from the launcher). */
+void launcher_draw_page_title(const char *title);
+
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 

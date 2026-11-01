@@ -8,6 +8,10 @@
 #include "../fonts.h"
 #include "../sound.h"
 #include "constants.h"
+#include "../launcher_ui.h"
+
+#define HIGHLIGHT_INSET     (6)
+#define HIGHLIGHT_RADIUS    (5)
 
 /**
  * @brief Get the current submenu from a context menu component.
@@ -125,7 +129,7 @@ void ui_components_context_menu_draw(component_context_menu_t *cm) {
             .valign = VALIGN_CENTER,
             .line_spacing = TEXT_LINE_SPACING_ADJUST,
         },
-        FNT_DEFAULT,
+        FNT_LAUNCHER,
         NULL
     );
 
@@ -149,11 +153,12 @@ void ui_components_context_menu_draw(component_context_menu_t *cm) {
     int highlight_height = (layout->bbox.y1 - layout->bbox.y0) / layout->nlines;
     int highlight_y = VISIBLE_AREA_Y0 + layout->bbox.y0 + ((cm->row_selected) * highlight_height);
 
-    ui_components_box_draw(
-        highlight_x0,
+    launcher_fill_rounded(
+        highlight_x0 + HIGHLIGHT_INSET,
         highlight_y,
-        highlight_x1,
+        highlight_x1 - HIGHLIGHT_INSET,
         highlight_y + highlight_height,
+        HIGHLIGHT_RADIUS,
         CONTEXT_MENU_HIGHLIGHT_COLOR
     );
 
