@@ -1,9 +1,10 @@
 /**
  * @file library_view.c
- * @brief Launcher library: games of one category as a grid of covers.
+ * @brief Launcher library: games of one category as a grid of covers or a carousel.
  * @ingroup view
  */
 
+#include <math.h>
 #include <stdlib.h>
 
 #include "views.h"
@@ -17,6 +18,14 @@
 #define CATEGORY_TAB_SPACING        (22)
 #define TITLE_EXTRA_HIGHLIGHT_ONLY  (48)
 
+#define CAROUSEL_CENTER_Y           (222)   /* Vertical center of the covers */
+#define CAROUSEL_SIDE_SCALE         (0.66f) /* Size of the covers beside the highlighted one */
+#define CAROUSEL_SPACING            (14)
+#define CAROUSEL_REACH              (4)     /* Covers drawn on each side */
+#define CAROUSEL_EASE               (0.35f) /* Fraction of the remaining distance moved per frame */
+#define CAROUSEL_FAST_STEP          (5)
+#define CAROUSEL_TITLE_Y            (330)
+
 /* Button hints: ^02 = blue (A), ^01 = green (B), ^05 = red (Start), ^03 = yellow (L/R/Z) */
 #define HINTS_LIBRARY   "^02A^00 Open    ^03L/R^00 Category    ^03Z^00 Layout    ^05Start^00 Menu"
 #define HINTS_EMPTY     "^05Start^00 Menu"
@@ -24,6 +33,7 @@
 static int category_index = 0;
 static int selections[MAX_REMEMBERED_CATEGORIES];
 static int top_row = 0;
+static float carousel_position = 0.0f;
 
 typedef struct {
     int cols;
@@ -75,6 +85,7 @@ static void switch_category (int delta) {
     }
     category_index = (category_index + delta + count) % count;
     top_row = 0;
+    carousel_position = (float)(*current_selection());
     sound_play_effect(SFX_CURSOR);
 }
 
@@ -122,6 +133,7 @@ static void process (menu_t *menu) {
             : LAUNCHER_LAYOUT_GRID;
         settings_save(&menu->settings);
         top_row = 0;
+        carousel_position = (float)(*current_selection());
         sound_play_effect(SFX_SETTING);
         return;
     }
@@ -144,6 +156,22 @@ static void process (menu_t *menu) {
         *sel = c->count - 1;
     }
     int previous = *sel;
+
+    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+        int step = menu->actions.go_fast ? CAROUSEL_FAST_STEP : 1;
+        if (menu->actions.go_left) {
+            *sel = (*sel - step < 0) ? 0 : *sel - step;
+        } else if (menu->actions.go_right) {
+            *sel = (*sel + step > c->count - 1) ? c->count - 1 : *sel + step;
+        }
+        if (*sel != previous) {
+            sound_play_effect(SFX_CURSOR);
+        }
+        if (menu->actions.enter) {
+            launch(menu, &c->games[*sel]);
+        }
+        return;
+    }
 
     grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
     int step = menu->actions.go_fast ? (g.cols * g.rows) : g.cols;
@@ -245,6 +273,75 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     }
 }
 
+/**
+ * @brief Horizontal center and scale of a carousel cover at offset t from the middle
+ * (t may be fractional while sliding).
+ */
+static void carousel_slot (float t, int cw, int sw, float *center_x, float *scale) {
+    float near = (cw / 2.0f) + CAROUSEL_SPACING + (sw / 2.0f);
+    float a = fabsf(t);
+    if (a <= 1.0f) {
+        *scale = 1.0f - (1.0f - CAROUSEL_SIDE_SCALE) * a;
+        *center_x = 320.0f + t * near;
+    } else {
+        *scale = CAROUSEL_SIDE_SCALE;
+        *center_x = 320.0f + copysignf(near + (a - 1.0f) * (sw + CAROUSEL_SPACING), t);
+    }
+}
+
+static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
+    int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
+    int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+    int sw = (int)(cw * CAROUSEL_SIDE_SCALE);
+    int lookups_left = 1;
+    bool pending;
+
+    // Ease toward the selection; snap when close.
+    carousel_position += (sel - carousel_position) * CAROUSEL_EASE;
+    if (fabsf(sel - carousel_position) < 0.02f) {
+        carousel_position = (float)sel;
+    }
+
+    // Highlighted cover first so it loads before its neighbours.
+    game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
+
+    // Far covers first so nearer ones draw on top.
+    for (int reach = CAROUSEL_REACH + 1; reach >= 0; reach--) {
+        for (int side = -1; side <= 1; side += 2) {
+            if (reach == 0 && side == 1) {
+                continue;
+            }
+            int i = (int)roundf(carousel_position) + side * reach;
+            if (i < 0 || i >= c->count) {
+                continue;
+            }
+            float center_x, scale;
+            carousel_slot(i - carousel_position, cw, sw, &center_x, &scale);
+            int w = (int)(cw * scale);
+            int h = (int)(ch * scale);
+            int x = (int)center_x - w / 2;
+            int y = CAROUSEL_CENTER_Y - h / 2;
+            if (x + w < 0 || x > 640) {
+                continue;
+            }
+
+            surface_t *image = game_cover(menu, &c->games[i], cw, ch, &lookups_left, &pending);
+            bool settled = (i == sel) && (carousel_position == (float)sel);
+            if (settled) {
+                launcher_draw_tile(x, y, w, h, image, pending, c->games[i].title, true);
+            } else if (image) {
+                launcher_draw_cover_scaled(image, x, y, w, h);
+            } else {
+                launcher_draw_tile(x, y, w, h, NULL, true, NULL, false);
+            }
+        }
+    }
+
+    launcher_text(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, "%s", c->games[sel].title);
+    launcher_text(LAUNCHER_X0, CAROUSEL_TITLE_Y + 24, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "%s  -  %d of %d",
+        c->name, sel + 1, c->count);
+}
+
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
@@ -267,8 +364,12 @@ static void draw (menu_t *menu, surface_t *d) {
             if (*sel >= c->count) {
                 *sel = c->count - 1;
             }
-            launcher_text(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%d / %d", *sel + 1, c->count);
-            draw_grid(menu, c, *sel);
+            if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+                draw_carousel(menu, c, *sel);
+            } else {
+                launcher_text(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%d / %d", *sel + 1, c->count);
+                draw_grid(menu, c, *sel);
+            }
         }
         launcher_draw_footer(HINTS_LIBRARY);
     }
@@ -286,6 +387,7 @@ void view_library_init (menu_t *menu) {
         category_index = 0;
         top_row = 0;
     }
+    carousel_position = (float)(*current_selection());
 }
 
 void view_library_display (menu_t *menu, surface_t *display) {
