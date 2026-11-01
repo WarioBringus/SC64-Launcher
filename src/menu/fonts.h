@@ -33,6 +33,7 @@ typedef enum {
     STL_GRAY,        /**< Gray font style */
     STL_ACCENT,      /**< Theme accent color */
     STL_ON_ACCENT,   /**< Text drawn on the accent color */
+    STL_ON_BUTTON,   /**< White, for button icons */
 } menu_font_style_t;
 
 /**

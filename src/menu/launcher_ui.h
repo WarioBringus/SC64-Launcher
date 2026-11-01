@@ -30,6 +30,21 @@
 #define LAUNCHER_COVER_W        (158)
 #define LAUNCHER_COVER_H        (112)
 
+/** @brief Controller buttons shown in the hints bar (sets the icon color). */
+typedef enum {
+    LAUNCHER_BUTTON_A,
+    LAUNCHER_BUTTON_B,
+    LAUNCHER_BUTTON_START,
+    LAUNCHER_BUTTON_OTHER,
+} launcher_button_t;
+
+/** @brief One entry of the hints bar: a button icon and what it does. */
+typedef struct {
+    launcher_button_t kind;
+    const char *button;     /**< Text on the icon, e.g. "A" or "L R" */
+    const char *label;      /**< What the button does */
+} launcher_hint_t;
+
 /** @brief Top-level launcher tabs. */
 typedef enum {
     LAUNCHER_TAB_HOME = 0,
@@ -77,11 +92,23 @@ int launcher_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 
-/** @brief Draw the separator and a right-aligned line of button hints. */
-void launcher_draw_footer(const char *hints);
+/** @brief Draw the separator and a right-aligned row of button icons with labels. */
+void launcher_draw_footer(const launcher_hint_t *hints, int count);
 
-/** @brief Draw a selection ring just outside a rectangle. */
-void launcher_draw_ring(int x0, int y0, int x1, int y1);
+/** @brief Fill a rectangle with rounded corners. */
+void launcher_fill_rounded(int x0, int y0, int x1, int y1, int radius, color_t color);
+
+/**
+ * @brief Draw a selection ring around a rounded rectangle (draw it before the content).
+ */
+void launcher_draw_ring(int x0, int y0, int x1, int y1, int radius);
+
+/**
+ * @brief Draw a category pill; active pills are filled with the accent color.
+ *
+ * @return Width of the pill in pixels.
+ */
+int launcher_draw_pill(int x, int y, const char *name, bool active);
 
 /**
  * @brief Draw a cover tile: the image (fitted and centered), or a placeholder with the title.
@@ -94,13 +121,16 @@ void launcher_draw_ring(int x0, int y0, int x1, int y1);
  * @param pending True while the cover is loading (draws an empty tile instead of the title).
  * @param title Game title.
  * @param selected Draw the selection ring.
+ * @param behind Color behind the tile, used to round the cover's corners.
  */
-void launcher_draw_tile(int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected);
+void launcher_draw_tile(int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind);
 
 /**
  * @brief Draw a cover scaled to fit inside a box (used by the carousel).
+ *
+ * @param behind Color behind the cover, used to round its corners.
  */
-void launcher_draw_cover_scaled(surface_t *image, int x, int y, int w, int h);
+void launcher_draw_cover_scaled(surface_t *image, int x, int y, int w, int h, color_t behind);
 
 /* ------------------------------------------------------------------ navigation */
 

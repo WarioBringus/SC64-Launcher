@@ -28,10 +28,27 @@
 #define MAX_ROW_ITEMS       (HISTORY_COUNT > FAVORITES_COUNT ? HISTORY_COUNT : FAVORITES_COUNT)
 #define COVER_CACHE_SIZE    (HISTORY_COUNT + FAVORITES_COUNT)
 
-/* Button hints: ^02 = blue (A), ^03 = yellow (R/Z), ^05 = red (Start) */
-#define HINTS_HOME          "^02A^00 Play    ^03R^00 Library    ^05Start^00 Menu"
-#define HINTS_FAVORITES     "^02A^00 Play    ^03Z^00 Remove    ^03R^00 Library    ^05Start^00 Menu"
-#define HINTS_EMPTY         "^03R^00 Library    ^05Start^00 Menu"
+#define CARD_RADIUS         (10)
+
+static const launcher_hint_t hints_home[] = {
+    { LAUNCHER_BUTTON_A, "A", "Play" },
+    { LAUNCHER_BUTTON_OTHER, "R", "Library" },
+    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+};
+
+static const launcher_hint_t hints_favorites[] = {
+    { LAUNCHER_BUTTON_A, "A", "Play" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Remove" },
+    { LAUNCHER_BUTTON_OTHER, "R", "Library" },
+    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+};
+
+static const launcher_hint_t hints_empty[] = {
+    { LAUNCHER_BUTTON_OTHER, "R", "Library" },
+    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+};
+
+#define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
 typedef enum {
     ROW_RESUME,
@@ -229,15 +246,15 @@ static void process (menu_t *menu) {
 
 static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int *lookups_left) {
     home_item_t *h = &row->items[0];
-    ui_components_box_draw(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H, theme_current()->panel);
     if (focused) {
-        launcher_draw_ring(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H);
+        launcher_draw_ring(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H, CARD_RADIUS);
     }
+    launcher_fill_rounded(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H, CARD_RADIUS, theme_current()->panel);
 
     bool pending;
     int cover_y = y + (RESUME_CARD_H - LAUNCHER_COVER_H) / 2;
     surface_t *image = item_image(menu, h, LAUNCHER_COVER_W, LAUNCHER_COVER_H, lookups_left, &pending);
-    launcher_draw_tile(RESUME_COVER_X, cover_y, LAUNCHER_COVER_W, LAUNCHER_COVER_H, image, pending, h->title, false);
+    launcher_draw_tile(RESUME_COVER_X, cover_y, LAUNCHER_COVER_W, LAUNCHER_COVER_H, image, pending, h->title, false, theme_current()->panel);
 
     // The folder the game lives in, e.g. "N64 USA".
     char folder[64] = "";
@@ -275,7 +292,7 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
         bool selected = focused && (i == row->selected);
         bool pending;
         surface_t *image = item_image(menu, h, ROW_TILE_W, ROW_TILE_H, lookups_left, &pending);
-        launcher_draw_tile(x, tile_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, selected);
+        launcher_draw_tile(x, tile_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, selected, theme_current()->bg);
         if (selected || !highlight_only) {
             int extra = selected && highlight_only ? 60 : 3;
             int tx = x - extra;
@@ -303,7 +320,7 @@ static void draw (menu_t *menu, surface_t *d) {
     if (row_count == 0) {
         launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Games you play and favorite will show up here");
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Press R to browse your library");
-        launcher_draw_footer(HINTS_EMPTY);
+        launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
     } else {
         int y = LAUNCHER_SUBHEADER_Y + 2;
         for (int r = 0; r < row_count; r++) {
@@ -314,7 +331,11 @@ static void draw (menu_t *menu, surface_t *d) {
                 y = draw_row(menu, &rows[r], y, focused, &lookups_left);
             }
         }
-        launcher_draw_footer(rows[row_selected].kind == ROW_FAVORITES ? HINTS_FAVORITES : HINTS_HOME);
+        if (rows[row_selected].kind == ROW_FAVORITES) {
+            launcher_draw_footer(hints_favorites, HINT_COUNT(hints_favorites));
+        } else {
+            launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
+        }
     }
 
     launcher_menu_draw();

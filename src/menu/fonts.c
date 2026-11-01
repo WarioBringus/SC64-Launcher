@@ -18,6 +18,7 @@ static void apply_font_styles (void) {
     rdpq_font_style(default_font, STL_GRAY, &((rdpq_fontstyle_t) { .color = THEME_TEXT_GRAY }));
     rdpq_font_style(default_font, STL_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->accent }));
     rdpq_font_style(default_font, STL_ON_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->on_accent }));
+    rdpq_font_style(default_font, STL_ON_BUTTON, &((rdpq_fontstyle_t) { .color = RGBA32(0xFF, 0xFF, 0xFF, 0xFF) }));
 }
 
 static void load_default_font (char *custom_font_path) {

@@ -16,7 +16,6 @@
 #include "../theme.h"
 
 #define MAX_REMEMBERED_CATEGORIES   (32)
-#define CATEGORY_TAB_SPACING        (22)
 #define TITLE_EXTRA_HIGHLIGHT_ONLY  (48)
 
 #define CAROUSEL_CENTER_Y           (222)   /* Vertical center of the covers */
@@ -27,9 +26,31 @@
 #define CAROUSEL_FAST_STEP          (5)
 #define CAROUSEL_TITLE_Y            (330)
 
-/* Button hints: ^02 = blue (A), ^01 = green (B), ^05 = red (Start), ^03 = yellow (L/R/Z) */
-#define HINTS_LIBRARY   "^02A^00 Open    ^01B^00 Home    ^03L/R^00 Category    ^03Z^00 Layout    ^05Start^00 Menu"
-#define HINTS_EMPTY     "^01B^00 Home    ^05Start^00 Menu"
+#define CATEGORY_PILL_Y             (LAUNCHER_SUBHEADER_Y - 2)
+
+static const launcher_hint_t hints_grid[] = {
+    { LAUNCHER_BUTTON_A, "A", "Open" },
+    { LAUNCHER_BUTTON_B, "B", "Home" },
+    { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
+    { LAUNCHER_BUTTON_OTHER, "C", "Size" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
+    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+};
+
+static const launcher_hint_t hints_carousel[] = {
+    { LAUNCHER_BUTTON_A, "A", "Open" },
+    { LAUNCHER_BUTTON_B, "B", "Home" },
+    { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
+    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+};
+
+static const launcher_hint_t hints_empty[] = {
+    { LAUNCHER_BUTTON_B, "B", "Home" },
+    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+};
+
+#define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
 static int category_index = 0;
 static int selections[MAX_REMEMBERED_CATEGORIES];
@@ -230,13 +251,8 @@ static void draw_category_tabs (void) {
         return;
     }
     int x = LAUNCHER_X0;
-    for (int i = 0; i < count && x < LAUNCHER_X1 - 40; i++) {
-        bool on = (i == category_index);
-        int w = launcher_name(x, LAUNCHER_SUBHEADER_Y, 0, ALIGN_LEFT, on ? STL_ACCENT : STL_GRAY, library_category_name(i));
-        if (on) {
-            ui_components_box_draw(x, LAUNCHER_SUBHEADER_Y + 20, x + w, LAUNCHER_SUBHEADER_Y + 22, theme_current()->accent);
-        }
-        x += w + CATEGORY_TAB_SPACING;
+    for (int i = 0; i < count && x < LAUNCHER_X1 - 80; i++) {
+        x += launcher_draw_pill(x, CATEGORY_PILL_Y, library_category_name(i), i == category_index) + 8;
     }
 }
 
@@ -271,7 +287,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         bool selected = (i == sel);
 
         surface_t *image = game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
-        launcher_draw_tile(x, y, g.w, g.h, image, pending, c->games[i].title, selected);
+        launcher_draw_tile(x, y, g.w, g.h, image, pending, c->games[i].title, selected, theme_current()->bg);
 
         if (selected || !highlight_only) {
             int extra = highlight_only ? TITLE_EXTRA_HIGHLIGHT_ONLY : (g.gap / 2) - 1;
@@ -349,11 +365,11 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
             surface_t *image = game_cover(menu, &c->games[i], cw, ch, &lookups_left, &pending);
             bool settled = (i == sel) && (carousel_position == (float)sel);
             if (settled) {
-                launcher_draw_tile(x, y, w, h, image, pending, c->games[i].title, true);
+                launcher_draw_tile(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg);
             } else if (image) {
-                launcher_draw_cover_scaled(image, x, y, w, h);
+                launcher_draw_cover_scaled(image, x, y, w, h, theme_current()->bg);
             } else {
-                launcher_draw_tile(x, y, w, h, NULL, true, NULL, false);
+                launcher_draw_tile(x, y, w, h, NULL, true, NULL, false, theme_current()->bg);
             }
         }
     }
@@ -377,7 +393,7 @@ static void draw (menu_t *menu, surface_t *d) {
         launcher_name(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, message);
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY,
             "Use Start > File browser to find your ROMs");
-        launcher_draw_footer(HINTS_EMPTY);
+        launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
     } else {
         draw_category_tabs();
         int *sel = current_selection();
@@ -394,7 +410,11 @@ static void draw (menu_t *menu, surface_t *d) {
                 draw_grid(menu, c, *sel);
             }
         }
-        launcher_draw_footer(HINTS_LIBRARY);
+        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+            launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
+        } else {
+            launcher_draw_footer(hints_grid, HINT_COUNT(hints_grid));
+        }
     }
 
     launcher_menu_draw();
