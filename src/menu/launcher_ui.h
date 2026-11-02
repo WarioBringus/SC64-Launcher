@@ -133,6 +133,29 @@ int launcher_title(int x, int y, int width, rdpq_align_t align, menu_font_style_
 /** @brief Draw a page title in the header (for screens opened from the launcher). */
 void launcher_draw_page_title(const char *title);
 
+/** @brief Draw the screen background (theme color, or the user's background image). */
+void launcher_draw_background(void);
+
+/** @brief A block of wrapped text laid out once and drawn every frame (e.g. a game description). */
+typedef struct launcher_paragraph_s launcher_paragraph_t;
+
+/** @brief Lay out text wrapped to a logical width, in the launcher font. */
+launcher_paragraph_t *launcher_paragraph_build(const char *text, int width);
+
+/** @brief Height of the laid-out text in pixels. */
+int launcher_paragraph_height(launcher_paragraph_t *paragraph);
+
+/**
+ * @brief Draw laid-out text with its top at (x, y), showing only the rows between clip_y0 and clip_y1.
+ */
+void launcher_paragraph_draw(launcher_paragraph_t *paragraph, int x, int y, int clip_y0, int clip_y1);
+
+/** @brief Free laid-out text (NULL is fine). */
+void launcher_paragraph_free(launcher_paragraph_t *paragraph);
+
+/** @brief The game the About page shows (set by the Start menu's "About this game"). */
+path_t *launcher_about_rom(void);
+
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 

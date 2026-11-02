@@ -22,6 +22,7 @@
 #include "../sound.h"
 #include "../theme.h"
 #include "../ui_components.h"
+#include "utils/fs.h"
 
 #define HEADER_TAB_SPACING      (24)
 #define HEADER_UNDERLINE_Y      (LAUNCHER_HEADER_Y + 21)
@@ -293,8 +294,55 @@ void launcher_draw_page_title (const char *title) {
     launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
 }
 
-void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
+void launcher_draw_background (void) {
     ui_components_background_draw();
+}
+
+struct launcher_paragraph_s {
+    rdpq_paragraph_t *layout;
+};
+
+launcher_paragraph_t *launcher_paragraph_build (const char *text, int width) {
+    size_t size = strlen(text) * 2 + 1;
+    char *escaped = malloc(size);
+    if (!escaped) {
+        return NULL;
+    }
+    escape_text_codes(text, escaped, size);
+    int nbytes = strlen(escaped);
+    launcher_paragraph_t *p = malloc(sizeof(launcher_paragraph_t));
+    p->layout = rdpq_paragraph_build(&(rdpq_textparms_t) {
+        .style_id = STL_DEFAULT,
+        .width = px(width),
+        .wrap = WRAP_WORD,
+    }, launcher_font(font_for(escaped, FNT_LAUNCHER)), escaped, &nbytes);
+    free(escaped);
+    return p;
+}
+
+int launcher_paragraph_height (launcher_paragraph_t *p) {
+    return p ? (int)(p->layout->bbox.y1 - p->layout->bbox.y0) : 0;
+}
+
+void launcher_paragraph_draw (launcher_paragraph_t *p, int x, int y, int clip_y0, int clip_y1) {
+    if (!p) {
+        return;
+    }
+    rdpq_set_scissor(0, clip_y0, display_get_width(), clip_y1);
+    // Layouts built without a height put the first baseline at 0; shift so the text's top sits at y.
+    rdpq_paragraph_render(p->layout, px(x), y - p->layout->bbox.y0);
+    rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+}
+
+void launcher_paragraph_free (launcher_paragraph_t *p) {
+    if (p) {
+        rdpq_paragraph_free(p->layout);
+        free(p);
+    }
+}
+
+void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
+    launcher_draw_background();
 
     static const char *tabs[] = { "Home", "Library" };
     int x = LAUNCHER_X0;
@@ -646,6 +694,41 @@ static void toggle_favorite (menu_t *menu, void *arg) {
     favorites_changed = true;
 }
 
+static path_t *about_rom = NULL;
+
+path_t *launcher_about_rom (void) {
+    return about_rom;
+}
+
+/** @brief Whether the highlighted entry is a ROM (64DD disks have their own load screen). */
+static bool selected_is_rom (void) {
+    return selected_rom && !file_has_extensions(path_get(selected_rom), (const char *[]) { "ndd", NULL });
+}
+
+static void about_game (menu_t *menu, void *arg) {
+    (void)arg;
+    if (!selected_is_rom()) {
+        return;
+    }
+    path_free(about_rom);
+    about_rom = path_clone(selected_rom);
+    launcher_leave(menu, MENU_MODE_ABOUT);
+}
+
+static void game_options (menu_t *menu, void *arg) {
+    (void)arg;
+    if (!selected_is_rom()) {
+        return;
+    }
+    // The ROM details screen with all its per-game settings, even when Quick Launch is on.
+    path_free(menu->load.launcher_rom_path);
+    menu->load.launcher_rom_path = path_clone(selected_rom);
+    menu->load.load_history_id = -1;
+    menu->load.load_favorite_id = -1;
+    menu->load.quick_start = false;
+    launcher_leave(menu, MENU_MODE_LOAD_ROM);
+}
+
 static void request (menu_t *menu, launcher_request_t r) {
     pending_request = r;
     // These act on the library; from Home, go there first.
@@ -685,6 +768,8 @@ static void rescan_folders (menu_t *menu, void *arg) {
 static component_context_menu_t start_menu = {
     .list = {
         { .text = favorite_label, .action = toggle_favorite },
+        { .text = "About this game", .action = about_game },
+        { .text = "Game options", .action = game_options },
         { .text = "Sort by", .submenu = &sort_menu },
         { .text = "Filter", .action = open_filter },
         { .text = "Surprise me", .action = surprise_me },

@@ -385,6 +385,21 @@ void view_home_init(menu_t *menu);
 void view_home_display(menu_t *menu, surface_t *display);
 
 /**
+ * @brief Initialize the launcher "About this game" view.
+ *
+ * @param menu Pointer to the menu structure.
+ */
+void view_about_init(menu_t *menu);
+
+/**
+ * @brief Display the launcher "About this game" view.
+ *
+ * @param menu Pointer to the menu structure.
+ * @param display Pointer to the display surface.
+ */
+void view_about_display(menu_t *menu, surface_t *display);
+
+/**
  * @brief Show an error message in the menu.
  *
  * @param menu Pointer to the menu structure.

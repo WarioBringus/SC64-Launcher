@@ -49,7 +49,8 @@ typedef enum {
     MENU_MODE_DATEL_CODE_EDITOR,
     MENU_MODE_EXTRACT_FILE,
     MENU_MODE_LIBRARY,
-    MENU_MODE_HOME
+    MENU_MODE_HOME,
+    MENU_MODE_ABOUT
 } menu_mode_t;
 
 /** @brief File entry type enumeration */
