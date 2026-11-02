@@ -590,6 +590,17 @@ static bool game_identity (const library_game_t *g, char key[4]) {
     return true;
 }
 
+/** @brief Whether a folder holds ROM hacks: its name contains "hack", in any case ("N64 Hacks", "ROM hacks"). */
+static bool is_hack_folder (path_t *directory) {
+    const char *name = path_last_get(directory);
+    for (const char *p = name; p && *p; p++) {
+        if (strncasecmp(p, "hack", 4) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** @brief Preference among regional copies: lower is better (USA, Europe, Japan, then the rest). */
 static int region_rank (path_t *directory) {
     const char *dir = path_get(directory);
@@ -650,7 +661,9 @@ static void load_all_games (void) {
     int *ranks = malloc((n > 0 ? n : 1) * sizeof(int));
     for (int k = 0; k < n; k++) {
         char key[4];
-        keys[k] = game_identity(&everything[k], key) ? ((uint32_t)key[0] << 16) | ((uint32_t)key[1] << 8) | (uint32_t)key[2] : 0;
+        // Hacks reuse their original's game code but are different games: never treat them as copies.
+        bool hack = is_hack_folder(everything[k].directory);
+        keys[k] = (!hack && game_identity(&everything[k], key)) ? ((uint32_t)key[0] << 16) | ((uint32_t)key[1] << 8) | (uint32_t)key[2] : 0;
         ranks[k] = region_rank(everything[k].directory);
     }
 
