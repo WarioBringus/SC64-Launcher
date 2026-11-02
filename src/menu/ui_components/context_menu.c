@@ -36,6 +36,7 @@ void ui_components_context_menu_init(component_context_menu_t *cm) {
     cm->row_count = 0;
     cm->hide_pending = false;
     cm->parent = NULL;
+    cm->submenu = NULL;
     for (int i = 0; (cm->list[i].text) != NULL; i++) {
         cm->row_count += 1;
     }

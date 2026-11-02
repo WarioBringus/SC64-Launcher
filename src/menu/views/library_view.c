@@ -48,7 +48,7 @@ static const launcher_hint_t hints_grid[] = {
     { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
     { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Jump" },
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Size" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
@@ -57,7 +57,7 @@ static const launcher_hint_t hints_carousel[] = {
     { LAUNCHER_BUTTON_B, "B", "Home" },
     { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
@@ -457,6 +457,14 @@ static void process (menu_t *menu) {
         return;
     }
 
+    // Layout changed from the Start menu: start the new one at the highlighted game.
+    static int shown_layout = -1;
+    if (menu->settings.launcher_layout != shown_layout) {
+        shown_layout = menu->settings.launcher_layout;
+        top_row = 0;
+        carousel_position = (float)(*current_selection());
+    }
+
     library_category_t *current = library_category(category_index);
     if (current) {
         apply_sort(current, category_index);
@@ -495,25 +503,20 @@ static void process (menu_t *menu) {
         return;
     }
 
-    if (menu->actions.settings) {
+    if (menu->actions.settings || menu->actions.trigger_z) {
         int sel = *current_selection();
         path_t *rom = (current && sel < current->shown) ? library_game_path(&current->games[sel]) : NULL;
-        launcher_menu_show(menu, rom);
+        if (menu->actions.settings) {
+            launcher_menu_show(menu, rom);
+        } else {
+            launcher_game_menu_show(menu, rom);
+        }
         return;
     }
     if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
         settings_save(&menu->settings);
         menu->next_mode = MENU_MODE_HOME;
-        return;
-    }
-    if (menu->actions.trigger_z) {
-        menu->settings.launcher_layout = (menu->settings.launcher_layout == LAUNCHER_LAYOUT_GRID)
-            ? LAUNCHER_LAYOUT_CAROUSEL
-            : LAUNCHER_LAYOUT_GRID;
-        top_row = 0;
-        carousel_position = (float)(*current_selection());
-        sound_play_effect(SFX_SETTING);
         return;
     }
     if (menu->actions.shoulder_l) {

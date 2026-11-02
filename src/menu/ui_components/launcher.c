@@ -755,6 +755,12 @@ static launcher_request_t pending_request = LAUNCHER_REQUEST_NONE;
 static bool favorites_changed = false;
 static char favorite_label[32] = "Add to favorites";
 static char rescan_label[40] = "Rescan folders";
+static char sort_label[40] = "Sort by";
+static char theme_label[48] = "Theme";
+static char layout_label[40] = "Layout";
+static char tile_size_label[40] = "Tile size";
+static char cover_style_label[40] = "Cover style";
+static char titles_label[48] = "Game titles";
 
 static int favorite_index (menu_t *menu, path_t *rom) {
     for (int i = 0; rom && i < FAVORITES_COUNT; i++) {
@@ -901,29 +907,65 @@ static void rescan_folders (menu_t *menu, void *arg) {
     library_rescan(menu);
 }
 
-static component_context_menu_t start_menu = {
+/* Z: things to do with the highlighted game. */
+static component_context_menu_t game_menu = {
     .list = {
         { .text = favorite_label, .action = toggle_favorite },
         { .text = "About this game", .action = about_game },
         { .text = "Game options", .action = game_options },
-        { .text = "Sort by", .submenu = &sort_menu },
-        { .text = "Filter", .action = open_filter },
-        { .text = "Surprise me", .action = surprise_me },
         { .text = "Hide game", .action = hide_game },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static component_context_menu_t browse_menu = {
+    .list = {
+        { .text = sort_label, .submenu = &sort_menu },
+        { .text = "Filter", .action = open_filter },
         { .text = "Hidden games", .action = open_hidden },
-        { .text = "Theme", .submenu = &theme_menu },
-        { .text = "Tile size", .submenu = &tile_size_menu },
-        { .text = "Cover style", .submenu = &cover_style_menu },
-        { .text = "Layout", .submenu = &layout_menu },
-        { .text = "Game titles", .submenu = &titles_menu },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static component_context_menu_t look_menu = {
+    .list = {
+        { .text = theme_label, .submenu = &theme_menu },
+        { .text = layout_label, .submenu = &layout_menu },
+        { .text = tile_size_label, .submenu = &tile_size_menu },
+        { .text = cover_style_label, .submenu = &cover_style_menu },
+        { .text = titles_label, .submenu = &titles_menu },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static component_context_menu_t files_menu = {
+    .list = {
         { .text = rescan_label, .action = rescan_folders },
         { .text = "File browser", .action = open_file_browser },
-        { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static component_context_menu_t system_menu = {
+    .list = {
         { .text = "Menu settings", .action = open_screen, .arg = (void *)(MENU_MODE_SETTINGS_EDITOR) },
+        { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Time (RTC) settings", .action = open_screen, .arg = (void *)(MENU_MODE_RTC) },
         { .text = "Menu information", .action = open_screen, .arg = (void *)(MENU_MODE_CREDITS) },
         { .text = "Flashcart information", .action = open_screen, .arg = (void *)(MENU_MODE_FLASHCART) },
         { .text = "N64 information", .action = open_screen, .arg = (void *)(MENU_MODE_SYSTEM_INFO) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+/* Start: the whole launcher, grouped. */
+static component_context_menu_t start_menu = {
+    .list = {
+        { .text = "Surprise me", .action = surprise_me },
+        { .text = "Browse", .submenu = &browse_menu },
+        { .text = "Look", .submenu = &look_menu },
+        { .text = "Library", .submenu = &files_menu },
+        { .text = "System", .submenu = &system_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -934,9 +976,22 @@ void launcher_menu_init (void) {
         theme_menu.list[i].text = theme ? theme->name : "-";
     }
     ui_components_context_menu_init(&start_menu);
+    ui_components_context_menu_init(&game_menu);
 }
 
-void launcher_menu_show (menu_t *menu, path_t *rom) {
+/** @brief The name of a choice menu's current choice, e.g. "Medium" from the tile size menu. */
+static const char *current_choice (menu_t *menu, component_context_menu_t *choices) {
+    int index = choices->get_default_selection(menu);
+    for (int i = 0; choices->list[i].text; i++) {
+        if (i == index) {
+            return choices->list[i].text;
+        }
+    }
+    return "-";
+}
+
+/** @brief Remember the highlighted game and refresh the labels that depend on it or on settings. */
+static void prepare_menus (menu_t *menu, path_t *rom) {
     path_free(selected_rom);
     selected_rom = rom;
     snprintf(favorite_label, sizeof(favorite_label), "%s",
@@ -947,14 +1002,36 @@ void launcher_menu_show (menu_t *menu, path_t *rom) {
     } else {
         snprintf(rescan_label, sizeof(rescan_label), "Rescan folders");
     }
+    snprintf(sort_label, sizeof(sort_label), "Sort by: %s", current_choice(menu, &sort_menu));
+    snprintf(theme_label, sizeof(theme_label), "Theme: %s", current_choice(menu, &theme_menu));
+    snprintf(layout_label, sizeof(layout_label), "Layout: %s", current_choice(menu, &layout_menu));
+    snprintf(tile_size_label, sizeof(tile_size_label), "Tile size: %s", current_choice(menu, &tile_size_menu));
+    snprintf(cover_style_label, sizeof(cover_style_label), "Cover style: %s", current_choice(menu, &cover_style_menu));
+    snprintf(titles_label, sizeof(titles_label), "Game titles: %s",
+        menu->settings.launcher_titles_highlight_only ? "Highlighted" : "Always");
+}
+
+void launcher_menu_show (menu_t *menu, path_t *rom) {
+    prepare_menus(menu, rom);
     ui_components_context_menu_show(&start_menu);
     sound_play_effect(SFX_SETTING);
 }
 
+void launcher_game_menu_show (menu_t *menu, path_t *rom) {
+    if (!rom) {
+        return;
+    }
+    prepare_menus(menu, rom);
+    ui_components_context_menu_show(&game_menu);
+    sound_play_effect(SFX_SETTING);
+}
+
 bool launcher_menu_process (menu_t *menu) {
-    return ui_components_context_menu_process(menu, &start_menu);
+    return ui_components_context_menu_process(menu, &start_menu) ||
+        ui_components_context_menu_process(menu, &game_menu);
 }
 
 void launcher_menu_draw (void) {
     ui_components_context_menu_draw(&start_menu);
+    ui_components_context_menu_draw(&game_menu);
 }

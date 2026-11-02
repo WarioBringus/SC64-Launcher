@@ -35,13 +35,7 @@
 
 static const launcher_hint_t hints_home[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },
-    { LAUNCHER_BUTTON_OTHER, "R", "Library" },
-    { LAUNCHER_BUTTON_START, "S", "Menu" },
-};
-
-static const launcher_hint_t hints_favorites[] = {
-    { LAUNCHER_BUTTON_A, "A", "Play" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Remove" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
@@ -254,11 +248,8 @@ static void process (menu_t *menu) {
         sound_play_effect(SFX_CURSOR);
     } else if (menu->actions.enter && row->count > 0) {
         launch(menu, &row->items[row->selected]);
-    } else if (menu->actions.trigger_z && row->kind == ROW_FAVORITES && row->count > 0) {
-        bookkeeping_favorite_remove(&menu->bookkeeping, row->items[row->selected].index);
-        launcher_favorites_touched();
-        build_rows(menu);
-        sound_play_effect(SFX_SETTING);
+    } else if (menu->actions.trigger_z && row->count > 0) {
+        launcher_game_menu_show(menu, path_clone(item_path(&row->items[row->selected])));
     }
 }
 
@@ -378,11 +369,7 @@ static void draw (menu_t *menu, surface_t *d) {
             }
         }
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
-        if (rows[row_selected].kind == ROW_FAVORITES) {
-            launcher_draw_footer(hints_favorites, HINT_COUNT(hints_favorites));
-        } else {
-            launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
-        }
+        launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
 
     launcher_menu_draw();

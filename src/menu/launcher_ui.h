@@ -234,11 +234,18 @@ void launcher_leave(menu_t *menu, menu_mode_t next_mode);
 void launcher_apply_theme(menu_t *menu, int index);
 
 /**
- * @brief Open the Start menu (favorite, sort, filter, quick settings, file browser, settings, info screens).
+ * @brief Open the Start menu: Surprise me, then Browse, Look, Library and System groups.
  *
- * @param selected_rom The highlighted game's ROM (for "Add to favorites"); the menu keeps it. May be NULL.
+ * @param selected_rom The highlighted game's ROM; the menu keeps it. May be NULL.
  */
 void launcher_menu_show(menu_t *menu, path_t *selected_rom);
+
+/**
+ * @brief Open the Game menu (Z): favorite, about, game options, hide.
+ *
+ * @param selected_rom The highlighted game's ROM; the menu keeps it. Nothing opens for NULL.
+ */
+void launcher_game_menu_show(menu_t *menu, path_t *selected_rom);
 
 /** @brief Requests from the Start menu that the library view carries out. */
 typedef enum {
