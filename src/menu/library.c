@@ -25,10 +25,8 @@
 #define FALLBACK_REGIONS        "EPJUADFIS"
 #define PORTRAIT_SAMPLE_SIZE    (8)
 #define COVER_INDEX_FILE        "menu/cache/launcher/covers.idx"
-#define PLAY_COUNT_FILE         "menu/cache/launcher/playcount.txt"
 #define HIDDEN_FILE             "menu/cache/launcher/hidden.txt"
 #define MAX_HIDDEN              (256)
-#define MAX_PLAY_COUNTS         (512)
 #define COVER_INDEX_MAGIC       "LCIDX1"
 
 static const char *rom_extensions[] = { "z64", "n64", "v64", "rom", NULL };
@@ -1191,106 +1189,6 @@ void library_game_group (library_game_t *game, int sort, char *buffer, size_t si
             return;
         }
     }
-}
-
-/* Launch counts: "count<TAB>full ROM path" per line. */
-typedef struct {
-    char *path;
-    int count;
-} play_count_t;
-
-static play_count_t *play_counts = NULL;
-static int play_count_total = 0;
-static bool play_counts_loaded = false;
-
-static path_t *play_count_file (menu_t *menu) {
-    return path_init(menu->storage_prefix, PLAY_COUNT_FILE);
-}
-
-static void play_counts_load (menu_t *menu) {
-    if (play_counts_loaded) {
-        return;
-    }
-    play_counts_loaded = true;
-    play_counts = calloc(MAX_PLAY_COUNTS, sizeof(play_count_t));
-    path_t *file = play_count_file(menu);
-    FILE *f = fopen(path_get(file), "r");
-    path_free(file);
-    if (!f) {
-        return;
-    }
-    char line[600];
-    while (fgets(line, sizeof(line), f) && play_count_total < MAX_PLAY_COUNTS) {
-        char *tab = strchr(line, '\t');
-        if (!tab) {
-            continue;
-        }
-        *tab = '\0';
-        char *path = tab + 1;
-        path[strcspn(path, "\r\n")] = '\0';
-        if (path[0]) {
-            play_counts[play_count_total].count = atoi(line);
-            play_counts[play_count_total].path = strdup(path);
-            play_count_total++;
-        }
-    }
-    fclose(f);
-}
-
-void library_record_play (menu_t *menu, path_t *rom_path) {
-    if (!rom_path) {
-        return;
-    }
-    play_counts_load(menu);
-    const char *rom = path_get(rom_path);
-    int i = 0;
-    while (i < play_count_total && strcmp(play_counts[i].path, rom) != 0) {
-        i++;
-    }
-    if (i == play_count_total) {
-        if (play_count_total == MAX_PLAY_COUNTS) {
-            return;
-        }
-        play_counts[i].path = strdup(rom);
-        play_counts[i].count = 0;
-        play_count_total++;
-    }
-    play_counts[i].count++;
-
-    path_t *file = play_count_file(menu);
-    FILE *f = fopen(path_get(file), "w");
-    path_free(file);
-    if (f) {
-        for (int k = 0; k < play_count_total; k++) {
-            fprintf(f, "%d\t%s\n", play_counts[k].count, play_counts[k].path);
-        }
-        fclose(f);
-    }
-}
-
-int library_most_played (menu_t *menu, path_t **paths, int max) {
-    play_counts_load(menu);
-    bool *used = calloc(play_count_total > 0 ? play_count_total : 1, sizeof(bool));
-    int n = 0;
-    while (n < max) {
-        int best = -1;
-        for (int i = 0; i < play_count_total; i++) {
-            if (!used[i] && (best < 0 || play_counts[i].count > play_counts[best].count)) {
-                best = i;
-            }
-        }
-        if (best < 0) {
-            break;
-        }
-        used[best] = true;
-        // Skip ROMs that are no longer on the card.
-        if (!file_exists(play_counts[best].path)) {
-            continue;
-        }
-        paths[n++] = path_create(play_counts[best].path);
-    }
-    free(used);
-    return n;
 }
 
 /** @brief Whether the cover index lists this file (rel = path relative to the card root). */

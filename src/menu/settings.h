@@ -140,9 +140,6 @@ typedef struct {
     /** @brief Show the favorites row on the home screen */
     bool launcher_home_favorites;
 
-    /** @brief Show the most played row on the home screen */
-    bool launcher_home_most_played;
-
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     /** @brief Enable the ability to bypass the menu and instantly load a ROM on power and reset button */
     bool rom_autoload_enabled;

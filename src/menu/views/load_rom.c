@@ -7,7 +7,6 @@
 #include "utils/fs.h"
 #include "../ui_components/constants.h"
 #include "views.h"
-#include "../library.h"
 #include <string.h>
 
 static bool show_extra_info_message = false;
@@ -916,7 +915,6 @@ static void load (menu_t *menu) {
     }
 
     bookkeeping_history_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
-    library_record_play(menu, menu->load.rom_path);
 
     menu->next_mode = MENU_MODE_BOOT;
 
