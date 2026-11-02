@@ -12,6 +12,7 @@
 
 #define SOUND_SFX_CHANNEL           (0) /**< First Channel of sound effects 0-7 (8 in total) */
 #define SOUND_BGM_CHANNEL           (8) /**< First Channel for background music 8-9 (2 in total [stereo]) */
+#define BGM_FADE_MS                 (500) /**< Music fade-out when a game starts */
 #define SOUND_MP3_PLAYER_CHANNEL    (10) /**< First Channel for MP3 player sound 10-15 (6 in total [surround sound possible]) */
 
 

@@ -259,9 +259,12 @@ static void draw_progress (float progress) {
 static void load (menu_t *menu) {
     cart_load_err_t err;
 
+    sound_bgm_fade_out(BGM_FADE_MS);
+
     if (menu->load.rom_path && menu->load.combined_disk_rom) {
         err = cart_load_n64_rom_and_save(menu, draw_progress, NULL);
         if (err != CART_LOAD_OK) {
+            sound_use_bgm(menu->settings.bgm_enabled);
             menu_show_error(menu, cart_load_convert_error_message(err));
             return;
         }
@@ -269,6 +272,7 @@ static void load (menu_t *menu) {
 
     err = cart_load_64dd_ipl_and_disks(menu, draw_progress);
     if (err != CART_LOAD_OK) {
+        sound_use_bgm(menu->settings.bgm_enabled);
         menu_show_error(menu, cart_load_convert_error_message(err));
         return;
     }

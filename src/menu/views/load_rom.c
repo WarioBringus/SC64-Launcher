@@ -899,6 +899,9 @@ static void draw_creating_save (float progress) {
 static void load (menu_t *menu) {
     debugf("Load ROM: load function called\n");
     cart_load_err_t err;
+
+    // Fade the menu music out rather than cutting it off when the game starts.
+    sound_bgm_fade_out(BGM_FADE_MS);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.loading_progress_bar_enabled) {
         err = cart_load_n64_rom_and_save(menu, NULL, NULL);
@@ -910,6 +913,7 @@ static void load (menu_t *menu) {
 #endif
 
     if (err != CART_LOAD_OK) {
+        sound_use_bgm(menu->settings.bgm_enabled);
         menu_show_error(menu, cart_load_convert_error_message(err));
         return;
     }
