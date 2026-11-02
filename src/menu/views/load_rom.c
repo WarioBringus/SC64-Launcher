@@ -885,6 +885,7 @@ static void draw (menu_t *menu, surface_t *d) {
 }
 
 static void draw_progress (float progress) {
+    sound_bgm_keep_alive();
     surface_t *d = (progress >= 1.0f) ? display_get() : display_try_get();
 
     if (d) {
@@ -902,6 +903,7 @@ static void draw_progress (float progress) {
 }
 
 static void draw_creating_save (float progress) {
+    sound_bgm_keep_alive();
     surface_t *d = display_get();
 
     if (d) {
@@ -922,8 +924,8 @@ static void load (menu_t *menu) {
     debugf("Load ROM: load function called\n");
     cart_load_err_t err;
 
-    // Fade the menu music out rather than cutting it off when the game starts.
-    sound_bgm_fade_out(BGM_FADE_MS);
+    // SD card music keeps playing while the game loads and fades out once it's in.
+    sound_bgm_prepare_for_load();
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.loading_progress_bar_enabled) {
         err = cart_load_n64_rom_and_save(menu, NULL, NULL);
@@ -935,10 +937,15 @@ static void load (menu_t *menu) {
 #endif
 
     if (err != CART_LOAD_OK) {
-        sound_use_bgm(menu->settings.bgm_enabled);
+        sound_use_sfx(menu->settings.soundfx_enabled);
+        if (sound_bgm_is_faded()) {
+            sound_use_bgm(menu->settings.bgm_enabled);
+        }
         menu_show_error(menu, cart_load_convert_error_message(err));
         return;
     }
+
+    sound_bgm_fade_out(BGM_FADE_MS);
 
     bookkeeping_history_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
 

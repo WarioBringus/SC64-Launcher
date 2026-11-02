@@ -143,6 +143,18 @@ uint32_t sound_bgm_track_generation(void);
 /** @brief Fade the music out over duration_ms (blocks) and stop it, e.g. before a game boots. */
 void sound_bgm_fade_out(int duration_ms);
 
+/** @brief Whether the music was faded out (for a game launch). */
+bool sound_bgm_is_faded(void);
+
+/**
+ * @brief Get sound ready for a ROM load: SD card music keeps playing, the built-in track fades out,
+ * and sound effects stop (they live in the ROM area the game is loaded into).
+ */
+void sound_bgm_prepare_for_load(void);
+
+/** @brief Keep the music fed during a long blocking load (call it between chunks). */
+void sound_bgm_keep_alive(void);
+
 /**
  * @brief Play a specified sound effect.
  * 

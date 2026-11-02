@@ -297,6 +297,34 @@ uint32_t sound_bgm_track_generation (void) {
     return bgm_track_generation;
 }
 
+bool sound_bgm_is_faded (void) {
+    return bgm_faded;
+}
+
+void sound_bgm_prepare_for_load (void) {
+    // The built-in track lives in the menu's ROM filesystem, which the game is about to overwrite:
+    // fade it now. Tracks from the SD card can keep playing while the game loads.
+    if (bgm_track_count == 0) {
+        sound_bgm_fade_out(BGM_FADE_MS);
+    }
+    // The sound effects live there too: let the one just played finish before the ROM area changes.
+    uint64_t start = get_ticks_ms();
+    while (sound_initialized && mixer_ch_playing(SOUND_SFX_CHANNEL) && get_ticks_ms() - start < 400) {
+        mixer_try_play();
+    }
+    if (sound_initialized) {
+        mixer_ch_stop(SOUND_SFX_CHANNEL);
+    }
+    sfx_enabled = false;    // Nothing else plays from there until the game boots or the load fails.
+}
+
+void sound_bgm_keep_alive (void) {
+    // Called between chunks of a ROM load: fill every audio buffer that has room.
+    for (int i = 0; i < NUM_BUFFERS && sound_initialized && audio_can_write(); i++) {
+        sound_poll();
+    }
+}
+
 void sound_bgm_fade_out (int duration_ms) {
     if (!sound_initialized || !bgm_opened || !bgm_enabled || bgm_faded) {
         return;
