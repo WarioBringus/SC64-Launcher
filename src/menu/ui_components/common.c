@@ -210,9 +210,9 @@ void ui_components_dialog_draw (int width, int height) {
     int x1 = DISPLAY_CENTER_X + (width / 2);
     int y1 = DISPLAY_CENTER_Y + (height / 2);
 
-    launcher_fill_rounded(x0 - DIALOG_OUTLINE, y0 - DIALOG_OUTLINE, x1 + DIALOG_OUTLINE, y1 + DIALOG_OUTLINE,
+    launcher_fill_rounded_px(x0 - DIALOG_OUTLINE, y0 - DIALOG_OUTLINE, x1 + DIALOG_OUTLINE, y1 + DIALOG_OUTLINE,
         DIALOG_RADIUS + DIALOG_OUTLINE, BORDER_COLOR);
-    launcher_fill_rounded(x0, y0, x1, y1, DIALOG_RADIUS, DIALOG_BG_COLOR);
+    launcher_fill_rounded_px(x0, y0, x1, y1, DIALOG_RADIUS, DIALOG_BG_COLOR);
 }
 
 /**

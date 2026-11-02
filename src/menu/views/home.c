@@ -350,6 +350,8 @@ void view_home_init (menu_t *menu) {
 }
 
 void view_home_display (menu_t *menu, surface_t *display) {
+    launcher_set_widescreen(menu->settings.launcher_widescreen);
+
     process(menu);
 
     draw(menu, display);

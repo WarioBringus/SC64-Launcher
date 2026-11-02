@@ -128,6 +128,9 @@ FILESYSTEM = \
 	$(addprefix $(FILESYSTEM_DIR)/menu/fonts/, $(notdir $(FONTS:%.ttf=%.font64))) \
 	$(FILESYSTEM_DIR)/menu/fonts/InterTitle.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterSmall.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterWide.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterTitleWide.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterSmallWide.font64 \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_WAV:%.wav=%.wav64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_XM:%.xm=%.xm64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sprites/, $(notdir $(IMAGES:%.png=%.sprite)))
@@ -153,6 +156,27 @@ $(FILESYSTEM_DIR)/menu/fonts/InterSmall.font64: $(ASSETS_DIR)/fonts/Inter.ttf
 	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
 	@cp "$<" $(BUILD_DIR)/fonts/InterSmall.ttf
 	@$(N64_MKFONT) --compress 1 --size 12 --var-axis wght=600 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterSmall.ttf
+
+# 16:9 variants: glyphs squeezed for a display that is stretched to 16:9 (--display ...,16:9).
+INTER_WIDE_FLAGS = --compress 1 --display 640x480,16:9 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1
+
+$(FILESYSTEM_DIR)/menu/fonts/InterWide.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterWide.ttf
+	@$(N64_MKFONT) $(INTER_WIDE_FLAGS) --size 15 --var-axis wght=600 -o $(dir $@) $(BUILD_DIR)/fonts/InterWide.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterTitleWide.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterTitleWide.ttf
+	@$(N64_MKFONT) $(INTER_WIDE_FLAGS) --size 22 --var-axis wght=700 -o $(dir $@) $(BUILD_DIR)/fonts/InterTitleWide.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterSmallWide.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterSmallWide.ttf
+	@$(N64_MKFONT) $(INTER_WIDE_FLAGS) --size 12 --var-axis wght=600 -o $(dir $@) $(BUILD_DIR)/fonts/InterSmallWide.ttf
 
 $(FILESYSTEM_DIR)/menu/fonts/%.font64: $(ASSETS_DIR)/fonts/%.ttf
 	@echo " [FONT] $@"

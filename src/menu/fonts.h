@@ -18,6 +18,9 @@ typedef enum {
     FNT_LAUNCHER = 2, /**< Launcher body text (Inter) */
     FNT_TITLE = 3,   /**< Launcher titles (Inter, larger) */
     FNT_SMALL = 4,   /**< Launcher button hints (Inter, smaller) */
+    FNT_LAUNCHER_WIDE = 5, /**< FNT_LAUNCHER squeezed for 16:9 */
+    FNT_TITLE_WIDE = 6,    /**< FNT_TITLE squeezed for 16:9 */
+    FNT_SMALL_WIDE = 7,    /**< FNT_SMALL squeezed for 16:9 */
 } menu_font_type_t;
 
 /**

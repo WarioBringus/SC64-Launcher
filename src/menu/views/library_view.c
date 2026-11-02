@@ -22,7 +22,7 @@
 #define CAROUSEL_CENTER_Y           (222)   /* Vertical center of the covers */
 #define CAROUSEL_SIDE_SCALE         (0.66f) /* Size of the covers beside the highlighted one */
 #define CAROUSEL_SPACING            (14)
-#define CAROUSEL_REACH              (4)     /* Covers drawn on each side */
+#define CAROUSEL_REACH              (5)     /* Covers considered on each side (off-screen ones are skipped) */
 #define CAROUSEL_EASE               (0.35f) /* Fraction of the remaining distance moved per frame */
 #define CAROUSEL_FAST_STEP          (5)
 #define CAROUSEL_TITLE_Y            (330)
@@ -82,7 +82,7 @@ typedef struct {
 
 static grid_geometry_t grid_geometry (int tile_size, bool portrait) {
     static const int gaps[] = { 10, 14, 18 };
-    static const int landscape_cols[] = { 6, 4, 3 };
+    static const int landscape_widths[] = { 87, 133, 158 };
     static const int portrait_heights[] = { 84, 100, 115 };
     grid_geometry_t g;
 
@@ -92,12 +92,10 @@ static grid_geometry_t grid_geometry (int tile_size, bool portrait) {
         g.w = (g.h * LAUNCHER_COVER_H) / LAUNCHER_COVER_W;
         g.cols = (LAUNCHER_WIDTH + g.gap) / (g.w + g.gap);
     } else {
-        g.cols = landscape_cols[tile_size];
-        g.w = (LAUNCHER_WIDTH - g.gap * (g.cols - 1)) / g.cols;
-        if (g.w > LAUNCHER_COVER_W) {
-            g.w = LAUNCHER_COVER_W;
-        }
+        // Tile sizes are fixed (they match the cover packs); a wider screen fits more columns.
+        g.w = landscape_widths[tile_size];
         g.h = (g.w * LAUNCHER_COVER_H) / LAUNCHER_COVER_W;
+        g.cols = (LAUNCHER_WIDTH + g.gap) / (g.w + g.gap);
     }
     g.row_h = g.h + LAUNCHER_TITLE_SPACE + g.gap;
     g.rows = (LAUNCHER_CONTENT_Y1 - LAUNCHER_CONTENT_Y + g.gap) / g.row_h;
@@ -501,10 +499,10 @@ static void carousel_slot (float t, int cw, int sw, float *center_x, float *scal
     float a = fabsf(t);
     if (a <= 1.0f) {
         *scale = 1.0f - (1.0f - CAROUSEL_SIDE_SCALE) * a;
-        *center_x = 320.0f + t * near;
+        *center_x = LAUNCHER_CENTER_X + t * near;
     } else {
         *scale = CAROUSEL_SIDE_SCALE;
-        *center_x = 320.0f + copysignf(near + (a - 1.0f) * (sw + CAROUSEL_SPACING), t);
+        *center_x = LAUNCHER_CENTER_X + copysignf(near + (a - 1.0f) * (sw + CAROUSEL_SPACING), t);
     }
 }
 
@@ -540,7 +538,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
             int h = (int)(ch * scale);
             int x = (int)center_x - w / 2;
             int y = CAROUSEL_CENTER_Y - h / 2;
-            if (x + w < 0 || x > 640) {
+            if (x + w < 0 || x > LAUNCHER_SCREEN_W) {
                 continue;
             }
 
@@ -623,7 +621,7 @@ static void draw (menu_t *menu, surface_t *d) {
             if (w > LAUNCHER_WIDTH - 40) {
                 w = LAUNCHER_WIDTH - 40;
             }
-            int x0 = 320 - w / 2;
+            int x0 = LAUNCHER_CENTER_X - w / 2;
             int y0 = 222 - GROUP_BADGE_HEIGHT / 2;
             launcher_fill_rounded(x0, y0, x0 + w, y0 + GROUP_BADGE_HEIGHT, 16, theme_current()->accent);
             launcher_title(x0 + 8, y0 + (GROUP_BADGE_HEIGHT - 30) / 2, w - 16, ALIGN_CENTER, STL_ON_ACCENT, group_badge);
@@ -655,6 +653,7 @@ void view_library_init (menu_t *menu) {
 
 void view_library_display (menu_t *menu, surface_t *display) {
     current_sort = menu->settings.launcher_sort;
+    launcher_set_widescreen(menu->settings.launcher_widescreen);
 
     // "Rescan folders" in the Start menu can change the number of categories.
     if (category_index >= library_category_count()) {

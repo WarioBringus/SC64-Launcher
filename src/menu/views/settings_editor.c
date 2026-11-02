@@ -193,6 +193,11 @@ static void set_theme_type (menu_t *menu, void *arg) {
     launcher_apply_theme(menu, (int)(uintptr_t)(arg));
 }
 
+static void set_launcher_widescreen_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_widescreen = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void remove_background_image (menu_t *menu, void *arg) {
     (void)arg;
     (void)menu;
@@ -496,6 +501,18 @@ static component_context_menu_t set_launcher_tile_size_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_launcher_widescreen_current_selection (menu_t *menu) {
+    return menu->settings.launcher_widescreen ? 1 : 0;
+}
+
+static component_context_menu_t set_launcher_widescreen_context_menu = {
+    .get_default_selection = get_launcher_widescreen_current_selection,
+    .list = {
+        {.text = "4:3", .action = set_launcher_widescreen_type, .arg = (void *)(uintptr_t)(false) },
+        {.text = "16:9", .action = set_launcher_widescreen_type, .arg = (void *)(uintptr_t)(true) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t launcher_context_menu = { .list = {
     { .text = "Launcher", .submenu = &set_launcher_enabled_context_menu },
     { .text = "Folder Categories", .submenu = &set_launcher_categories_enabled_context_menu },
@@ -505,6 +522,7 @@ static component_context_menu_t launcher_context_menu = { .list = {
     { .text = "Home: Resume", .submenu = &set_launcher_home_resume_context_menu },
     { .text = "Home: Recent", .submenu = &set_launcher_home_recent_context_menu },
     { .text = "Home: Favorites", .submenu = &set_launcher_home_favorites_context_menu },
+    { .text = "Screen", .submenu = &set_launcher_widescreen_context_menu },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -595,6 +613,9 @@ static const launcher_hint_t settings_hints[] = {
 
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
+
+    // This page's body is the stock layout, so its launcher-style title and hints are drawn in 4:3 too.
+    launcher_set_widescreen(false);
 
     ui_components_background_draw();
 

@@ -113,6 +113,9 @@ typedef struct {
     /** @brief Library sort order (launcher_sort_t) */
     int launcher_sort;
 
+    /** @brief Draw the launcher for a 16:9 display (the TV or Analogue 3D stretches it) */
+    bool launcher_widescreen;
+
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 

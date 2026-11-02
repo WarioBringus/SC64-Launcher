@@ -9,6 +9,7 @@ static rdpq_font_t *default_font = NULL;
 static rdpq_font_t *launcher_font = NULL;
 static rdpq_font_t *title_font = NULL;
 static rdpq_font_t *small_font = NULL;
+static rdpq_font_t *wide_fonts[3] = { NULL, NULL, NULL };
 
 
 static void apply_styles (rdpq_font_t *font) {
@@ -36,6 +37,11 @@ static void apply_font_styles (void) {
     if (small_font) {
         apply_styles(small_font);
     }
+    for (int i = 0; i < 3; i++) {
+        if (wide_fonts[i]) {
+            apply_styles(wide_fonts[i]);
+        }
+    }
 }
 
 static void load_default_font (char *custom_font_path) {
@@ -52,6 +58,9 @@ static void load_default_font (char *custom_font_path) {
     launcher_font = rdpq_font_load("rom:/menu/fonts/Inter.font64");
     title_font = rdpq_font_load("rom:/menu/fonts/InterTitle.font64");
     small_font = rdpq_font_load("rom:/menu/fonts/InterSmall.font64");
+    wide_fonts[0] = rdpq_font_load("rom:/menu/fonts/InterWide.font64");
+    wide_fonts[1] = rdpq_font_load("rom:/menu/fonts/InterTitleWide.font64");
+    wide_fonts[2] = rdpq_font_load("rom:/menu/fonts/InterSmallWide.font64");
 
     apply_font_styles();
 
@@ -59,6 +68,9 @@ static void load_default_font (char *custom_font_path) {
     rdpq_text_register_font(FNT_LAUNCHER, launcher_font);
     rdpq_text_register_font(FNT_TITLE, title_font);
     rdpq_text_register_font(FNT_SMALL, small_font);
+    rdpq_text_register_font(FNT_LAUNCHER_WIDE, wide_fonts[0]);
+    rdpq_text_register_font(FNT_TITLE_WIDE, wide_fonts[1]);
+    rdpq_text_register_font(FNT_SMALL_WIDE, wide_fonts[2]);
 }
 
 

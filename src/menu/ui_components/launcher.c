@@ -2,6 +2,11 @@
  * @file launcher.c
  * @brief Drawing and navigation helpers shared by the launcher views.
  * @ingroup ui_components
+ *
+ * Launcher views lay out in logical coordinates. In 16:9 mode the logical screen is 853 pixels
+ * wide and every helper here squeezes horizontal positions by 3/4 into the real 640-pixel frame;
+ * the TV (or the Analogue 3D's stretch setting) widens it back, so shapes and text keep their
+ * proportions. In 4:3 mode logical and real coordinates are the same.
  */
 
 #include <math.h>
@@ -32,6 +37,10 @@
 #define HINT_GAP                (14)
 #define WIDTH_CACHE_SIZE        (48)
 
+#define SCREEN_WIDTH_4_3        (640)
+#define SCREEN_WIDTH_16_9       (853)   /* 640 * 4 / 3 */
+#define WIDE_SQUEEZE            (0.75f)
+
 /* Button colors match the N64 controller. */
 #define BUTTON_A_COLOR          RGBA32(0x4C, 0x7B, 0xE0, 0xFF)
 #define BUTTON_B_COLOR          RGBA32(0x3F, 0xA3, 0x4D, 0xFF)
@@ -39,6 +48,52 @@
 #define BUTTON_C_COLOR          RGBA32(0xF5, 0xC5, 0x18, 0xFF)
 #define BUTTON_C_INK            RGBA32(0x2A, 0x22, 0x00, 0xFF)
 #define C_ARROWS_WIDTH          (9)     /* Room for the drawn arrows beside the "C" */
+
+static bool widescreen = false;
+
+
+void launcher_set_widescreen (bool enabled) {
+    widescreen = enabled;
+}
+
+bool launcher_is_widescreen (void) {
+    return widescreen;
+}
+
+int launcher_screen_width (void) {
+    return widescreen ? SCREEN_WIDTH_16_9 : SCREEN_WIDTH_4_3;
+}
+
+int launcher_x0 (void) {
+    // The same TV-safe margin as 4:3 (32 px), in logical units.
+    return widescreen ? 43 : 32;
+}
+
+int launcher_x1 (void) {
+    return launcher_screen_width() - launcher_x0();
+}
+
+/** @brief Logical x to real framebuffer x. */
+static int px (int x) {
+    return widescreen ? (x * 3 + 2) / 4 : x;
+}
+
+/** @brief Real pixel width to logical width. */
+static int logical_width (int width) {
+    return widescreen ? (width * 4 + 2) / 3 : width;
+}
+
+uint8_t launcher_font (uint8_t font) {
+    if (!widescreen) {
+        return font;
+    }
+    switch (font) {
+        case FNT_LAUNCHER: return FNT_LAUNCHER_WIDE;
+        case FNT_TITLE: return FNT_TITLE_WIDE;
+        case FNT_SMALL: return FNT_SMALL_WIDE;
+        default: return font;   // The stock font has no squeezed variant.
+    }
+}
 
 
 /**
@@ -57,25 +112,28 @@ static const char *escape_text_codes (const char *text, char *buffer, size_t siz
 }
 
 /**
- * @brief Draw already-escaped text inside a box.
+ * @brief Draw already-escaped text inside a box given in logical coordinates.
+ *
+ * @return Logical width of the drawn text.
  */
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
+    int real_w = (w > 0) ? px(x + w) - px(x) : 0;
     rdpq_textmetrics_t metrics = rdpq_text_printn(
         &(rdpq_textparms_t) {
             .style_id = style,
-            .width = w,
+            .width = real_w,
             .height = h,
             .align = align,
             .valign = valign,
-            .wrap = (w > 0) ? WRAP_ELLIPSES : WRAP_NONE,
+            .wrap = (real_w > 0) ? WRAP_ELLIPSES : WRAP_NONE,
         },
-        font,
-        x,
+        launcher_font(font),
+        px(x),
         y,
         text,
         strlen(text)
     );
-    return (int)(metrics.advance_x);
+    return logical_width((int)(metrics.advance_x));
 }
 
 /**
@@ -105,19 +163,20 @@ static width_entry_t width_cache[WIDTH_CACHE_SIZE];
 static int width_cache_next = 0;
 
 /**
- * @brief Width of already-escaped text in pixels, remembered for strings that stay in memory
+ * @brief Logical width of already-escaped text, remembered for strings that stay in memory
  * (hint labels, category names) so they aren't laid out again every frame.
  */
 static int text_width_font (uint8_t font, const char *text) {
+    uint8_t real_font = launcher_font(font);
     size_t length = strlen(text);
     for (int i = 0; i < WIDTH_CACHE_SIZE; i++) {
         width_entry_t *e = &width_cache[i];
-        if (e->text == text && e->length == length && e->font == font) {
-            return e->width;
+        if (e->text == text && e->length == length && e->font == real_font) {
+            return logical_width(e->width);
         }
     }
     int nbytes = (int)length;
-    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, font, text, &nbytes);
+    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, real_font, text, &nbytes);
     int width = (int)(layout->bbox.x1 - layout->bbox.x0);
     rdpq_paragraph_free(layout);
 
@@ -125,9 +184,9 @@ static int text_width_font (uint8_t font, const char *text) {
     width_cache_next = (width_cache_next + 1) % WIDTH_CACHE_SIZE;
     e->text = text;
     e->length = length;
-    e->font = font;
+    e->font = real_font;
     e->width = width;
-    return width;
+    return logical_width(width);
 }
 
 static int text_width (const char *text) {
@@ -173,37 +232,52 @@ static void flat_end (void) {
     rdpq_mode_pop();
 }
 
-void launcher_fill_rounded (int x0, int y0, int x1, int y1, int radius, color_t color) {
+/**
+ * @brief Rounded rectangle in real pixels; corner insets are multiplied by squeeze (1 or 3/4).
+ */
+static void fill_rounded_real (int x0, int y0, int x1, int y1, int radius, float squeeze, color_t color) {
     if (radius * 2 > y1 - y0) {
         radius = (y1 - y0) / 2;
     }
-    if (radius * 2 > x1 - x0) {
-        radius = (x1 - x0) / 2;
+    if ((int)(radius * squeeze) * 2 > x1 - x0) {
+        radius = (int)((x1 - x0) / (2 * squeeze));
     }
     flat_begin(color);
     rdpq_fill_rectangle(x0, y0 + radius, x1, y1 - radius);
     for (int i = 0; i < radius; i++) {
-        int inset = corner_inset(radius, i);
+        int inset = (int)(corner_inset(radius, i) * squeeze + 0.5f);
         rdpq_fill_rectangle(x0 + inset, y0 + i, x1 - inset, y0 + i + 1);
         rdpq_fill_rectangle(x0 + inset, y1 - 1 - i, x1 - inset, y1 - i);
     }
     flat_end();
 }
 
+void launcher_fill_rounded (int x0, int y0, int x1, int y1, int radius, color_t color) {
+    fill_rounded_real(px(x0), y0, px(x1), y1, radius, widescreen ? WIDE_SQUEEZE : 1.0f, color);
+}
+
+void launcher_fill_rounded_px (int x0, int y0, int x1, int y1, int radius, color_t color) {
+    fill_rounded_real(x0, y0, x1, y1, radius, 1.0f, color);
+}
+
 /**
  * @brief Round off the corners of something already drawn by painting them in the color behind it.
+ * Coordinates are logical.
  */
 static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t behind) {
+    float squeeze = widescreen ? WIDE_SQUEEZE : 1.0f;
+    int rx0 = px(x0);
+    int rx1 = px(x1);
     flat_begin(behind);
     for (int i = 0; i < radius; i++) {
-        int inset = corner_inset(radius, i);
+        int inset = (int)(corner_inset(radius, i) * squeeze + 0.5f);
         if (inset <= 0) {
             continue;
         }
-        rdpq_fill_rectangle(x0, y0 + i, x0 + inset, y0 + i + 1);
-        rdpq_fill_rectangle(x1 - inset, y0 + i, x1, y0 + i + 1);
-        rdpq_fill_rectangle(x0, y1 - 1 - i, x0 + inset, y1 - i);
-        rdpq_fill_rectangle(x1 - inset, y1 - 1 - i, x1, y1 - i);
+        rdpq_fill_rectangle(rx0, y0 + i, rx0 + inset, y0 + i + 1);
+        rdpq_fill_rectangle(rx1 - inset, y0 + i, rx1, y0 + i + 1);
+        rdpq_fill_rectangle(rx0, y1 - 1 - i, rx0 + inset, y1 - i);
+        rdpq_fill_rectangle(rx1 - inset, y1 - 1 - i, rx1, y1 - i);
     }
     flat_end();
 }
@@ -246,17 +320,18 @@ int launcher_draw_pill (int x, int y, const char *name, bool active) {
 }
 
 /**
- * @brief Small solid triangle pointing up, down, left or right, centered on (cx, cy).
+ * @brief Small solid triangle pointing up, down, left or right, centered on logical (cx, cy).
  */
 static void draw_arrow (int cx, int cy, int dx, int dy) {
+    int rcx = px(cx);
     flat_begin(BUTTON_C_INK);
     for (int i = 0; i < 3; i++) {
         int half = i;       // rows widen by one pixel each side
         if (dy != 0) {
             int y = (dy < 0) ? cy - 1 + i : cy + 1 - i;
-            rdpq_fill_rectangle(cx - half, y, cx + half + 1, y + 1);
+            rdpq_fill_rectangle(rcx - half, y, rcx + half + 1, y + 1);
         } else {
-            int x = (dx < 0) ? cx - 1 + i : cx + 1 - i;
+            int x = (dx < 0) ? rcx - 1 + i : rcx + 1 - i;
             rdpq_fill_rectangle(x, cy - half, x + 1, cy + half + 1);
         }
     }
@@ -268,7 +343,7 @@ static bool is_c_button (launcher_button_t kind) {
 }
 
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
-    ui_components_box_draw(LAUNCHER_X0, LAUNCHER_FOOTER_Y, LAUNCHER_X1, LAUNCHER_FOOTER_Y + 1, theme_current()->line);
+    ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
 
     // Lay the hints out right-aligned: [button] label   [button] label ...
     int button_w[8];
@@ -327,6 +402,22 @@ void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
         radius + LAUNCHER_RING, theme_current()->accent);
 }
 
+/**
+ * @brief Draw a cover at logical (x, y) at its own size: copied 1:1 in 4:3, squeezed to 3/4 width in 16:9.
+ */
+static void blit_cover (surface_t *image, int x, int y) {
+    rdpq_mode_push();
+    if (widescreen) {
+        rdpq_set_mode_standard();
+        rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_tex_blit(image, px(x), y, &(rdpq_blitparms_t) { .scale_x = WIDE_SQUEEZE, .scale_y = 1.0f });
+    } else {
+        rdpq_set_mode_copy(false);
+        rdpq_tex_blit(image, x, y, NULL);
+    }
+    rdpq_mode_pop();
+}
+
 void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind) {
     color_t edge = behind;
     if (selected) {
@@ -343,10 +434,7 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
     if (image) {
         int ix = x + (w - image->width) / 2;
         int iy = y + (h - image->height) / 2;
-        rdpq_mode_push();
-            rdpq_set_mode_copy(false);
-            rdpq_tex_blit(image, ix, iy, NULL);
-        rdpq_mode_pop();
+        blit_cover(image, ix, iy);
         if (fills_tile) {
             mask_corners(ix, iy, ix + image->width, iy + image->height, TILE_RADIUS, edge);
         }
@@ -356,14 +444,14 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
         rdpq_text_printn(
             &(rdpq_textparms_t) {
                 .style_id = STL_GRAY,
-                .width = w - 8,
+                .width = px(x + w - 4) - px(x + 4),
                 .height = h - 8,
                 .align = ALIGN_CENTER,
                 .valign = VALIGN_CENTER,
                 .wrap = WRAP_WORD,
             },
-            font_for(escaped, FNT_LAUNCHER),
-            x + 4,
+            launcher_font(font_for(escaped, FNT_LAUNCHER)),
+            px(x + 4),
             y + 4,
             escaped,
             strlen(escaped)
@@ -380,8 +468,8 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
     rdpq_mode_push();
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
-        rdpq_tex_blit(image, dx, dy, &(rdpq_blitparms_t) {
-            .scale_x = scale,
+        rdpq_tex_blit(image, px(dx), dy, &(rdpq_blitparms_t) {
+            .scale_x = scale * (widescreen ? WIDE_SQUEEZE : 1.0f),
             .scale_y = scale,
         });
     rdpq_mode_pop();
@@ -504,6 +592,24 @@ static component_context_menu_t sort_menu = {
     }
 };
 
+static void set_screen (menu_t *menu, void *arg) {
+    menu->settings.launcher_widescreen = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_screen_selection (menu_t *menu) {
+    return menu->settings.launcher_widescreen ? 1 : 0;
+}
+
+static component_context_menu_t screen_menu = {
+    .get_default_selection = get_screen_selection,
+    .list = {
+        { .text = "4:3", .action = set_screen, .arg = (void *)(uintptr_t)(false) },
+        { .text = "16:9 (stretched by the TV)", .action = set_screen, .arg = (void *)(uintptr_t)(true) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static void set_titles (menu_t *menu, void *arg) {
     menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -535,6 +641,7 @@ static component_context_menu_t start_menu = {
         { .text = "Tile size", .submenu = &tile_size_menu },
         { .text = "Layout", .submenu = &layout_menu },
         { .text = "Game titles", .submenu = &titles_menu },
+        { .text = "Screen", .submenu = &screen_menu },
         { .text = "Rescan folders", .action = rescan_folders },
         { .text = "File browser", .action = open_file_browser },
         { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },

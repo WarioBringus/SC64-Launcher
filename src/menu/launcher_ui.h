@@ -14,9 +14,14 @@
 #include "fonts.h"
 #include "menu_state.h"
 
-/* Screen layout (640x480, inside the TV-safe area) */
-#define LAUNCHER_X0             (32)    /**< Left edge of content */
-#define LAUNCHER_X1             (608)   /**< Right edge of content */
+/*
+ * Screen layout, in logical coordinates. The logical screen is 640 wide in 4:3 and 853 wide in
+ * 16:9 (the launcher helpers squeeze it into the real 640-pixel frame). Heights are real pixels.
+ */
+#define LAUNCHER_SCREEN_W       (launcher_screen_width())
+#define LAUNCHER_CENTER_X       (launcher_screen_width() / 2)
+#define LAUNCHER_X0             (launcher_x0())     /**< Left edge of content */
+#define LAUNCHER_X1             (launcher_x1())     /**< Right edge of content */
 #define LAUNCHER_WIDTH          (LAUNCHER_X1 - LAUNCHER_X0)
 #define LAUNCHER_HEADER_Y       (24)    /**< Top tabs */
 #define LAUNCHER_SUBHEADER_Y    (60)    /**< Category tabs */
@@ -52,6 +57,33 @@ typedef enum {
     LAUNCHER_TAB_HOME = 0,
     LAUNCHER_TAB_LIBRARY = 1,
 } launcher_tab_t;
+
+/* ------------------------------------------------------------------ 16:9 */
+
+/**
+ * @brief Draw the launcher for a 16:9 display (squeezed horizontally, for the TV to stretch back).
+ *
+ * Views set this from the settings at the start of every frame.
+ */
+void launcher_set_widescreen(bool enabled);
+
+/** @brief Whether the launcher is drawing for 16:9. */
+bool launcher_is_widescreen(void);
+
+/** @brief Logical screen width: 640 in 4:3, 853 in 16:9. */
+int launcher_screen_width(void);
+
+/** @brief Logical left edge of content (inside the TV-safe margin). */
+int launcher_x0(void);
+
+/** @brief Logical right edge of content. */
+int launcher_x1(void);
+
+/** @brief The font to use for a launcher font id: its squeezed variant in 16:9. */
+uint8_t launcher_font(uint8_t font);
+
+/** @brief Rounded rectangle in real framebuffer pixels (for stock dialogs, never squeezed). */
+void launcher_fill_rounded_px(int x0, int y0, int x1, int y1, int radius, color_t color);
 
 /* ------------------------------------------------------------------ covers */
 
