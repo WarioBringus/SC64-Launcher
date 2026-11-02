@@ -25,3 +25,6 @@
 
 # Ignore macOS filesystem cruft
 .DS_Store
+
+# Python bytecode from pc-tools
+__pycache__/
