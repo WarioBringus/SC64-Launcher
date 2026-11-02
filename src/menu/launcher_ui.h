@@ -176,6 +176,12 @@ path_t *launcher_about_rom(void);
 /** @brief Draw the "new games found" notice under the header, when there are any. */
 void launcher_draw_new_games_notice(void);
 
+/**
+ * @brief Full-screen loading card in the launcher's style: the game's name, a rounded progress bar
+ * and a status line ("Loading 45%" when status is NULL).
+ */
+void launcher_draw_loading(const char *title, float progress, const char *status);
+
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 

@@ -356,6 +356,40 @@ void launcher_draw_new_games_notice (void) {
         ALIGN_RIGHT, STL_ACCENT, text);
 }
 
+#define LOADING_TITLE_Y     (186)
+#define LOADING_BAR_Y       (228)
+#define LOADING_BAR_W       (320)
+#define LOADING_BAR_H       (8)
+#define LOADING_STATUS_Y    (246)
+
+void launcher_draw_loading (const char *title, float progress, const char *status) {
+    launcher_draw_background();
+    if (title && title[0]) {
+        launcher_title(LAUNCHER_X0, LOADING_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, title);
+    }
+
+    if (progress < 0.0f) {
+        progress = 0.0f;
+    }
+    if (progress > 1.0f) {
+        progress = 1.0f;
+    }
+    int x0 = LAUNCHER_CENTER_X - LOADING_BAR_W / 2;
+    int x1 = x0 + LOADING_BAR_W;
+    launcher_fill_rounded(x0, LOADING_BAR_Y, x1, LOADING_BAR_Y + LOADING_BAR_H, LOADING_BAR_H / 2, theme_current()->panel);
+    int filled = (int)(progress * LOADING_BAR_W);
+    if (filled >= LOADING_BAR_H) {
+        launcher_fill_rounded(x0, LOADING_BAR_Y, x0 + filled, LOADING_BAR_Y + LOADING_BAR_H, LOADING_BAR_H / 2, theme_current()->accent);
+    }
+
+    char text[64];
+    if (!status) {
+        snprintf(text, sizeof(text), "Loading %d%%", (int)(progress * 100.0f));
+        status = text;
+    }
+    launcher_small(LAUNCHER_X0, LOADING_STATUS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, status);
+}
+
 #define NOW_PLAYING_MS      (4000)
 
 static uint32_t now_playing_generation = 0;

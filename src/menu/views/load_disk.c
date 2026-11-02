@@ -3,6 +3,7 @@
 #include "boot/boot.h"
 #include "../sound.h"
 #include "views.h"
+#include "../launcher_ui.h"
 #include "../bookkeeping.h"
 #include <string.h>
 
@@ -242,15 +243,20 @@ static void draw (menu_t *menu, surface_t *d) {
     rdpq_detach_show();
 }
 
+static bool launcher_loader = false;    /* Loading screen in the launcher's style */
+
 static void draw_progress (float progress) {
     surface_t *d = (progress >= 1.0f) ? display_get() : display_try_get();
 
     if (d) {
         rdpq_attach(d, NULL);
 
-        ui_components_background_draw();
-
-        ui_components_loader_draw(progress, "Loading 64DD disk...");
+        if (launcher_loader) {
+            launcher_draw_loading(NULL, progress, "Loading 64DD disk");
+        } else {
+            ui_components_background_draw();
+            ui_components_loader_draw(progress, "Loading 64DD disk...");
+        }
 
         rdpq_detach_show();
     }
@@ -259,6 +265,7 @@ static void draw_progress (float progress) {
 static void load (menu_t *menu) {
     cart_load_err_t err;
 
+    launcher_loader = menu->settings.launcher_enabled;
     sound_bgm_fade_out(BGM_FADE_MS);
 
     if (menu->load.rom_path && menu->load.combined_disk_rom) {

@@ -7,12 +7,16 @@
 #include "utils/fs.h"
 #include "../ui_components/constants.h"
 #include "views.h"
+#include "../launcher_ui.h"
+#include "../library.h"
 #include <string.h>
 
 static bool show_extra_info_message = false;
 static bool show_advanced_info_message = false;
 static bool show_expansion_pak_warning = false;
 static bool quick_loading = false;  /* Launcher quick launch: show the loading bar, never the details */
+static bool launcher_loader = false; /* Loading screens in the launcher's style */
+static char loading_title[96];
 static component_boxart_t *boxart;
 static bool boxart_sd_fallback_attempted = false;
 static char *rom_filename = NULL;
@@ -730,7 +734,11 @@ static void draw (menu_t *menu, surface_t *d) {
 
     if (quick_loading) {
         // Straight to the loading bar rather than flashing the details screen.
-        ui_components_loader_draw(0.0f, "Loading ROM...");
+        if (launcher_loader) {
+            launcher_draw_loading(loading_title, 0.0f, NULL);
+        } else {
+            ui_components_loader_draw(0.0f, "Loading ROM...");
+        }
         rdpq_detach_show();
         return;
     }
@@ -882,9 +890,12 @@ static void draw_progress (float progress) {
     if (d) {
         rdpq_attach(d, NULL);
 
-        ui_components_background_draw();
-
-        ui_components_loader_draw(progress, "Loading ROM...");
+        if (launcher_loader) {
+            launcher_draw_loading(loading_title, progress, NULL);
+        } else {
+            ui_components_background_draw();
+            ui_components_loader_draw(progress, "Loading ROM...");
+        }
 
         rdpq_detach_show();
     }
@@ -896,9 +907,12 @@ static void draw_creating_save (float progress) {
     if (d) {
         rdpq_attach(d, NULL);
 
-        ui_components_background_draw();
-
-        ui_components_loader_draw(progress, "Creating initial save file...");
+        if (launcher_loader) {
+            launcher_draw_loading(loading_title, progress, "Creating save file");
+        } else {
+            ui_components_background_draw();
+            ui_components_loader_draw(progress, "Creating initial save file...");
+        }
 
         rdpq_detach_show();
     }
@@ -1005,6 +1019,7 @@ void view_load_rom_init (menu_t *menu) {
     bool quick_start = menu->load.quick_start;
     menu->load.quick_start = false;
     quick_loading = false;
+    launcher_loader = menu->settings.launcher_enabled;
 
     // Must run unconditionally before any rom_info_free_meta()/rom_config_load() below:
     // metadata_image_names may hold borrowed pointers into the ROM metadata about to be
@@ -1103,6 +1118,14 @@ void view_load_rom_init (menu_t *menu) {
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     }
 #endif
+
+    // The game's name for the loading screen (the ROM is known by now).
+    loading_title[0] = '\0';
+    if (menu->load.rom_path) {
+        char *title = library_title_from_path(menu->load.rom_path);
+        snprintf(loading_title, sizeof(loading_title), "%s", title ? title : "");
+        free(title);
+    }
 
     if (quick_start) {
         if (rom_requires_missing_expansion_pak(menu)) {
