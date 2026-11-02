@@ -7,8 +7,9 @@ Writes to <card>/menu/cache/launcher/:
   covers.idx              which cover each ROM uses (so the menu needn't read ROM headers)
   covers_<W>x<H>.pak      every cover pre-scaled to each tile size (so the menu needn't decode PNGs)
 
-Cover matching mirrors the menu (src/menu/library.c): metadata/C/I/D/R, metadata/C/I/D, the old
-boxart folder, another region of the same game, then metadata/names/<file name>.png.
+Cover matching mirrors the menu (src/menu/library.c): metadata/names/<file name>.png first (an
+override), then metadata/C/I/D/R, metadata/C/I/D, the old boxart folder, and another region of the
+same game.
 Re-run after adding ROMs or cover art. The menu falls back to its own lookup for anything missing.
 
 Index format (UTF-8 text, sorted byte-wise so the menu can binary search):
@@ -72,6 +73,11 @@ def find_cover(menu_dir, code, raw_title, title):
     def exists(rel):
         return rel if os.path.isfile(os.path.join(menu_dir, rel)) else None
 
+    # A cover named after the game wins: it fixes prototypes and hacks that reuse another game's code.
+    named = exists('metadata/names/%s.png' % title)
+    if named:
+        return named
+
     if code and code.isascii() and code.isalnum():
         if code[1] == 'E' and code[2] == 'D':
             hit = exists('metadata/homebrew/%s/boxart_front.png' % raw_title)
@@ -90,7 +96,7 @@ def find_cover(menu_dir, code, raw_title, title):
                         hit = exists('%s/%s/boxart_front.png' % (game, r))
                 if hit:
                     return hit
-    return exists('metadata/names/%s.png' % title)
+    return None
 
 
 def main():

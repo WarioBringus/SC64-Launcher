@@ -213,7 +213,7 @@ static char *find_cover_by_code (const char code[4], const char *raw_title) {
 
 /**
  * @brief Cover named after the game: menu/metadata/names/<title>.png.
- * Covers ROMs whose header has no game code.
+ * Takes priority over the game code, and covers ROMs whose header has no game code.
  */
 static char *find_cover_by_name (const char *title) {
     path_t *path = path_init(storage_prefix, METADATA_DIRECTORY);
@@ -245,11 +245,10 @@ static char *find_cover (path_t *rom_path, const char *title) {
         return found;
     }
 
-    if (read_rom_header(path_get(rom_path), code, raw_title) && code_is_valid(code)) {
+    // A cover named after the game wins: it fixes prototypes and hacks that reuse another game's code.
+    found = find_cover_by_name(title);
+    if (!found && read_rom_header(path_get(rom_path), code, raw_title) && code_is_valid(code)) {
         found = find_cover_by_code(code, raw_title);
-    }
-    if (!found) {
-        found = find_cover_by_name(title);
     }
     return found;
 }
