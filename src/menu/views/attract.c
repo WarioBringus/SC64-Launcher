@@ -58,6 +58,9 @@ static slide_t pick_game (void) {
         if (pick < c->count) {
             s.game = &c->games[pick];
             s.portrait = c->portrait;
+            if (library_game_hidden(s.game)) {
+                s.game = NULL;      // Hidden: the next pick tries again.
+            }
             return s;
         }
         pick -= c->count;
@@ -108,6 +111,15 @@ static void draw_slide (menu_t *menu, slide_t *s, int offset_x) {
     }
 }
 
+/** @brief A random game that isn't hidden (a few tries). */
+static slide_t pick_visible_game (void) {
+    slide_t s = { NULL, false };
+    for (int attempt = 0; attempt < 16 && !s.game; attempt++) {
+        s = pick_game();
+    }
+    return s;
+}
+
 static void process (menu_t *menu) {
     if (any_input(menu)) {
         launcher_reset_idle();
@@ -118,16 +130,16 @@ static void process (menu_t *menu) {
     uint64_t now = get_ticks_ms();
     bool pending;
     if (!have_current) {
-        current = pick_game();
+        current = pick_visible_game();
         have_current = true;
         shown_at_ms = now;
-        next = pick_game();
+        next = pick_visible_game();
     }
     // Keep the next cover loading; move on once its time is up and it's ready.
     slide_cover(menu, &next, &pending);
     if (now - shown_at_ms > SLIDE_MS && !pending) {
         current = next;
-        next = pick_game();
+        next = pick_visible_game();
         shown_at_ms = now;
     }
 }

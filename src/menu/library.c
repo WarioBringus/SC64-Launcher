@@ -26,6 +26,8 @@
 #define PORTRAIT_SAMPLE_SIZE    (8)
 #define COVER_INDEX_FILE        "menu/cache/launcher/covers.idx"
 #define PLAY_COUNT_FILE         "menu/cache/launcher/playcount.txt"
+#define HIDDEN_FILE             "menu/cache/launcher/hidden.txt"
+#define MAX_HIDDEN              (256)
 #define MAX_PLAY_COUNTS         (512)
 #define COVER_INDEX_MAGIC       "LCIDX1"
 
@@ -804,12 +806,107 @@ bool library_category_is_quick (int index) {
     return index >= 0 && index < folder_count && (folders[index].loaded || folders[index].from_index);
 }
 
+/* Hidden ROMs: full paths, one per line in HIDDEN_FILE. */
+static char *hidden_paths[MAX_HIDDEN];
+static int hidden_total = 0;
+static bool hidden_loaded = false;
+static uint32_t hidden_generation = 1;
+
+static void hidden_load (void) {
+    if (hidden_loaded || !storage_prefix) {
+        return;
+    }
+    hidden_loaded = true;
+    path_t *file = path_init(storage_prefix, HIDDEN_FILE);
+    FILE *f = fopen(path_get(file), "r");
+    path_free(file);
+    if (!f) {
+        return;
+    }
+    char line[512];
+    while (fgets(line, sizeof(line), f) && hidden_total < MAX_HIDDEN) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[0]) {
+            hidden_paths[hidden_total++] = strdup(line);
+        }
+    }
+    fclose(f);
+}
+
+static void hidden_save (void) {
+    path_t *file = path_init(storage_prefix, HIDDEN_FILE);
+    FILE *f = fopen(path_get(file), "w");
+    path_free(file);
+    if (f) {
+        for (int i = 0; i < hidden_total; i++) {
+            fprintf(f, "%s\n", hidden_paths[i]);
+        }
+        fclose(f);
+    }
+}
+
+static int hidden_index (const char *full) {
+    for (int i = 0; i < hidden_total; i++) {
+        if (strcmp(hidden_paths[i], full) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool library_game_hidden (library_game_t *game) {
+    if (game->hidden_generation != hidden_generation) {
+        hidden_load();
+        game->hidden = false;
+        if (hidden_total > 0) {
+            path_t *path = library_game_path(game);
+            game->hidden = hidden_index(path_get(path)) >= 0;
+            path_free(path);
+        }
+        game->hidden_generation = hidden_generation;
+    }
+    return game->hidden;
+}
+
+void library_set_hidden (menu_t *menu, path_t *rom_path, bool hidden) {
+    if (!storage_prefix) {
+        storage_prefix = menu->storage_prefix;
+    }
+    hidden_load();
+    int index = hidden_index(path_get(rom_path));
+    if (hidden && index < 0 && hidden_total < MAX_HIDDEN) {
+        hidden_paths[hidden_total++] = strdup(path_get(rom_path));
+    } else if (!hidden && index >= 0) {
+        free(hidden_paths[index]);
+        hidden_paths[index] = hidden_paths[--hidden_total];
+    } else {
+        return;
+    }
+    hidden_save();
+    hidden_generation++;
+}
+
+int library_hidden_count (menu_t *menu) {
+    if (!storage_prefix) {
+        storage_prefix = menu->storage_prefix;
+    }
+    hidden_load();
+    return hidden_total;
+}
+
+const char *library_hidden_at (int index) {
+    return (index >= 0 && index < hidden_total) ? hidden_paths[index] : NULL;
+}
+
 /* Sort order and filter used by compare_sorted (qsort has no context argument). */
 static int sort_order = 0;
 static int filter_field_now = -1;
 static const char *filter_value_now = NULL;
 
 static bool game_matches_filter (const library_game_t *g) {
+    if (library_game_hidden((library_game_t *)g)) {
+        return false;
+    }
     if (filter_field_now < 0) {
         return true;
     }
@@ -831,8 +928,8 @@ static const char *sort_key (const library_game_t *g) {
 static int compare_sorted (const void *a, const void *b) {
     const library_game_t *ga = a;
     const library_game_t *gb = b;
-    if (filter_field_now >= 0) {
-        // Games the filter keeps come first; only they are shown.
+    {
+        // Games shown (not hidden, and kept by any filter) come first; only they are shown.
         bool ma = game_matches_filter(ga);
         bool mb = game_matches_filter(gb);
         if (ma != mb) {
@@ -870,8 +967,10 @@ bool library_arrange_category (library_category_t *category, int sort, int filte
         filter_field = -1;
         filter_value = "";
     }
+    hidden_load();
     if (category->sort == sort && category->filter_field == filter_field &&
-        (filter_field < 0 || strcmp(category->filter_value, filter_value) == 0)) {
+        (filter_field < 0 || strcmp(category->filter_value, filter_value) == 0) &&
+        category->hidden_generation == hidden_generation) {
         return false;
     }
     sort_order = sort;
@@ -879,13 +978,11 @@ bool library_arrange_category (library_category_t *category, int sort, int filte
     filter_value_now = filter_value;
     qsort(category->games, category->count, sizeof(library_game_t), compare_sorted);
 
-    category->shown = category->count;
-    if (filter_field >= 0) {
-        category->shown = 0;
-        while (category->shown < category->count && game_matches_filter(&category->games[category->shown])) {
-            category->shown++;
-        }
+    category->shown = 0;
+    while (category->shown < category->count && game_matches_filter(&category->games[category->shown])) {
+        category->shown++;
     }
+    category->hidden_generation = hidden_generation;
     category->sort = sort;
     category->filter_field = filter_field;
     snprintf(category->filter_value, sizeof(category->filter_value), "%s", filter_value);

@@ -866,6 +866,18 @@ static void surprise_me (menu_t *menu, void *arg) {
     request(menu, LAUNCHER_REQUEST_SURPRISE);
 }
 
+static void hide_game (menu_t *menu, void *arg) {
+    (void)arg;
+    if (selected_rom) {
+        library_set_hidden(menu, selected_rom, true);
+    }
+}
+
+static void open_hidden (menu_t *menu, void *arg) {
+    (void)arg;
+    request(menu, LAUNCHER_REQUEST_HIDDEN);
+}
+
 static void open_filter (menu_t *menu, void *arg) {
     (void)arg;
     request(menu, LAUNCHER_REQUEST_FILTER);
@@ -897,6 +909,8 @@ static component_context_menu_t start_menu = {
         { .text = "Sort by", .submenu = &sort_menu },
         { .text = "Filter", .action = open_filter },
         { .text = "Surprise me", .action = surprise_me },
+        { .text = "Hide game", .action = hide_game },
+        { .text = "Hidden games", .action = open_hidden },
         { .text = "Theme", .submenu = &theme_menu },
         { .text = "Tile size", .submenu = &tile_size_menu },
         { .text = "Cover style", .submenu = &cover_style_menu },

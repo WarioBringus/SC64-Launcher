@@ -93,6 +93,16 @@ static int picker_field = -1;
 static library_group_t *picker_groups = NULL;
 static int picker_group_count = 0;
 
+/* Hidden games list (Start > Hidden games): A shows a game again. */
+static bool hidden_open = false;
+static int hidden_sel = 0;
+static int hidden_top = 0;
+
+static const launcher_hint_t hints_hidden[] = {
+    { LAUNCHER_BUTTON_A, "A", "Show again" },
+    { LAUNCHER_BUTTON_B, "B", "Back" },
+};
+
 static const launcher_hint_t hints_picker[] = {
     { LAUNCHER_BUTTON_A, "A", "Choose" },
     { LAUNCHER_BUTTON_B, "B", "Back" },
@@ -203,11 +213,19 @@ static void show_group_badge (library_category_t *c, int sel) {
  * @brief Bring a category into the current sort order. A new order starts back at its first game.
  */
 static void apply_sort (library_category_t *c, int index) {
+    // A new sort or filter starts at the first game; hiding a game keeps the place.
+    bool new_order = c->sort != current_sort || c->filter_field != filter_field ||
+        (filter_field >= 0 && strcmp(c->filter_value, filter_value) != 0);
     if (library_arrange_category(c, current_sort, filter_field, filter_value)) {
-        selections[index % MAX_REMEMBERED_CATEGORIES] = 0;
-        if (index == category_index) {
-            top_row = 0;
-            carousel_position = 0.0f;
+        int *sel = &selections[index % MAX_REMEMBERED_CATEGORIES];
+        if (new_order) {
+            *sel = 0;
+            if (index == category_index) {
+                top_row = 0;
+                carousel_position = 0.0f;
+            }
+        } else if (*sel >= c->shown) {
+            *sel = c->shown > 0 ? c->shown - 1 : 0;
         }
     }
 }
@@ -340,6 +358,70 @@ static bool game_is_favorite (menu_t *menu, library_game_t *game) {
     return game->favorite;
 }
 
+static void hidden_process (menu_t *menu) {
+    int count = library_hidden_count(menu);
+    if (menu->actions.back) {
+        sound_play_effect(SFX_EXIT);
+        hidden_open = false;
+        return;
+    }
+    if (count == 0) {
+        return;
+    }
+    if (menu->actions.go_up && hidden_sel > 0) {
+        hidden_sel--;
+        sound_play_effect(SFX_CURSOR);
+    } else if (menu->actions.go_down && hidden_sel < count - 1) {
+        hidden_sel++;
+        sound_play_effect(SFX_CURSOR);
+    } else if (menu->actions.enter) {
+        path_t *rom = path_create(library_hidden_at(hidden_sel));
+        library_set_hidden(menu, rom, false);
+        path_free(rom);
+        sound_play_effect(SFX_ENTER);
+        count--;
+        if (hidden_sel >= count) {
+            hidden_sel = count > 0 ? count - 1 : 0;
+        }
+    }
+    if (hidden_sel < hidden_top) {
+        hidden_top = hidden_sel;
+    }
+    if (hidden_sel >= hidden_top + PICKER_ROWS) {
+        hidden_top = hidden_sel - PICKER_ROWS + 1;
+    }
+}
+
+static void hidden_draw (menu_t *menu) {
+    launcher_fill_rounded(LAUNCHER_X0 - 2, PICKER_TOP - 2, LAUNCHER_X1 + 2, PICKER_BOTTOM + 2, 14, theme_current()->line);
+    launcher_fill_rounded(LAUNCHER_X0, PICKER_TOP, LAUNCHER_X1, PICKER_BOTTOM, 12, theme_current()->panel);
+    launcher_title(LAUNCHER_X0 + 20, PICKER_TOP + 10, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_DEFAULT, "Hidden games");
+    int count = library_hidden_count(menu);
+    if (count == 0) {
+        launcher_text(LAUNCHER_X0, PICKER_FIRST_ROW_Y + 40, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No hidden games");
+        return;
+    }
+    for (int r = 0; r < PICKER_ROWS; r++) {
+        int i = hidden_top + r;
+        if (i >= count) {
+            break;
+        }
+        int y = PICKER_FIRST_ROW_Y + r * PICKER_ROW_H;
+        if (i == hidden_sel) {
+            launcher_fill_rounded(LAUNCHER_X0 + 12, y - 3, LAUNCHER_X1 - 12, y + PICKER_ROW_H - 5, 6, theme_current()->highlight);
+        }
+        // "sd:/N64 USA/Game.n64" -> "Game" and its folder.
+        const char *full = library_hidden_at(i);
+        path_t *path = path_create(full);
+        char *title = library_title_from_path(path);
+        path_pop(path);
+        launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_DEFAULT, title);
+        launcher_name(LAUNCHER_X1 - 180, y, 156, ALIGN_RIGHT, STL_GRAY, path_last_get(path));
+        free(title);
+        path_free(path);
+    }
+}
+
 static void launch (menu_t *menu, library_game_t *game) {
     path_free(menu->load.launcher_rom_path);
     menu->load.launcher_rom_path = library_game_path(game);
@@ -384,8 +466,18 @@ static void process (menu_t *menu) {
         picker_process(menu, current);
         return;
     }
+    if (hidden_open) {
+        hidden_process(menu);
+        return;
+    }
 
     launcher_request_t request = launcher_take_request();
+    if (request == LAUNCHER_REQUEST_HIDDEN) {
+        hidden_open = true;
+        hidden_sel = 0;
+        hidden_top = 0;
+        return;
+    }
     if (request == LAUNCHER_REQUEST_FILTER) {
         picker_show_fields();
         return;
@@ -825,7 +917,10 @@ static void draw (menu_t *menu, surface_t *d) {
                 }
             }
         }
-        if (picker_open) {
+        if (hidden_open) {
+            hidden_draw(menu);
+            launcher_draw_footer(hints_hidden, HINT_COUNT(hints_hidden));
+        } else if (picker_open) {
             picker_draw();
             launcher_draw_footer(hints_picker, HINT_COUNT(hints_picker));
         } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {

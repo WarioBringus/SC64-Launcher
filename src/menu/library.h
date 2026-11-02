@@ -32,6 +32,8 @@ typedef struct {
     int players;                /**< Maximum players, 0 when unknown */
     uint32_t favorite_generation; /**< launcher_favorites_generation() when favorite was worked out */
     bool favorite;              /**< In the favorites (valid when favorite_generation is current) */
+    uint32_t hidden_generation; /**< Hidden list version when hidden was worked out */
+    bool hidden;                /**< Hidden from the library (valid when hidden_generation is current) */
 } library_game_t;
 
 /** @brief One category (a folder of ROMs). */
@@ -46,7 +48,8 @@ typedef struct {
     int sort;                   /**< Order games[] is in (launcher_sort_t) */
     int filter_field;           /**< Filter games[] is arranged for (a launcher_sort_t field, or -1) */
     char filter_value[64];      /**< Group label the filter keeps */
-    int shown;                  /**< Games to show: all of them, or the ones matching the filter (they come first) */
+    uint32_t hidden_generation; /**< Hidden list version games[] is arranged for */
+    int shown;                  /**< Games to show: not hidden and matching the filter (they come first) */
     library_game_t *games;
     int count;
 } library_category_t;
@@ -146,6 +149,18 @@ typedef struct {
  * @return Number of groups.
  */
 int library_category_groups(library_category_t *category, int field, library_group_t **groups);
+
+/** @brief Whether a game is hidden from the library. */
+bool library_game_hidden(library_game_t *game);
+
+/** @brief Hide a ROM from the library, or show it again (saved in menu/cache/launcher/hidden.txt). */
+void library_set_hidden(menu_t *menu, path_t *rom_path, bool hidden);
+
+/** @brief Number of hidden ROMs. */
+int library_hidden_count(menu_t *menu);
+
+/** @brief Full path of hidden ROM number i. */
+const char *library_hidden_at(int index);
 
 /**
  * @brief One-line game details, e.g. "Racing  ·  1997  ·  Nintendo EAD  ·  4 players". Empty when unknown.
