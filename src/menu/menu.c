@@ -233,8 +233,7 @@ static view_t menu_views[] = {
     { MENU_MODE_LIBRARY, view_library_init, view_library_display },
     { MENU_MODE_HOME, view_home_init, view_home_display },
     { MENU_MODE_ABOUT, view_about_init, view_about_display },
-    { MENU_MODE_ATTRACT, view_attract_init, view_attract_display },
-    { MENU_MODE_INTRO, view_intro_init, view_intro_display }
+    { MENU_MODE_ATTRACT, view_attract_init, view_attract_display }
 };
 
 /**

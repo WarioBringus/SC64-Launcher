@@ -51,8 +51,7 @@ typedef enum {
     MENU_MODE_LIBRARY,
     MENU_MODE_HOME,
     MENU_MODE_ABOUT,
-    MENU_MODE_ATTRACT,
-    MENU_MODE_INTRO
+    MENU_MODE_ATTRACT
 } menu_mode_t;
 
 /** @brief File entry type enumeration */

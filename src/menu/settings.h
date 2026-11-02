@@ -122,9 +122,6 @@ typedef struct {
     /** @brief Open the launcher on the Library rather than Home */
     bool launcher_start_in_library;
 
-    /** @brief Show a short title card when the launcher starts */
-    bool launcher_intro;
-
     /** @brief Minutes idle before the attract mode slideshow starts (0 = never) */
     int launcher_attract_minutes;
 
