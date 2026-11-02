@@ -431,6 +431,7 @@ void view_home_init (menu_t *menu) {
 
 void view_home_display (menu_t *menu, surface_t *display) {
     launcher_set_widescreen(menu->settings.launcher_widescreen);
+    launcher_track_idle(menu);
     if (launcher_take_favorites_changed()) {
         build_rows(menu);
     }

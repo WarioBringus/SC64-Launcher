@@ -153,6 +153,16 @@ void launcher_paragraph_draw(launcher_paragraph_t *paragraph, int x, int y, int 
 /** @brief Free laid-out text (NULL is fine). */
 void launcher_paragraph_free(launcher_paragraph_t *paragraph);
 
+/**
+ * @brief Note controller input and start attract mode after the idle time in settings.
+ *
+ * Call once per frame from views that should fall into attract mode (Home, Library).
+ */
+void launcher_track_idle(menu_t *menu);
+
+/** @brief Restart the idle timer (e.g. when leaving attract mode). */
+void launcher_reset_idle(void);
+
 /** @brief The game the About page shows (set by the Start menu's "About this game"). */
 path_t *launcher_about_rom(void);
 

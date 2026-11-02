@@ -694,6 +694,29 @@ static void toggle_favorite (menu_t *menu, void *arg) {
     favorites_changed = true;
 }
 
+static uint64_t last_input_ms = 0;
+
+void launcher_reset_idle (void) {
+    last_input_ms = get_ticks_ms();
+}
+
+void launcher_track_idle (menu_t *menu) {
+    uint64_t now = get_ticks_ms();
+    bool input = menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
+        menu->actions.enter || menu->actions.back || menu->actions.options || menu->actions.settings ||
+        menu->actions.lz_context || menu->actions.shoulder_l || menu->actions.shoulder_r || menu->actions.trigger_z;
+    if (input || last_input_ms == 0) {
+        last_input_ms = now;
+        return;
+    }
+    int minutes = menu->settings.launcher_attract_minutes;
+    if (minutes > 0 && now - last_input_ms > (uint64_t)minutes * 60 * 1000 && menu->next_mode == menu->mode) {
+        launcher_reset_idle();
+        menu->launcher_return_mode = menu->mode;
+        menu->next_mode = MENU_MODE_ATTRACT;
+    }
+}
+
 static path_t *about_rom = NULL;
 
 path_t *launcher_about_rom (void) {

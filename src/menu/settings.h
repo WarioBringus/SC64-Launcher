@@ -119,6 +119,9 @@ typedef struct {
     /** @brief A starts the game straight away, skipping the ROM details screen */
     bool launcher_quick_launch;
 
+    /** @brief Minutes idle before the attract mode slideshow starts (0 = never) */
+    int launcher_attract_minutes;
+
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 

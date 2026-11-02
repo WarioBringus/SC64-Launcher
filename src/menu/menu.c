@@ -232,14 +232,15 @@ static view_t menu_views[] = {
     { MENU_MODE_EXTRACT_FILE, view_extract_file_init, view_extract_file_display },
     { MENU_MODE_LIBRARY, view_library_init, view_library_display },
     { MENU_MODE_HOME, view_home_init, view_home_display },
-    { MENU_MODE_ABOUT, view_about_init, view_about_display }
+    { MENU_MODE_ABOUT, view_about_init, view_about_display },
+    { MENU_MODE_ATTRACT, view_attract_init, view_attract_display }
 };
 
 /**
  * @brief Whether a mode is one of the launcher's own views.
  */
 static bool menu_mode_is_launcher (menu_mode_t mode) {
-    return mode == MENU_MODE_LIBRARY || mode == MENU_MODE_HOME || mode == MENU_MODE_ABOUT;
+    return mode == MENU_MODE_LIBRARY || mode == MENU_MODE_HOME || mode == MENU_MODE_ABOUT || mode == MENU_MODE_ATTRACT;
 }
 
 /**

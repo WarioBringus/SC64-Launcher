@@ -78,6 +78,7 @@ SRCS = \
 	menu/ui_components/tabs.c \
 	menu/usb_comm.c \
 	menu/views/about.c \
+	menu/views/attract.c \
 	menu/views/browser.c \
 	menu/views/credits.c \
 	menu/views/datel_code_editor.c \
