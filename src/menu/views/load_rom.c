@@ -12,6 +12,7 @@
 static bool show_extra_info_message = false;
 static bool show_advanced_info_message = false;
 static bool show_expansion_pak_warning = false;
+static bool quick_loading = false;  /* Launcher quick launch: show the loading bar, never the details */
 static component_boxart_t *boxart;
 static bool boxart_sd_fallback_attempted = false;
 static char *rom_filename = NULL;
@@ -726,6 +727,13 @@ static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
     ui_components_background_draw();
+
+    if (quick_loading) {
+        // Straight to the loading bar rather than flashing the details screen.
+        ui_components_loader_draw(0.0f, "Loading ROM...");
+        rdpq_detach_show();
+        return;
+    }
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (menu->load_pending.rom_file && menu->settings.loading_progress_bar_enabled) {
         ui_components_loader_draw(0.0f, NULL);
@@ -984,6 +992,7 @@ static void reset_metadata_image_cache (void) {
 }
 
 static void deinit (void) {
+    quick_loading = false;
     ui_components_boxart_free(boxart);
     boxart = NULL;
     ui_components_background_reload();
@@ -995,6 +1004,7 @@ void view_load_rom_init (menu_t *menu) {
     // Launcher quick launch: start the game once this screen has loaded it (same checks as pressing A).
     bool quick_start = menu->load.quick_start;
     menu->load.quick_start = false;
+    quick_loading = false;
 
     // Must run unconditionally before any rom_info_free_meta()/rom_config_load() below:
     // metadata_image_names may hold borrowed pointers into the ROM metadata about to be
@@ -1096,9 +1106,10 @@ void view_load_rom_init (menu_t *menu) {
 
     if (quick_start) {
         if (rom_requires_missing_expansion_pak(menu)) {
-            show_expansion_pak_warning = true;
+            show_expansion_pak_warning = true;   // Needs an answer, so the screen shows for this one.
         } else {
             menu->load_pending.rom_file = true;
+            quick_loading = true;
         }
     }
 }
