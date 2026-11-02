@@ -177,6 +177,15 @@ void library_record_play(menu_t *menu, path_t *rom_path);
  */
 int library_most_played(menu_t *menu, path_t **paths, int max);
 
+/**
+ * @brief Walk the folders a little (for about budget_us) looking for ROMs the cover index doesn't
+ * list yet. Call every frame; it stops by itself once done.
+ */
+void library_check_new_games(int budget_us);
+
+/** @brief ROMs found that aren't in the cover index (0 until the check has finished, or without an index). */
+int library_new_game_count(void);
+
 /** @brief Free everything. */
 void library_free(void);
 

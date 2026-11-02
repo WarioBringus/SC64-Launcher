@@ -410,6 +410,16 @@ void launcher_paragraph_free (launcher_paragraph_t *p) {
     }
 }
 
+void launcher_draw_new_games_notice (void) {
+    int count = library_new_game_count();
+    if (count <= 0) {
+        return;
+    }
+    char text[128];
+    snprintf(text, sizeof(text), "%d new game%s: run the cover tool", count, count == 1 ? "" : "s");
+    launcher_small(LAUNCHER_X0 + 150, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH - 150 - 90, ALIGN_RIGHT, STL_ACCENT, text);
+}
+
 void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     launcher_draw_background();
 
@@ -430,6 +440,7 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
         strftime(clock, sizeof(clock), "%I:%M %p", t);
         launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock[0] == '0' ? clock + 1 : clock);
     }
+    launcher_draw_new_games_notice();
 }
 
 int launcher_draw_pill (int x, int y, const char *name, bool active) {
@@ -783,6 +794,7 @@ static path_t *selected_rom = NULL;
 static launcher_request_t pending_request = LAUNCHER_REQUEST_NONE;
 static bool favorites_changed = false;
 static char favorite_label[32] = "Add to favorites";
+static char rescan_label[40] = "Rescan folders";
 
 static int favorite_index (menu_t *menu, path_t *rom) {
     for (int i = 0; rom && i < FAVORITES_COUNT; i++) {
@@ -930,7 +942,7 @@ static component_context_menu_t start_menu = {
         { .text = "Cover style", .submenu = &cover_style_menu },
         { .text = "Layout", .submenu = &layout_menu },
         { .text = "Game titles", .submenu = &titles_menu },
-        { .text = "Rescan folders", .action = rescan_folders },
+        { .text = rescan_label, .action = rescan_folders },
         { .text = "File browser", .action = open_file_browser },
         { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
         { .text = "Menu settings", .action = open_screen, .arg = (void *)(MENU_MODE_SETTINGS_EDITOR) },
@@ -955,6 +967,12 @@ void launcher_menu_show (menu_t *menu, path_t *rom) {
     selected_rom = rom;
     snprintf(favorite_label, sizeof(favorite_label), "%s",
         favorite_index(menu, rom) >= 0 ? "Remove from favorites" : "Add to favorites");
+    int new_games = library_new_game_count();
+    if (new_games > 0) {
+        snprintf(rescan_label, sizeof(rescan_label), "Rescan folders (%d new)", new_games);
+    } else {
+        snprintf(rescan_label, sizeof(rescan_label), "Rescan folders");
+    }
     ui_components_context_menu_show(&start_menu);
     sound_play_effect(SFX_SETTING);
 }

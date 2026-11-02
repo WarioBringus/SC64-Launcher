@@ -33,6 +33,7 @@
 #define GROUP_BADGE_MS              (800)
 
 #define INFO_LINE_Y                 (398)   /* Game details under the grid, above the hints */
+#define NEW_GAMES_CHECK_US          (2000)  /* Time per frame spent looking for new ROMs */
 #define PICKER_TOP                  (56)
 #define PICKER_BOTTOM               (412)
 #define PICKER_FIRST_ROW_Y          (100)
@@ -674,8 +675,10 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         any_pending |= pending;
     }
 
-    // Once this screen is complete, get group jumps and then the categories either side ready.
+    // Once this screen is complete, get group jumps and then the categories either side ready,
+    // and look for ROMs added since the cover index was built.
     if (!any_pending) {
+        library_check_new_games(NEW_GAMES_CHECK_US);
         preload_group_jumps(menu, c, sel, &lookups_left);
         preload_neighbours(menu, &lookups_left);
     }
@@ -757,6 +760,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
         snprintf(position, sizeof(position), "%s  -  %s  -  %d of %d", c->name, group, sel + 1, c->shown);
     }
     if (!pending && carousel_position == (float)sel) {
+        library_check_new_games(NEW_GAMES_CHECK_US);
         preload_group_jumps(menu, c, sel, &lookups_left);
         preload_neighbours(menu, &lookups_left);
     }

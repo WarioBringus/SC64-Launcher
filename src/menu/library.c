@@ -70,6 +70,13 @@ static int index_meta_count = 0;
 static bool index_tried = false;
 static bool index_lists_disabled = false;
 
+/* Background check for ROMs added since the cover index was built. */
+static int new_check_folder = 0;        /* Next folder to walk (index into folders[]) */
+static bool new_check_listing = false;  /* A folder listing is in progress */
+static dir_t new_check_entry;
+static bool new_check_done = false;
+static int new_game_count = 0;
+
 
 static int index_rom_cover (path_t *rom_path);
 
@@ -1105,6 +1112,51 @@ int library_most_played (menu_t *menu, path_t **paths, int max) {
     return n;
 }
 
+/** @brief Whether the cover index lists this file (rel = path relative to the card root). */
+static bool index_has_rom (const char *rel) {
+    return bsearch(rel, index_roms, index_rom_count, sizeof(index_rom_t), compare_index_rom) != NULL;
+}
+
+void library_check_new_games (int budget_us) {
+    // Only meaningful when the game lists come from the index.
+    if (new_check_done || !index_roms || index_lists_disabled || folder_count == 0 || !folders[0].from_index) {
+        return;
+    }
+    uint64_t start = get_ticks_us();
+    while (get_ticks_us() - start < (uint64_t)budget_us) {
+        if (new_check_folder >= folder_count) {
+            new_check_done = true;
+            return;
+        }
+        library_category_t *c = &folders[new_check_folder];
+        const char *dir = path_get(c->directory);
+        int result = new_check_listing ? dir_findnext(dir, &new_check_entry) : dir_findfirst(dir, &new_check_entry);
+        new_check_listing = true;
+        if (result != 0) {
+            new_check_listing = false;
+            new_check_folder++;
+            continue;
+        }
+        if (new_check_entry.d_type == DT_DIR || !is_rom_name(new_check_entry.d_name)) {
+            continue;
+        }
+        // The folder part of the index path: the directory without "sd:/" (empty for the root).
+        const char *folder = dir + strlen(storage_prefix);
+        while (*folder == '/') {
+            folder++;
+        }
+        char rel[512];
+        snprintf(rel, sizeof(rel), "%s%s%s", folder, folder[0] ? "/" : "", new_check_entry.d_name);
+        if (!index_has_rom(rel)) {
+            new_game_count++;
+        }
+    }
+}
+
+int library_new_game_count (void) {
+    return new_check_done ? new_game_count : 0;
+}
+
 void library_rescan (menu_t *menu) {
     index_lists_disabled = true;
     scanned = false;
@@ -1182,6 +1234,11 @@ void library_free (void) {
     free(scanned_root);
     scanned_root = NULL;
     scanned = false;
+
+    new_check_folder = 0;
+    new_check_listing = false;
+    new_check_done = false;
+    new_game_count = 0;
 
     index_free();
 }

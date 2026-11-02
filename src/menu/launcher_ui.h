@@ -176,6 +176,9 @@ void launcher_reset_idle(void);
 /** @brief The game the About page shows (set by the Start menu's "About this game"). */
 path_t *launcher_about_rom(void);
 
+/** @brief Draw the "new games found" notice under the header, when there are any. */
+void launcher_draw_new_games_notice(void);
+
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 
