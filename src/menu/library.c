@@ -41,6 +41,7 @@ static int folder_count = 0;
 /* Single merged category used when categories are off. */
 static library_category_t all_games;
 static bool categories_enabled = true;
+static bool one_per_game = true;
 
 static bool scanned = false;
 static char *scanned_root = NULL;
@@ -560,6 +561,64 @@ static void load_folder_games (library_category_t *c) {
     c->loaded = true;
 }
 
+/**
+ * @brief A game's identity for duplicate detection: the 3-character game code in its cover's folder
+ * (metadata/N/D/O/... -> "NDO"). False for covers matched by name or without a cover.
+ */
+static bool game_identity (const library_game_t *g, char key[4]) {
+    if (!g->cover_path) {
+        return false;
+    }
+    const char *m = strstr(g->cover_path, "/metadata/");
+    if (!m || strncmp(m, "/metadata/names/", 16) == 0) {
+        return false;
+    }
+    m += strlen("/metadata/");
+    if (strlen(m) < 6 || m[1] != '/' || m[3] != '/' || m[5] != '/') {
+        return false;
+    }
+    key[0] = m[0];
+    key[1] = m[2];
+    key[2] = m[4];
+    key[3] = '\0';
+    return true;
+}
+
+/** @brief Preference among regional copies: lower is better (USA, Europe, Japan, then the rest). */
+static int region_rank (path_t *directory) {
+    const char *dir = path_get(directory);
+    if (strstr(dir, "USA")) {
+        return 0;
+    }
+    if (strstr(dir, "Europe")) {
+        return 1;
+    }
+    if (strstr(dir, "Japan")) {
+        return 2;
+    }
+    return 3;
+}
+
+/**
+ * @brief Whether another copy of game i in a different folder is preferred over it.
+ * Copies in the same folder (an original and its hack, say) are all kept. keys/ranks are
+ * precomputed so the all-pairs check only compares numbers.
+ */
+static bool has_better_copy (library_game_t *games, const uint32_t *keys, const int *ranks, int count, int i) {
+    if (keys[i] == 0) {
+        return false;
+    }
+    for (int j = 0; j < count; j++) {
+        if (j == i || keys[j] != keys[i] || games[j].directory == games[i].directory) {
+            continue;
+        }
+        if (ranks[j] < ranks[i] || (ranks[j] == ranks[i] && j < i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void load_all_games (void) {
     int total = 0;
     for (int i = 0; i < folder_count; i++) {
@@ -569,13 +628,33 @@ static void load_all_games (void) {
         total += folders[i].count;
     }
 
+    // Every game, for spotting regional duplicates.
+    library_game_t *everything = malloc((total > 0 ? total : 1) * sizeof(library_game_t));
+    int n = 0;
+    for (int i = 0; i < folder_count; i++) {
+        for (int j = 0; j < folders[i].count; j++) {
+            everything[n++] = folders[i].games[j];
+        }
+    }
+
+    uint32_t *keys = malloc((n > 0 ? n : 1) * sizeof(uint32_t));
+    int *ranks = malloc((n > 0 ? n : 1) * sizeof(int));
+    for (int k = 0; k < n; k++) {
+        char key[4];
+        keys[k] = game_identity(&everything[k], key) ? ((uint32_t)key[0] << 16) | ((uint32_t)key[1] << 8) | (uint32_t)key[2] : 0;
+        ranks[k] = region_rank(everything[k].directory);
+    }
+
     // Shallow copies: names and directories stay owned by the folder entries.
     all_games.games = malloc((total > 0 ? total : 1) * sizeof(library_game_t));
     all_games.count = 0;
-    for (int i = 0; i < folder_count; i++) {
-        for (int j = 0; j < folders[i].count; j++) {
+    for (int k = 0; k < n; k++) {
+        if (one_per_game && has_better_copy(everything, keys, ranks, n, k)) {
+            continue;
+        }
+        {
             library_game_t *g = &all_games.games[all_games.count++];
-            *g = folders[i].games[j];
+            *g = everything[k];
             // Each list owns its cover paths.
             g->cover_path = g->cover_path ? strdup(g->cover_path) : NULL;
             if (g->cover_state == LIBRARY_COVER_FOUND && !g->cover_path) {
@@ -583,6 +662,9 @@ static void load_all_games (void) {
             }
         }
     }
+    free(keys);
+    free(ranks);
+    free(everything);
     qsort(all_games.games, all_games.count, sizeof(library_game_t), compare_games);
     all_games.portrait = false;
     all_games.filter_field = -1;
@@ -747,7 +829,8 @@ void library_init (menu_t *menu) {
         root_setting = "/";
     }
     if (scanned && scanned_root && strcmp(scanned_root, root_setting) == 0 &&
-        categories_enabled == menu->settings.launcher_categories_enabled) {
+        categories_enabled == menu->settings.launcher_categories_enabled &&
+        one_per_game == menu->settings.launcher_one_per_game) {
         return;
     }
 
@@ -755,6 +838,7 @@ void library_init (menu_t *menu) {
 
     storage_prefix = menu->storage_prefix;
     categories_enabled = menu->settings.launcher_categories_enabled;
+    one_per_game = menu->settings.launcher_one_per_game;
     scanned_root = strdup(root_setting);
 
     // The cover index lists ROMs relative to the card root, so it only stands in for a root library.

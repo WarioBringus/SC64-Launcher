@@ -125,6 +125,9 @@ typedef struct {
     /** @brief Show cartridge label art instead of boxes where the metadata pack has it */
     bool launcher_cartridge_art;
 
+    /** @brief With folder categories off, list each game once (USA, then Europe, then Japan) */
+    bool launcher_one_per_game;
+
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 

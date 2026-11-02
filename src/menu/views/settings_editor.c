@@ -203,6 +203,11 @@ static void set_launcher_attract_minutes_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_launcher_one_per_game_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_one_per_game = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void set_launcher_quick_launch_type (menu_t *menu, void *arg) {
     menu->settings.launcher_quick_launch = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -547,6 +552,18 @@ static component_context_menu_t set_launcher_attract_minutes_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_launcher_one_per_game_current_selection (menu_t *menu) {
+    return menu->settings.launcher_one_per_game ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_one_per_game_context_menu = {
+    .get_default_selection = get_launcher_one_per_game_current_selection,
+    .list = {
+        {.text = "One per game", .action = set_launcher_one_per_game_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Show all", .action = set_launcher_one_per_game_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static int get_launcher_quick_launch_current_selection (menu_t *menu) {
     return menu->settings.launcher_quick_launch ? 0 : 1;
 }
@@ -574,6 +591,7 @@ static component_context_menu_t set_launcher_widescreen_context_menu = {
 static component_context_menu_t launcher_context_menu = { .list = {
     { .text = "Launcher", .submenu = &set_launcher_enabled_context_menu },
     { .text = "Folder Categories", .submenu = &set_launcher_categories_enabled_context_menu },
+    { .text = "Duplicates", .submenu = &set_launcher_one_per_game_context_menu },
     { .text = "Library Layout", .submenu = &set_launcher_layout_context_menu },
     { .text = "Tile Size", .submenu = &set_launcher_tile_size_context_menu },
     { .text = "Game Titles", .submenu = &set_launcher_titles_highlight_only_context_menu },
