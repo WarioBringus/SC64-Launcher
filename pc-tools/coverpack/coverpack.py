@@ -21,7 +21,7 @@ Index format (UTF-8 text, sorted byte-wise so the menu can binary search):
 Pack format (big-endian): "CVP1", u32 count, u32 offset[count] (0 = none), then for each cover
 "CVR1", u16 width, u16 height, RGBA5551 pixels.
 """
-import argparse, os, shutil, struct, subprocess, sys, tempfile
+import argparse, hashlib, json, os, shutil, struct, subprocess, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gamemeta  # noqa: E402
@@ -103,6 +103,47 @@ def find_cover(menu_dir, code, raw_title, title):
     return None
 
 
+class ThumbCache:
+    """Scaled covers on the PC: one file per cover holding its blob for each box, plus a JSON index."""
+
+    def __init__(self, folder):
+        self.folder = folder
+        self.index_path = os.path.join(folder, 'index.json')
+        try:
+            self.index = json.load(open(self.index_path, encoding='utf-8'))
+        except (OSError, ValueError):
+            self.index = {}
+
+    def get(self, signature):
+        name = self.index.get(signature)
+        if not name:
+            return None
+        try:
+            data = open(os.path.join(self.folder, name), 'rb').read()
+        except OSError:
+            return None
+        blobs, pos = [], 0
+        for _ in BOXES:
+            if pos + 4 > len(data):
+                return None
+            n = struct.unpack('>I', data[pos:pos + 4])[0]
+            blobs.append(data[pos + 4:pos + 4 + n])
+            pos += 4 + n
+        return blobs
+
+    def put(self, signature, blobs):
+        os.makedirs(self.folder, exist_ok=True)
+        name = hashlib.sha1(signature.encode('utf-8')).hexdigest() + '.bin'
+        with open(os.path.join(self.folder, name), 'wb') as f:
+            for b in blobs:
+                f.write(struct.pack('>I', len(b)) + b)
+        self.index[signature] = name
+
+    def save(self):
+        os.makedirs(self.folder, exist_ok=True)
+        json.dump(self.index, open(self.index_path, 'w', encoding='utf-8'))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--card', default='I:')
@@ -110,6 +151,8 @@ def main():
     ap.add_argument('--metadata', default='C:/n64/downloads/libretro-db',
                     help='folder with the libretro-database N64 genre/developer/releaseyear/maxusers .dat files')
     ap.add_argument('--crc-cache', default='C:/n64/cache/rom_crc.json')
+    ap.add_argument('--thumb-cache', default='C:/n64/cache/thumbs',
+                    help='folder for scaled covers kept between runs')
     args = ap.parse_args()
     card = args.card.rstrip('/\\') + '/'
     menu_dir = card + 'menu'
@@ -131,33 +174,60 @@ def main():
     cover_id = {c: i for i, c in enumerate(covers)}
     print('%d ROMs, %d with covers, %d distinct covers' % (len(roms), sum(1 for c in rom_cover.values() if c), len(covers)))
 
-    # Thumbnails: the image tool takes ASCII paths, so it works on a temp copy of each cover.
+    # Thumbnails: scaled covers are kept in a cache on the PC, keyed by the cover's path, size and
+    # modification time, so only new or changed covers are scaled again.
+    thumb_cache = ThumbCache(args.thumb_cache)
     blobs = {box: [None] * len(covers) for box in BOXES}
+    signatures = []
     work = tempfile.mkdtemp(prefix='coverpack-')
-    failed = 0
+    failed = scaled = 0
     try:
         for i, cover in enumerate(covers):
-            src = os.path.join(work, 'in.png')
-            shutil.copyfile(os.path.join(menu_dir, cover), src)
-            prefix = os.path.join(work, 'c')
-            r = subprocess.run([args.tool, 'raw', src, prefix] + ['%dx%d' % b for b in BOXES],
-                               capture_output=True, text=True)
-            if r.returncode != 0:
-                failed += 1
-                print('  skipped %s: %s' % (cover, r.stderr.strip()))
-                continue
-            for box in BOXES:
-                p = '%s_%dx%d.raw' % (prefix, box[0], box[1])
-                with open(p, 'rb') as f:
-                    blobs[box][i] = f.read()
-                os.remove(p)
-            if (i + 1) % 100 == 0:
-                print('  scaled %d / %d covers' % (i + 1, len(covers)))
+            full = os.path.join(menu_dir, cover)
+            st = os.stat(full)
+            signature = '%s|%d|%d' % (cover, st.st_size, int(st.st_mtime))
+            signatures.append(signature)
+            cached = thumb_cache.get(signature)
+            if cached is None:
+                # The image tool takes ASCII paths, so it works on a temp copy of each cover.
+                src = os.path.join(work, 'in.png')
+                shutil.copyfile(full, src)
+                prefix = os.path.join(work, 'c')
+                r = subprocess.run([args.tool, 'raw', src, prefix] + ['%dx%d' % b for b in BOXES],
+                                   capture_output=True, text=True)
+                if r.returncode != 0:
+                    failed += 1
+                    print('  skipped %s: %s' % (cover, r.stderr.strip()))
+                    continue
+                cached = []
+                for box in BOXES:
+                    p = '%s_%dx%d.raw' % (prefix, box[0], box[1])
+                    with open(p, 'rb') as f:
+                        cached.append(f.read())
+                    os.remove(p)
+                thumb_cache.put(signature, cached)
+                scaled += 1
+                if scaled % 100 == 0:
+                    print('  scaled %d covers' % scaled)
+            for box, blob in zip(BOXES, cached):
+                blobs[box][i] = blob
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    thumb_cache.save()
+    print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
+
+    # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
+    manifest = hashlib.sha1('\n'.join(signatures + ['%dx%d' % b for b in BOXES]).encode('utf-8')).hexdigest()
+    manifest_path = out_dir + '/covers.manifest'
+    packs_present = all(os.path.exists('%s/covers_%dx%d.pak' % (out_dir, b[0], b[1])) for b in BOXES)
+    old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
+    packs_current = packs_present and old_manifest == manifest and failed == 0
 
     total = 0
     for box in BOXES:
+        if packs_current:
+            total += os.path.getsize('%s/covers_%dx%d.pak' % (out_dir, box[0], box[1]))
+            continue
         items = blobs[box]
         table_end = 8 + 4 * len(items)
         offsets, data, pos = [], bytearray(), table_end
@@ -175,6 +245,11 @@ def main():
             f.write(data)
         os.replace(path + '.tmp', path)
         total += os.path.getsize(path)
+    if packs_current:
+        print('Covers unchanged: packs left as they are.')
+    else:
+        with open(manifest_path, 'w') as f:
+            f.write(manifest + '\n')
 
     # Game details for the library's sort options.
     meta_lines = []
