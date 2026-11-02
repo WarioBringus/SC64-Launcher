@@ -125,6 +125,9 @@ typedef struct {
     /** @brief Show cartridge label art instead of boxes where the metadata pack has it */
     bool launcher_cartridge_art;
 
+    /** @brief Launcher background: a soft gradient from the theme's colors (false: flat) */
+    bool launcher_gradient;
+
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 

@@ -873,6 +873,7 @@ void view_library_init (menu_t *menu) {
 void view_library_display (menu_t *menu, surface_t *display) {
     current_sort = menu->settings.launcher_sort;
     launcher_set_widescreen(menu->settings.launcher_widescreen);
+    launcher_set_gradient(menu->settings.launcher_gradient);
     launcher_set_cartridge_art(menu->settings.launcher_cartridge_art);
     launcher_track_idle(menu);
 

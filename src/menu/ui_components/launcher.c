@@ -267,12 +267,20 @@ void launcher_fill_rounded_px (int x0, int y0, int x1, int y1, int radius, color
     fill_rounded_real(x0, y0, x1, y1, radius, 1.0f, color);
 }
 
+static color_t background_at (int y);
+
+static bool same_color (color_t a, color_t b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
 /**
  * @brief Round off the corners of something already drawn by painting them in the color behind it.
- * Coordinates are logical.
+ * Coordinates are logical. When the color behind is the screen background, each row uses the
+ * background's color at that height (it may be a gradient).
  */
 static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t behind) {
     float squeeze = widescreen ? WIDE_SQUEEZE : 1.0f;
+    bool on_background = same_color(behind, theme_current()->bg);
     int rx0 = px(x0);
     int rx1 = px(x1);
     flat_begin(behind);
@@ -281,8 +289,14 @@ static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t be
         if (inset <= 0) {
             continue;
         }
+        if (on_background) {
+            rdpq_set_prim_color(background_at(y0 + i));
+        }
         rdpq_fill_rectangle(rx0, y0 + i, rx0 + inset, y0 + i + 1);
         rdpq_fill_rectangle(rx1 - inset, y0 + i, rx1, y0 + i + 1);
+        if (on_background) {
+            rdpq_set_prim_color(background_at(y1 - 1 - i));
+        }
         rdpq_fill_rectangle(rx0, y1 - 1 - i, rx0 + inset, y1 - i);
         rdpq_fill_rectangle(rx1 - inset, y1 - 1 - i, rx1, y1 - i);
     }
@@ -294,8 +308,63 @@ void launcher_draw_page_title (const char *title) {
     launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
 }
 
+#define GRADIENT_BANDS          (24)
+#define GRADIENT_TOP_TINT       (0.55f)  /* How far the top leans from the background toward the panel color */
+
+static bool gradient = true;
+
+void launcher_set_gradient (bool enabled) {
+    gradient = enabled;
+}
+
+static color_t mix (color_t a, color_t b, float t) {
+    return RGBA32(
+        (uint8_t)(a.r + (b.r - a.r) * t),
+        (uint8_t)(a.g + (b.g - a.g) * t),
+        (uint8_t)(a.b + (b.b - a.b) * t),
+        0xFF
+    );
+}
+
+static bool gradient_active (void) {
+    return gradient && !ui_components_background_get_image();
+}
+
+static color_t band_color (int band) {
+    const theme_t *t = theme_current();
+    float f = 1.0f - (float)band / (GRADIENT_BANDS - 1);
+    return mix(t->bg, t->panel, GRADIENT_TOP_TINT * f * f);
+}
+
+/** @brief The background's color at a screen row (the gradient band it falls in). */
+static color_t background_at (int y) {
+    if (!gradient_active()) {
+        return theme_current()->bg;
+    }
+    int band = (y * GRADIENT_BANDS) / display_get_height();
+    if (band < 0) {
+        band = 0;
+    }
+    if (band >= GRADIENT_BANDS) {
+        band = GRADIENT_BANDS - 1;
+    }
+    return band_color(band);
+}
+
 void launcher_draw_background (void) {
-    ui_components_background_draw();
+    if (!gradient_active()) {
+        ui_components_background_draw();
+        return;
+    }
+    // A soft vertical gradient: a little lighter (toward the panel color) at the top, the theme
+    // background at the bottom. Full-width bands are cheap to fill.
+    int height = display_get_height();
+    int width = display_get_width();
+    for (int i = 0; i < GRADIENT_BANDS; i++) {
+        int y0 = (height * i) / GRADIENT_BANDS;
+        int y1 = (height * (i + 1)) / GRADIENT_BANDS;
+        ui_components_box_draw(0, y0, width, y1, band_color(i));
+    }
 }
 
 struct launcher_paragraph_s {

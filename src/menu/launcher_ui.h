@@ -140,8 +140,11 @@ int launcher_title(int x, int y, int width, rdpq_align_t align, menu_font_style_
 /** @brief Draw a page title in the header (for screens opened from the launcher). */
 void launcher_draw_page_title(const char *title);
 
-/** @brief Draw the screen background (theme color, or the user's background image). */
+/** @brief Draw the screen background: the user's background image, or the theme's gradient or flat color. */
 void launcher_draw_background(void);
+
+/** @brief Use the gradient background (views set this from the settings every frame). */
+void launcher_set_gradient(bool enabled);
 
 /** @brief A block of wrapped text laid out once and drawn every frame (e.g. a game description). */
 typedef struct launcher_paragraph_s launcher_paragraph_t;
