@@ -292,6 +292,7 @@ static void process (menu_t *menu) {
         launch(menu, &row->items[row->selected]);
     } else if (menu->actions.trigger_z && row->kind == ROW_FAVORITES && row->count > 0) {
         bookkeeping_favorite_remove(&menu->bookkeeping, row->items[row->selected].index);
+        launcher_favorites_touched();
         build_rows(menu);
         sound_play_effect(SFX_SETTING);
     }
@@ -353,6 +354,9 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
         bool pending;
         surface_t *image = item_image(menu, h, ROW_TILE_W, ROW_TILE_H, lookups_left, &pending);
         launcher_draw_tile(x, tile_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, selected, theme_current()->bg);
+        if (row->kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
+            launcher_draw_favorite_star(x, tile_y, ROW_TILE_W);
+        }
         if (selected || !highlight_only) {
             int extra = selected && highlight_only ? 60 : 3;
             int tx = x - extra;

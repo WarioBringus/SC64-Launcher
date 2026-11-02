@@ -327,6 +327,18 @@ static void picker_draw (void) {
     }
 }
 
+/** @brief Whether a game is a favorite, worked out again only when favorites change. */
+static bool game_is_favorite (menu_t *menu, library_game_t *game) {
+    uint32_t generation = launcher_favorites_generation();
+    if (game->favorite_generation != generation) {
+        path_t *path = library_game_path(game);
+        game->favorite = launcher_is_favorite(menu, path);
+        path_free(path);
+        game->favorite_generation = generation;
+    }
+    return game->favorite;
+}
+
 static void launch (menu_t *menu, library_game_t *game) {
     path_free(menu->load.launcher_rom_path);
     menu->load.launcher_rom_path = library_game_path(game);
@@ -636,6 +648,9 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
         surface_t *image = game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
         launcher_draw_tile(x, y, g.w, g.h, image, pending, c->games[i].title, selected, theme_current()->bg);
+        if (game_is_favorite(menu, &c->games[i])) {
+            launcher_draw_favorite_star(x, y, g.w);
+        }
 
         if (selected || !highlight_only) {
             int extra = highlight_only ? TITLE_EXTRA_HIGHLIGHT_ONLY : (g.gap / 2) - 1;
@@ -722,6 +737,9 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
             bool settled = (i == sel) && (carousel_position == (float)sel);
             if (settled) {
                 launcher_draw_tile(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg);
+                if (game_is_favorite(menu, &c->games[i])) {
+                    launcher_draw_favorite_star(x, y, w);
+                }
             } else if (image) {
                 launcher_draw_cover_scaled(image, x, y, w, h, theme_current()->bg);
             } else {
@@ -836,6 +854,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 void view_library_init (menu_t *menu) {
     library_init(menu);
+    launcher_favorites_touched();
     launcher_menu_init();
     if (!category_restored) {
         int found = library_category_find(menu->settings.launcher_category);

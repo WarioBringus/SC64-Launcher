@@ -451,6 +451,33 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     }
 }
 
+/**
+ * @brief Filled five-point star centered on logical (cx, cy), drawn as a triangle fan.
+ */
+static void fill_star (float cx, float cy, float radius, color_t color) {
+    float squeeze = widescreen ? WIDE_SQUEEZE : 1.0f;
+    float points[10][2];
+    for (int i = 0; i < 10; i++) {
+        float r = (i % 2 == 0) ? radius : radius * 0.45f;
+        float a = -1.5707963f + i * 0.6283185f;
+        points[i][0] = px((int)cx) + cosf(a) * r * squeeze;
+        points[i][1] = cy + sinf(a) * r;
+    }
+    float center[2] = { px((int)cx), cy };
+    flat_begin(color);
+    for (int i = 0; i < 10; i++) {
+        rdpq_triangle(&TRIFMT_FILL, center, points[i], points[(i + 1) % 10]);
+    }
+    flat_end();
+}
+
+void launcher_draw_favorite_star (int x, int y, int w) {
+    float cx = x + w - 9;
+    float cy = y + 9;
+    fill_star(cx, cy, 8.0f, theme_current()->bg);           // backing, so it reads on any cover
+    fill_star(cx, cy, 6.0f, theme_current()->accent);
+}
+
 void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
     launcher_fill_rounded(x0 - LAUNCHER_RING, y0 - LAUNCHER_RING, x1 + LAUNCHER_RING, y1 + LAUNCHER_RING,
         radius + LAUNCHER_RING, theme_current()->accent);
@@ -698,6 +725,20 @@ static int favorite_index (menu_t *menu, path_t *rom) {
     return -1;
 }
 
+static uint32_t favorites_generation = 1;
+
+void launcher_favorites_touched (void) {
+    favorites_generation++;
+}
+
+uint32_t launcher_favorites_generation (void) {
+    return favorites_generation;
+}
+
+bool launcher_is_favorite (menu_t *menu, path_t *rom) {
+    return favorite_index(menu, rom) >= 0;
+}
+
 static void toggle_favorite (menu_t *menu, void *arg) {
     (void)arg;
     if (!selected_rom) {
@@ -710,6 +751,7 @@ static void toggle_favorite (menu_t *menu, void *arg) {
         bookkeeping_favorite_add(&menu->bookkeeping, selected_rom, NULL, BOOKKEEPING_TYPE_ROM);
     }
     favorites_changed = true;
+    favorites_generation++;
 }
 
 static uint64_t last_input_ms = 0;

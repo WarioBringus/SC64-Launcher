@@ -250,6 +250,18 @@ launcher_request_t launcher_take_request(void);
 /** @brief Whether favorites changed since last asked (clears the flag). */
 bool launcher_take_favorites_changed(void);
 
+/** @brief Note that favorites may have changed (cached favorite flags are worked out again). */
+void launcher_favorites_touched(void);
+
+/** @brief Counter that changes whenever favorites may have changed. */
+uint32_t launcher_favorites_generation(void);
+
+/** @brief Whether a ROM is in the favorites. */
+bool launcher_is_favorite(menu_t *menu, path_t *rom);
+
+/** @brief Draw the favorite star in the top-right corner of a tile. */
+void launcher_draw_favorite_star(int x, int y, int w);
+
 /**
  * @brief Draw a short line in the small font (game details, filter rows).
  *

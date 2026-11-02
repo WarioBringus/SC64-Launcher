@@ -30,6 +30,8 @@ typedef struct {
     const char *developer;
     const char *year;
     int players;                /**< Maximum players, 0 when unknown */
+    uint32_t favorite_generation; /**< launcher_favorites_generation() when favorite was worked out */
+    bool favorite;              /**< In the favorites (valid when favorite_generation is current) */
 } library_game_t;
 
 /** @brief One category (a folder of ROMs). */
