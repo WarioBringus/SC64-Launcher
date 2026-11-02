@@ -5,6 +5,10 @@
 #define MENU_VERSION "Unknown"
 #endif
 
+#ifndef LAUNCHER_BUILD
+#define LAUNCHER_BUILD "Unknown"
+#endif
+
 #ifndef BUILD_TIMESTAMP
 #define BUILD_TIMESTAMP "Unknown"
 #endif
@@ -46,6 +50,7 @@ static void draw (menu_t *menu, surface_t *d) {
         "\n"
         "\n"
         "Menu version: \t%s\n"
+        "Launcher: \t%s\n"
         "Build timestamp:  %s\n"
         "libdragon SDK: \t%s%s (%s, %.7s)\n"
         "\n"
@@ -60,6 +65,7 @@ static void draw (menu_t *menu, surface_t *d) {
         "\tno matter how small the commit.\n"
         "\n\nThis menu is licensed under the AGPL-3.0 License.\n",
         MENU_VERSION,
+        LAUNCHER_BUILD,
         BUILD_TIMESTAMP,
         sdk_version.branch, sdk_version.dirty ? "*" : "",
         sdk_version.commit_date,

@@ -13,6 +13,8 @@ OUTPUT_DIR = output
 
 MENU_VERSION ?= "Preview release"
 BUILD_TIMESTAMP = "$(shell TZ='UTC' date "+%Y-%m-%d %H:%M:%S %:z")"
+# Launcher build: commits since upstream V0.3.6 and the commit (* = built with uncommitted changes).
+LAUNCHER_BUILD = "build $(shell git rev-list --count V0.3.6..HEAD 2>/dev/null || echo '?') ($(shell git rev-parse --short=8 HEAD 2>/dev/null)$(shell git diff --quiet HEAD -- src 2>/dev/null || echo '*'))"
 
 include $(N64_INST)/include/n64.mk
 
@@ -203,7 +205,7 @@ $(FILESYSTEM_DIR)/menu/sprites/%.sprite: $(ASSETS_DIR)/images/%.png
 $(BUILD_DIR)/$(PROJECT_NAME).dfs: $(FILESYSTEM)
 
 $(BUILD_DIR)/menu/views/credits.o: .FORCE
-$(BUILD_DIR)/menu/views/credits.o: FLAGS+=-DMENU_VERSION=\"$(MENU_VERSION)\" -DBUILD_TIMESTAMP=\"$(BUILD_TIMESTAMP)\"
+$(BUILD_DIR)/menu/views/credits.o: FLAGS+=-DMENU_VERSION=\"$(MENU_VERSION)\" -DBUILD_TIMESTAMP=\"$(BUILD_TIMESTAMP)\" -DLAUNCHER_BUILD=\"$(LAUNCHER_BUILD)\"
 
 $(BUILD_DIR)/$(PROJECT_NAME).elf: $(OBJS)
 
