@@ -409,6 +409,31 @@ static bool is_c_button (launcher_button_t kind) {
     return kind == LAUNCHER_BUTTON_C_UP_DOWN || kind == LAUNCHER_BUTTON_C_LEFT_RIGHT;
 }
 
+#define NOW_PLAYING_MS      (4000)
+
+static uint32_t now_playing_generation = 0;
+static uint64_t now_playing_until_ms = 0;
+
+/** @brief "Now playing: ..." at the left of the footer, in the width the hints leave. */
+static void draw_now_playing (int x1, int y) {
+    uint32_t generation = sound_bgm_track_generation();
+    if (generation != now_playing_generation) {
+        now_playing_generation = generation;
+        now_playing_until_ms = get_ticks_ms() + NOW_PLAYING_MS;
+    }
+    const char *name = sound_bgm_track_name();
+    if (!name || !sound_bgm_is_playing() || get_ticks_ms() > now_playing_until_ms) {
+        return;
+    }
+    int width = x1 - LAUNCHER_X0;
+    if (width < 80) {
+        return;
+    }
+    char text[128];
+    snprintf(text, sizeof(text), "Now playing: %s", name);
+    launcher_small(LAUNCHER_X0, y, width, ALIGN_LEFT, STL_GRAY, text);
+}
+
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
 
@@ -430,6 +455,7 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     int x = LAUNCHER_X1 - total;
     int y = LAUNCHER_FOOTER_Y + 12;
     int text_y = y - (HINT_TEXT_HEIGHT - HINT_BUTTON_SIZE) / 2;
+    draw_now_playing(x - HINT_GAP * 2, text_y);
     for (int i = 0; i < count; i++) {
         color_t color;
         switch (hints[i].kind) {
@@ -761,6 +787,10 @@ static char layout_label[40] = "Layout";
 static char tile_size_label[40] = "Tile size";
 static char cover_style_label[40] = "Cover style";
 static char titles_label[48] = "Game titles";
+static char pause_label[24] = "Pause";
+static char music_label[24] = "Music";
+static char order_label[32] = "Order";
+static char volume_label[32] = "Volume";
 
 static int favorite_index (menu_t *menu, path_t *rom) {
     for (int i = 0; rom && i < FAVORITES_COUNT; i++) {
@@ -943,6 +973,88 @@ static component_context_menu_t look_menu = {
     }
 };
 
+static void next_track (menu_t *menu, void *arg) {
+    (void)menu;
+    (void)arg;
+    sound_bgm_next();
+}
+
+static void toggle_pause (menu_t *menu, void *arg) {
+    (void)menu;
+    (void)arg;
+    sound_bgm_set_paused(!sound_bgm_is_paused());
+}
+
+static void set_music (menu_t *menu, void *arg) {
+    menu->settings.bgm_enabled = (bool)(uintptr_t)(arg);
+    sound_use_bgm(menu->settings.bgm_enabled);
+    settings_save(&menu->settings);
+}
+
+static int get_music_selection (menu_t *menu) {
+    return menu->settings.bgm_enabled ? 0 : 1;
+}
+
+static component_context_menu_t music_onoff_menu = {
+    .get_default_selection = get_music_selection,
+    .list = {
+        { .text = "On", .action = set_music, .arg = (void *)(uintptr_t)(true) },
+        { .text = "Off", .action = set_music, .arg = (void *)(uintptr_t)(false) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static void set_music_order (menu_t *menu, void *arg) {
+    menu->settings.bgm_order = (int)(uintptr_t)(arg);
+    sound_bgm_set_order(menu->settings.bgm_order);
+    settings_save(&menu->settings);
+}
+
+static int get_music_order_selection (menu_t *menu) {
+    return menu->settings.bgm_order;
+}
+
+static component_context_menu_t music_order_menu = {
+    .get_default_selection = get_music_order_selection,
+    .list = {
+        { .text = "Shuffle", .action = set_music_order, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_SHUFFLE) },
+        { .text = "In order", .action = set_music_order, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_IN_ORDER) },
+        { .text = "Repeat one", .action = set_music_order, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_REPEAT_ONE) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static void set_music_volume (menu_t *menu, void *arg) {
+    menu->settings.bgm_volume = (int)(uintptr_t)(arg);
+    sound_bgm_set_volume(menu->settings.bgm_volume);
+    settings_save(&menu->settings);
+}
+
+static int get_music_volume_selection (menu_t *menu) {
+    return menu->settings.bgm_volume;
+}
+
+static component_context_menu_t music_volume_menu = {
+    .get_default_selection = get_music_volume_selection,
+    .list = {
+        { .text = "Low", .action = set_music_volume, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_LOW) },
+        { .text = "Medium", .action = set_music_volume, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_MEDIUM) },
+        { .text = "High", .action = set_music_volume, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_HIGH) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
+static component_context_menu_t music_menu = {
+    .list = {
+        { .text = "Next track", .action = next_track },
+        { .text = pause_label, .action = toggle_pause },
+        { .text = music_label, .submenu = &music_onoff_menu },
+        { .text = order_label, .submenu = &music_order_menu },
+        { .text = volume_label, .submenu = &music_volume_menu },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t files_menu = {
     .list = {
         { .text = rescan_label, .action = rescan_folders },
@@ -970,6 +1082,7 @@ static component_context_menu_t start_menu = {
         { .text = "Surprise me", .action = surprise_me },
         { .text = "Browse", .submenu = &browse_menu },
         { .text = "Look", .submenu = &look_menu },
+        { .text = "Music", .submenu = &music_menu },
         { .text = "Library", .submenu = &files_menu },
         { .text = "System", .submenu = &system_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
@@ -1015,6 +1128,10 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     snprintf(cover_style_label, sizeof(cover_style_label), "Cover style: %s", current_choice(menu, &cover_style_menu));
     snprintf(titles_label, sizeof(titles_label), "Game titles: %s",
         menu->settings.launcher_titles_highlight_only ? "Highlighted" : "Always");
+    snprintf(pause_label, sizeof(pause_label), "%s", sound_bgm_is_paused() ? "Resume" : "Pause");
+    snprintf(music_label, sizeof(music_label), "Music: %s", current_choice(menu, &music_onoff_menu));
+    snprintf(order_label, sizeof(order_label), "Order: %s", current_choice(menu, &music_order_menu));
+    snprintf(volume_label, sizeof(volume_label), "Volume: %s", current_choice(menu, &music_volume_menu));
 }
 
 void launcher_menu_show (menu_t *menu, path_t *rom) {

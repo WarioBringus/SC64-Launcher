@@ -8,6 +8,7 @@
 #define SOUND_H__
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define SOUND_SFX_CHANNEL           (0) /**< First Channel of sound effects 0-7 (8 in total) */
 #define SOUND_BGM_CHANNEL           (8) /**< First Channel for background music 8-9 (2 in total [stereo]) */
@@ -122,6 +123,24 @@ void sound_bgm_next(void);
  * @brief Number of playable tracks found in the music folder.
  */
 int sound_bgm_track_count(void);
+
+/** @brief Pause (hold silent where it is) or resume the background music. */
+void sound_bgm_set_paused(bool paused);
+
+/** @brief Whether the background music is paused. */
+bool sound_bgm_is_paused(void);
+
+/** @brief Whether background music is audible now (on, not paused, not faded out). */
+bool sound_bgm_is_playing(void);
+
+/** @brief The current playlist track's file name without extension, or NULL for the built-in track. */
+const char *sound_bgm_track_name(void);
+
+/** @brief Goes up each time a playlist track starts. */
+uint32_t sound_bgm_track_generation(void);
+
+/** @brief Fade the music out over duration_ms (blocks) and stop it, e.g. before a game boots. */
+void sound_bgm_fade_out(int duration_ms);
 
 /**
  * @brief Play a specified sound effect.

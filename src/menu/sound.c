@@ -5,6 +5,7 @@
  */
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -34,6 +35,9 @@ static bool sfx_enabled = false;
 static bool bgm_enabled = false;
 static bool sfx_opened = false;
 static bool bgm_opened = false;
+static bool bgm_paused = false;
+static bool bgm_faded = false;             /* Faded out for a game launch; stays quiet until turned on again */
+static uint32_t bgm_track_generation = 0;  /* Counts playlist tracks started, for "now playing" */
 
 /**
  * @brief Reconfigure the sound system with the specified frequency.
@@ -118,9 +122,11 @@ static void bgm_open_current (void) {
     } else {
         wav64_open(&bgm, bgm_tracks[bgm_track_index]);
         wav64_set_loop(&bgm, (bgm_track_count == 1) || (bgm_order == SOUND_BGM_ORDER_REPEAT_ONE));
+        bgm_track_generation++;
     }
     mixer_ch_set_vol(SOUND_BGM_CHANNEL, bgm_volume, bgm_volume);
     bgm_opened = true;
+    bgm_paused = false;
 }
 
 /**
@@ -226,7 +232,9 @@ void sound_bgm_set_volume (int level) {
         case SOUND_BGM_VOLUME_MEDIUM: bgm_volume = 0.25f; break;
         default: bgm_volume = 0.1f; break;
     }
-    mixer_ch_set_vol(SOUND_BGM_CHANNEL, bgm_volume, bgm_volume);
+    if (!bgm_paused && !bgm_faded) {
+        mixer_ch_set_vol(SOUND_BGM_CHANNEL, bgm_volume, bgm_volume);
+    }
 }
 
 void sound_bgm_next (void) {
@@ -246,6 +254,68 @@ int sound_bgm_track_count (void) {
     return bgm_track_count;
 }
 
+void sound_bgm_set_paused (bool paused) {
+    if (!sound_initialized || !bgm_opened || !bgm_enabled || bgm_faded || paused == bgm_paused) {
+        return;
+    }
+    bgm_paused = paused;
+    // Seeking a VADPCM track is only allowed at its start, so a pause holds the channel still
+    // (no samples consumed) and silent, rather than stopping it.
+    if (paused) {
+        mixer_ch_set_vol(SOUND_BGM_CHANNEL, 0.0f, 0.0f);
+        mixer_ch_set_freq(SOUND_BGM_CHANNEL, 0.0f);
+    } else {
+        mixer_ch_set_freq(SOUND_BGM_CHANNEL, bgm.wave.frequency);
+        mixer_ch_set_vol(SOUND_BGM_CHANNEL, bgm_volume, bgm_volume);
+    }
+}
+
+bool sound_bgm_is_paused (void) {
+    return bgm_paused;
+}
+
+bool sound_bgm_is_playing (void) {
+    return sound_initialized && bgm_enabled && bgm_opened && !bgm_faded && !bgm_paused;
+}
+
+const char *sound_bgm_track_name (void) {
+    static char name[96];
+    if (bgm_track_count == 0) {
+        return NULL;
+    }
+    const char *path = bgm_tracks[bgm_track_index];
+    const char *slash = strrchr(path, '/');
+    snprintf(name, sizeof(name), "%s", slash ? slash + 1 : path);
+    char *dot = strrchr(name, '.');
+    if (dot) {
+        *dot = '\0';
+    }
+    return name;
+}
+
+uint32_t sound_bgm_track_generation (void) {
+    return bgm_track_generation;
+}
+
+void sound_bgm_fade_out (int duration_ms) {
+    if (!sound_initialized || !bgm_opened || !bgm_enabled || bgm_faded) {
+        return;
+    }
+    bgm_faded = true;
+    if (!bgm_paused) {
+        // Step the volume down while keeping the mixer fed.
+        uint64_t start = get_ticks_ms();
+        uint64_t now;
+        while ((now = get_ticks_ms()) - start < (uint64_t)duration_ms) {
+            float level = bgm_volume * (1.0f - (float)(now - start) / duration_ms);
+            mixer_ch_set_vol(SOUND_BGM_CHANNEL, level, level);
+            mixer_try_play();
+        }
+    }
+    mixer_ch_stop(SOUND_BGM_CHANNEL);
+    bgm_paused = false;
+}
+
 /**
  * @brief Enable or disable sound effects.
  * 
@@ -262,8 +332,11 @@ void sound_use_sfx(bool state) {
  */
 void sound_use_bgm(bool state) {
     bgm_enabled = state;
+    bgm_paused = false;
+    bgm_faded = false;
     if (bgm_enabled && bgm_opened) {
         wav64_play(&bgm, SOUND_BGM_CHANNEL);
+        mixer_ch_set_vol(SOUND_BGM_CHANNEL, bgm_volume, bgm_volume);
     } else {
         mixer_ch_stop(SOUND_BGM_CHANNEL);
     }
@@ -328,7 +401,7 @@ void sound_poll (void) {
     if (sound_initialized) {
         
         // Move on to the next playlist track when the current one has finished.
-        if (bgm_enabled && bgm_opened && bgm_track_count > 1 &&
+        if (bgm_enabled && bgm_opened && !bgm_faded && bgm_track_count > 1 &&
             bgm_order != SOUND_BGM_ORDER_REPEAT_ONE && !mixer_ch_playing(SOUND_BGM_CHANNEL)) {
             bgm_track_index = bgm_pick_next();
             bgm_open_current();
