@@ -164,7 +164,7 @@ int library_hidden_count(menu_t *menu);
 const char *library_hidden_at(int index);
 
 /**
- * @brief One-line game details, e.g. "Racing  ·  1997  ·  Nintendo EAD  ·  4 players". Empty when unknown.
+ * @brief One-line game details, e.g. "Racing  Â·  1997  Â·  Nintendo EAD  Â·  4 players". Empty when unknown.
  */
 void library_game_details(library_game_t *game, char *buffer, size_t size);
 

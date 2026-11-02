@@ -40,7 +40,7 @@ static char *title = NULL;
 static char *cover = NULL;
 static char *back_cover = NULL;
 static char details[160];
-static char origin[96];         /* "USA · Published by Acclaim" */
+static char origin[96];         /* "USA Â· Published by Acclaim" */
 static char accessories[160];
 static bool accessories_warning = false;   /* Something the game needs that this console lacks */
 static char *description = NULL;
@@ -152,7 +152,7 @@ static const char *region_name (rom_destination_type_t destination) {
 }
 
 /**
- * @brief Region and publisher ("USA · Published by Acclaim"), then accessories ("Rumble Pak · Controller Pak")
+ * @brief Region and publisher ("USA Â· Published by Acclaim"), then accessories ("Rumble Pak Â· Controller Pak")
  * from the ROM header and the menu's game database.
  * Expansion Pak notes only appear when they matter on this console.
  */
