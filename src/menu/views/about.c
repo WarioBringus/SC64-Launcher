@@ -7,8 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "views.h"
+#include "../cart_load.h"
 #include "../launcher_ui.h"
 #include "../library.h"
 #include "../rom_info.h"
@@ -43,6 +46,7 @@ static char details[160];
 static char origin[96];         /* "USA · Published by Acclaim" */
 static char accessories[160];
 static bool accessories_warning = false;   /* Something the game needs that this console lacks */
+static char save_info[48];      /* "Last saved Nov 1, 2026" */
 static char *description = NULL;
 static launcher_paragraph_t *paragraph = NULL;
 static int scroll = 0;
@@ -148,6 +152,37 @@ static const char *region_name (rom_destination_type_t destination) {
         case MARKET_OTHER_X:
         case MARKET_OTHER_Y: return "Europe";
         default: return NULL;
+    }
+}
+
+/**
+ * @brief "Last saved Nov 1, 2026" from the save file's date (the menu writes it back after each play),
+ * "Save file found" when the date can't be trusted, or nothing without a save.
+ */
+static void load_save_info (menu_t *menu, path_t *rom_path) {
+    static const char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    save_info[0] = '\0';
+    // Saves live in a "saves" folder beside the ROM, or beside it directly; try the configured place first.
+    for (int attempt = 0; attempt < 2; attempt++) {
+        bool in_folder = (attempt == 0) == menu->settings.use_saves_folder;
+        path_t *save = path_clone(rom_path);
+        path_ext_replace(save, "sav");
+        if (in_folder) {
+            path_push_subdir(save, SAVE_DIRECTORY_NAME);
+        }
+        struct stat st;
+        bool found = (stat(path_get(save), &st) == 0);
+        path_free(save);
+        if (!found) {
+            continue;
+        }
+        struct tm *t = localtime(&st.st_mtime);
+        if (t && t->tm_year + 1900 >= 2000 && t->tm_mon >= 0 && t->tm_mon < 12) {
+            snprintf(save_info, sizeof(save_info), "Last saved %s %d, %d", months[t->tm_mon], t->tm_mday, t->tm_year + 1900);
+        } else {
+            snprintf(save_info, sizeof(save_info), "Save file found");
+        }
+        return;
     }
 }
 
@@ -276,6 +311,10 @@ static void draw (menu_t *menu, surface_t *d) {
         }
         if (accessories[0]) {
             launcher_small(TEXT_X, y, text_w, ALIGN_LEFT, accessories_warning ? STL_ACCENT : STL_GRAY, accessories);
+            y += DETAILS_LINE_H;
+        }
+        if (save_info[0]) {
+            launcher_small(TEXT_X, y, text_w, ALIGN_LEFT, STL_GRAY, save_info);
         }
         if (paragraph) {
             launcher_paragraph_draw(paragraph, TEXT_X, description_y0 - scroll, description_y0, DESCRIPTION_Y1);
@@ -305,8 +344,9 @@ void view_about_init (menu_t *menu) {
     cover = library_find_cover(menu, rom, title);
     library_details_for_path(menu, rom, details, sizeof(details));
     load_accessories(menu, rom);
+    load_save_info(menu, rom);
     description_y0 = DETAILS_Y + DESCRIPTION_GAP + DETAILS_LINE_H *
-        ((details[0] ? 1 : 0) + (origin[0] ? 1 : 0) + (accessories[0] ? 1 : 0));
+        ((details[0] ? 1 : 0) + (origin[0] ? 1 : 0) + (accessories[0] ? 1 : 0) + (save_info[0] ? 1 : 0));
     if (cover) {
         char *front_name = strstr(cover, "boxart_front.png");
         if (front_name) {
