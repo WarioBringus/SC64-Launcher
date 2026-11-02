@@ -590,7 +590,7 @@ static void process (menu_t *menu) {
 static const launcher_hint_t settings_hints[] = {
     { LAUNCHER_BUTTON_A, "A", "Change" },
     { LAUNCHER_BUTTON_B, "B", "Back" },
-    { LAUNCHER_BUTTON_OTHER, "R", "Reset settings" },
+    { LAUNCHER_BUTTON_OTHER, "R", "Reset" },
 };
 
 static void draw (menu_t *menu, surface_t *d) {

@@ -127,6 +127,7 @@ DEPS = $(OBJS:.o=.d)
 FILESYSTEM = \
 	$(addprefix $(FILESYSTEM_DIR)/menu/fonts/, $(notdir $(FONTS:%.ttf=%.font64))) \
 	$(FILESYSTEM_DIR)/menu/fonts/InterTitle.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterSmall.font64 \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_WAV:%.wav=%.wav64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_XM:%.xm=%.xm64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sprites/, $(notdir $(IMAGES:%.png=%.sprite)))
@@ -146,6 +147,12 @@ $(FILESYSTEM_DIR)/menu/fonts/InterTitle.font64: $(ASSETS_DIR)/fonts/Inter.ttf
 	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
 	@cp "$<" $(BUILD_DIR)/fonts/InterTitle.ttf
 	@$(N64_MKFONT) --compress 1 --size 22 --var-axis wght=700 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterTitle.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterSmall.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterSmall.ttf
+	@$(N64_MKFONT) --compress 1 --size 12 --var-axis wght=600 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterSmall.ttf
 
 $(FILESYSTEM_DIR)/menu/fonts/%.font64: $(ASSETS_DIR)/fonts/%.ttf
 	@echo " [FONT] $@"

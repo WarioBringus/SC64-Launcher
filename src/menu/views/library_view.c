@@ -27,28 +27,23 @@
 #define CAROUSEL_FAST_STEP          (5)
 #define CAROUSEL_TITLE_Y            (330)
 
+#define LETTER_BADGE_SIZE           (84)
+#define LETTER_BADGE_MS             (700)
+
 #define CATEGORY_PILL_Y             (LAUNCHER_SUBHEADER_Y - 2)
 
-static const launcher_hint_t hints_grid[] = {
+static const launcher_hint_t hints_library[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
     { LAUNCHER_BUTTON_B, "B", "Home" },
     { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
-    { LAUNCHER_BUTTON_OTHER, "C", "Size" },
+    { LAUNCHER_BUTTON_OTHER, "C", "Letter" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
-    { LAUNCHER_BUTTON_START, "Start", "Menu" },
-};
-
-static const launcher_hint_t hints_carousel[] = {
-    { LAUNCHER_BUTTON_A, "A", "Open" },
-    { LAUNCHER_BUTTON_B, "B", "Home" },
-    { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
-    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
 static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_B, "B", "Home" },
-    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
@@ -58,6 +53,8 @@ static bool category_restored = false;
 static int selections[MAX_REMEMBERED_CATEGORIES];
 static int top_row = 0;
 static float carousel_position = 0.0f;
+static char letter_badge = 0;
+static uint64_t letter_badge_until_ms = 0;
 
 typedef struct {
     int cols;
@@ -112,13 +109,54 @@ static void switch_category (menu_t *menu, int delta) {
     carousel_position = (float)(*current_selection());
     sound_play_effect(SFX_CURSOR);
 
-    // Remember it, so the library opens here next time.
+    // Remember it, so the library opens here next time (saved when leaving the library).
     const char *name = library_category_name(category_index);
     if (name) {
         free(menu->settings.launcher_category);
         menu->settings.launcher_category = strdup(name);
-        settings_save(&menu->settings);
     }
+}
+
+/** @brief Index letter of a title: A-Z, or '#' for anything else. */
+static char title_letter (const char *title) {
+    char c = title[0];
+    if (c >= 'a' && c <= 'z') {
+        c -= 'a' - 'A';
+    }
+    return (c >= 'A' && c <= 'Z') ? c : '#';
+}
+
+/**
+ * @brief Move to the first game of the next letter, or back to the start of this letter / the previous one.
+ */
+static int jump_letter (library_category_t *c, int sel, int direction) {
+    char current = title_letter(c->games[sel].title);
+    if (direction > 0) {
+        for (int i = sel + 1; i < c->count; i++) {
+            if (title_letter(c->games[i].title) != current) {
+                return i;
+            }
+        }
+        return sel;
+    }
+    int start = sel;
+    while (start > 0 && title_letter(c->games[start - 1].title) == current) {
+        start--;
+    }
+    if (start < sel || start == 0) {
+        return start;
+    }
+    char previous = title_letter(c->games[start - 1].title);
+    start--;
+    while (start > 0 && title_letter(c->games[start - 1].title) == previous) {
+        start--;
+    }
+    return start;
+}
+
+static void show_letter_badge (library_category_t *c, int sel) {
+    letter_badge = title_letter(c->games[sel].title);
+    letter_badge_until_ms = get_ticks_ms() + LETTER_BADGE_MS;
 }
 
 static void launch (menu_t *menu, library_game_t *game) {
@@ -161,6 +199,7 @@ static void process (menu_t *menu) {
     }
     if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
+        settings_save(&menu->settings);
         menu->next_mode = MENU_MODE_HOME;
         return;
     }
@@ -168,7 +207,6 @@ static void process (menu_t *menu) {
         menu->settings.launcher_layout = (menu->settings.launcher_layout == LAUNCHER_LAYOUT_GRID)
             ? LAUNCHER_LAYOUT_CAROUSEL
             : LAUNCHER_LAYOUT_GRID;
-        settings_save(&menu->settings);
         top_row = 0;
         carousel_position = (float)(*current_selection());
         sound_play_effect(SFX_SETTING);
@@ -195,11 +233,13 @@ static void process (menu_t *menu) {
     int previous = *sel;
 
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
-        int step = menu->actions.go_fast ? CAROUSEL_FAST_STEP : 1;
-        if (menu->actions.go_left) {
-            *sel = (*sel - step < 0) ? 0 : *sel - step;
-        } else if (menu->actions.go_right) {
-            *sel = (*sel + step > c->count - 1) ? c->count - 1 : *sel + step;
+        if (menu->actions.go_fast && (menu->actions.go_left || menu->actions.go_right)) {
+            *sel = jump_letter(c, *sel, menu->actions.go_right ? 1 : -1);
+            show_letter_badge(c, *sel);
+        } else if (menu->actions.go_left && *sel > 0) {
+            *sel -= 1;
+        } else if (menu->actions.go_right && *sel < c->count - 1) {
+            *sel += 1;
         }
         if (*sel != previous) {
             sound_play_effect(SFX_CURSOR);
@@ -214,14 +254,21 @@ static void process (menu_t *menu) {
         int size = menu->settings.launcher_tile_size + (menu->actions.go_right ? 1 : -1);
         if (size >= LAUNCHER_TILE_SMALL && size <= LAUNCHER_TILE_LARGE) {
             menu->settings.launcher_tile_size = size;
-            settings_save(&menu->settings);
             sound_play_effect(SFX_SETTING);
+        }
+        return;
+    }
+    if (menu->actions.go_fast && (menu->actions.go_up || menu->actions.go_down)) {
+        *sel = jump_letter(c, *sel, menu->actions.go_down ? 1 : -1);
+        show_letter_badge(c, *sel);
+        if (*sel != previous) {
+            sound_play_effect(SFX_CURSOR);
         }
         return;
     }
 
     grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
-    int step = menu->actions.go_fast ? (g.cols * g.rows) : g.cols;
+    int step = g.cols;
 
     if (menu->actions.go_left && *sel > 0) {
         *sel -= 1;
@@ -230,8 +277,6 @@ static void process (menu_t *menu) {
     } else if (menu->actions.go_up) {
         if (*sel - step >= 0) {
             *sel -= step;
-        } else if (menu->actions.go_fast) {
-            *sel %= g.cols;
         }
     } else if (menu->actions.go_down) {
         if (*sel + step < c->count) {
@@ -478,14 +523,19 @@ static void draw (menu_t *menu, surface_t *d) {
             if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
                 draw_carousel(menu, c, *sel);
             } else {
-                launcher_text(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%d / %d", *sel + 1, c->count);
+                launcher_text(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%c   %d / %d",
+                    title_letter(c->games[*sel].title), *sel + 1, c->count);
                 draw_grid(menu, c, *sel);
             }
         }
-        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
-            launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
-        } else {
-            launcher_draw_footer(hints_grid, HINT_COUNT(hints_grid));
+        launcher_draw_footer(hints_library, HINT_COUNT(hints_library));
+
+        if (letter_badge && get_ticks_ms() < letter_badge_until_ms) {
+            int x0 = 320 - LETTER_BADGE_SIZE / 2;
+            int y0 = 222 - LETTER_BADGE_SIZE / 2;
+            launcher_fill_rounded(x0, y0, x0 + LETTER_BADGE_SIZE, y0 + LETTER_BADGE_SIZE, 16, theme_current()->accent);
+            char letter[2] = { letter_badge, '\0' };
+            launcher_title(x0, y0 + (LETTER_BADGE_SIZE - 30) / 2, LETTER_BADGE_SIZE, ALIGN_CENTER, STL_ON_ACCENT, letter);
         }
     }
 

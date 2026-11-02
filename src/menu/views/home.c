@@ -33,19 +33,19 @@
 static const launcher_hint_t hints_home[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
-    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
 static const launcher_hint_t hints_favorites[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Remove" },
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
-    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
 static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
-    { LAUNCHER_BUTTON_START, "Start", "Menu" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))

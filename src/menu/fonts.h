@@ -17,6 +17,7 @@ typedef enum {
     FNT_DEFAULT = 1, /**< Default font type */
     FNT_LAUNCHER = 2, /**< Launcher body text (Inter) */
     FNT_TITLE = 3,   /**< Launcher titles (Inter, larger) */
+    FNT_SMALL = 4,   /**< Launcher button hints (Inter, smaller) */
 } menu_font_type_t;
 
 /**

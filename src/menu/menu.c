@@ -39,7 +39,7 @@
 #define MENU_CACHE_DIRECTORY        "cache"
 #define BACKGROUND_CACHE_FILE       "background.data"
 
-#define FPS_LIMIT                   (30.0f)
+#define FPS_LIMIT                   (60.0f)
 
 static menu_t *menu;
 

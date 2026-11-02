@@ -3,10 +3,12 @@
 #include "actions.h"
 
 
-#define ACTIONS_REPEAT_DELAY    (8)
+/* Held directions repeat after a pause, then steadily; timed in milliseconds so the frame rate doesn't matter. */
+#define ACTIONS_REPEAT_DELAY_MS     (250)
+#define ACTIONS_REPEAT_INTERVAL_MS  (40)
 
 
-static int dir_repeat_delay;
+static uint64_t repeat_at_ms;
 static joypad_8way_t last_dir = JOYPAD_8WAY_NONE;
 
 
@@ -46,10 +48,16 @@ static void actions_update_direction (menu_t *menu) {
     }
 
     joypad_8way_t final_dir = held_dir;
+    uint64_t now = get_ticks_ms();
 
-    if ((last_dir != held_dir) && (last_dir == JOYPAD_8WAY_NONE)) {
-        dir_repeat_delay = ACTIONS_REPEAT_DELAY;
-    } else if (dir_repeat_delay > 0) {
+    if (held_dir == JOYPAD_8WAY_NONE) {
+        // Nothing held.
+    } else if (held_dir != last_dir) {
+        // New press (or a change of direction): act now, then wait before repeating.
+        repeat_at_ms = now + ACTIONS_REPEAT_DELAY_MS;
+    } else if (now >= repeat_at_ms) {
+        repeat_at_ms = now + ACTIONS_REPEAT_INTERVAL_MS;
+    } else {
         final_dir = JOYPAD_8WAY_NONE;
     }
 
@@ -84,10 +92,6 @@ static void actions_update_direction (menu_t *menu) {
             menu->actions.go_down = true;
             menu->actions.go_right = true;
             break;
-    }
-
-    if (dir_repeat_delay > 0) {
-        dir_repeat_delay -= 1;
     }
 
     last_dir = held_dir;

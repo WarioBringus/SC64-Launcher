@@ -25,10 +25,12 @@
 #define TILE_RADIUS             (6)
 #define PILL_HEIGHT             (24)
 #define PILL_PADDING            (12)
-#define HINT_BUTTON_SIZE        (20)
-/* rdpq drops a line taller than its text box, and Inter needs about 19px, so text boxes get headroom. */
-#define HINT_TEXT_HEIGHT        (24)
-#define HINT_GAP                (18)
+#define HINT_BUTTON_SIZE        (16)
+/* rdpq drops a line taller than its text box, so text boxes get headroom over the font's line height. */
+#define HINT_TEXT_HEIGHT        (22)
+#define HINT_ICON_GAP           (5)
+#define HINT_GAP                (14)
+#define WIDTH_CACHE_SIZE        (48)
 
 /* Button colors match the N64 controller. */
 #define BUTTON_A_COLOR          RGBA32(0x4C, 0x7B, 0xE0, 0xFF)
@@ -89,15 +91,44 @@ static int text_box (int x, int y, int w, int h, rdpq_align_t align, rdpq_valign
     return text_box_font(font_for(text, FNT_LAUNCHER), x, y, w, h, align, valign, style, text);
 }
 
+typedef struct {
+    const char *text;
+    size_t length;
+    uint8_t font;
+    int width;
+} width_entry_t;
+
+static width_entry_t width_cache[WIDTH_CACHE_SIZE];
+static int width_cache_next = 0;
+
 /**
- * @brief Width of already-escaped text in pixels.
+ * @brief Width of already-escaped text in pixels, remembered for strings that stay in memory
+ * (hint labels, category names) so they aren't laid out again every frame.
  */
-static int text_width (const char *text) {
-    int nbytes = strlen(text);
-    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, font_for(text, FNT_LAUNCHER), text, &nbytes);
+static int text_width_font (uint8_t font, const char *text) {
+    size_t length = strlen(text);
+    for (int i = 0; i < WIDTH_CACHE_SIZE; i++) {
+        width_entry_t *e = &width_cache[i];
+        if (e->text == text && e->length == length && e->font == font) {
+            return e->width;
+        }
+    }
+    int nbytes = (int)length;
+    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, font, text, &nbytes);
     int width = (int)(layout->bbox.x1 - layout->bbox.x0);
     rdpq_paragraph_free(layout);
+
+    width_entry_t *e = &width_cache[width_cache_next];
+    width_cache_next = (width_cache_next + 1) % WIDTH_CACHE_SIZE;
+    e->text = text;
+    e->length = length;
+    e->font = font;
+    e->width = width;
     return width;
+}
+
+static int text_width (const char *text) {
+    return text_width_font(font_for(text, FNT_LAUNCHER), text);
 }
 
 int launcher_text (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *fmt, ...) {
@@ -204,7 +235,8 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
 int launcher_draw_pill (int x, int y, const char *name, bool active) {
     char escaped[128];
     escape_text_codes(name, escaped, sizeof(escaped));
-    int w = text_width(escaped) + PILL_PADDING * 2;
+    // '$' and '^' are rare in folder names; measuring the original keeps the width cached.
+    int w = text_width(strpbrk(name, "$^") ? escaped : name) + PILL_PADDING * 2;
     launcher_fill_rounded(x, y, x + w, y + PILL_HEIGHT, PILL_HEIGHT / 2, active ? theme_current()->accent : theme_current()->panel);
     text_box(x, y, w, PILL_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, active ? STL_ON_ACCENT : STL_GRAY, escaped);
     return w;
@@ -220,15 +252,16 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     if (count > 8) {
         count = 8;
     }
+    // Measured widths are glyph extents; a little slack keeps the last letter from touching the next icon.
     for (int i = 0; i < count; i++) {
-        int bw = text_width(hints[i].button) + 10;
+        int bw = text_width_font(FNT_SMALL, hints[i].button) + 9;
         button_w[i] = (bw < HINT_BUTTON_SIZE) ? HINT_BUTTON_SIZE : bw;
-        label_w[i] = text_width(hints[i].label);
-        total += button_w[i] + 6 + label_w[i] + (i > 0 ? HINT_GAP : 0);
+        label_w[i] = text_width_font(FNT_SMALL, hints[i].label) + 2;
+        total += button_w[i] + HINT_ICON_GAP + label_w[i] + (i > 0 ? HINT_GAP : 0);
     }
 
     int x = LAUNCHER_X1 - total;
-    int y = LAUNCHER_FOOTER_Y + 10;
+    int y = LAUNCHER_FOOTER_Y + 12;
     int text_y = y - (HINT_TEXT_HEIGHT - HINT_BUTTON_SIZE) / 2;
     for (int i = 0; i < count; i++) {
         color_t color;
@@ -239,9 +272,10 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             default: color = theme_current()->text_muted; break;
         }
         launcher_fill_rounded(x, y, x + button_w[i], y + HINT_BUTTON_SIZE, HINT_BUTTON_SIZE / 2, color);
-        text_box(x, text_y, button_w[i], HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
-        x += button_w[i] + 6;
-        text_box(x, text_y, label_w[i] + 4, HINT_TEXT_HEIGHT, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
+        text_box_font(FNT_SMALL, x, text_y, button_w[i], HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
+        x += button_w[i] + HINT_ICON_GAP;
+        // No width: the label is never cut short, whatever the measurement said.
+        text_box_font(FNT_SMALL, x, text_y, 0, HINT_TEXT_HEIGHT, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
         x += label_w[i] + HINT_GAP;
     }
 }
@@ -313,6 +347,9 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
 }
 
 void launcher_leave (menu_t *menu, menu_mode_t next_mode) {
+    // Category, tile size and layout changes made with the controller are saved here, in one write,
+    // rather than on every button press (an SD card write is a visible stall).
+    settings_save(&menu->settings);
     menu->launcher_return_mode = menu->mode;
     menu->next_mode = next_mode;
 }
