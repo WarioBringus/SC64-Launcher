@@ -12,9 +12,11 @@
 #include "../library.h"
 #include "../png_decoder.h"
 
-#define COVER_SLOTS             (64)    /* With an Expansion Pak */
+#define COVER_SLOTS             (96)    /* With an Expansion Pak */
 #define COVER_SLOTS_4MB         (24)    /* Without one */
-#define PACK_READS_PER_FRAME    (6)
+/* Pack reads stop for the frame once this much time has gone on them (at least one read per frame),
+   so a screen full of new covers fills in over a few smooth frames instead of stalling one. */
+#define PACK_READ_BUDGET_US     (3500)
 #define MAX_PACKS               (12)
 #define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d.pak"
 
@@ -43,7 +45,14 @@ static int slot_count = 0;
 static uint32_t frame = 0;
 static bool decoding = false;
 static cover_pack_t packs[MAX_PACKS];
-static int pack_reads_left = PACK_READS_PER_FRAME;
+static uint64_t pack_budget_start_us = 0;
+static bool pack_read_this_frame = false;
+
+
+/** @brief Whether another pack read fits in this frame's time budget. */
+static bool pack_budget_left (void) {
+    return !pack_read_this_frame || (get_ticks_us() - pack_budget_start_us) < PACK_READ_BUDGET_US;
+}
 
 
 static uint32_t read_u32_be (const uint8_t *p) {
@@ -143,13 +152,20 @@ static surface_t *pack_read (const char *path, int w, int h) {
         free(image);
         return NULL;
     }
-    // Pixels are stored big-endian RGBA5551, the N64's own format; rows may be padded in memory.
-    for (int y = 0; y < ih; y++) {
-        if (fread((uint8_t *)image->buffer + y * image->stride, 2, iw, p->f) != (size_t)iw) {
-            surface_free(image);
-            free(image);
-            return NULL;
+    // Pixels are stored big-endian RGBA5551, the N64's own format. Read them in one go, then
+    // spread the rows out if the surface pads them.
+    size_t row = (size_t)iw * 2;
+    bool ok = (fread(image->buffer, row, ih, p->f) == (size_t)ih);
+    if (ok && (size_t)image->stride != row) {
+        uint8_t *buffer = image->buffer;
+        for (int y = ih - 1; y > 0; y--) {
+            memmove(buffer + y * image->stride, buffer + y * row, row);
         }
+    }
+    if (!ok) {
+        surface_free(image);
+        free(image);
+        return NULL;
     }
     return image;
 }
@@ -195,7 +211,8 @@ static void slot_free (cover_slot_t *slot) {
 
 void launcher_covers_begin_frame (void) {
     frame++;
-    pack_reads_left = PACK_READS_PER_FRAME;
+    pack_budget_start_us = get_ticks_us();
+    pack_read_this_frame = false;
     if (slot_count == 0) {
         slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
     }
@@ -227,7 +244,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     if (pending) {
         *pending = true;
     }
-    bool can_read_pack = (pack_reads_left > 0);
+    bool can_read_pack = pack_budget_left();
     if (decoding && !can_read_pack) {
         return NULL;
     }
@@ -255,7 +272,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     victim->last_used = frame;
 
     if (can_read_pack) {
-        pack_reads_left--;
+        pack_read_this_frame = true;
         victim->image = pack_read(path, max_w, max_h);
         if (victim->image) {
             if (pending) {
