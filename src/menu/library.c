@@ -60,13 +60,14 @@ static int index_cover_count = 0;
 static index_rom_t *index_roms = NULL;
 static int index_rom_count = 0;
 
-/* Game details lines (M) from the index: genre, developer, year, players. */
+/* Game details lines (M) from the index: genre, developer, year, players, publisher. */
 typedef struct {
     const char *rom;
     const char *genre;
     const char *developer;
     const char *year;
     int players;
+    const char *publisher;
 } index_meta_t;
 
 static index_meta_t *index_meta = NULL;
@@ -350,26 +351,30 @@ static void index_load (void) {
         if (line[0] == 'C' && line[1] == '\t') {
             index_covers[index_cover_count++] = line + 2;
         } else if (line[0] == 'M' && line[1] == '\t') {
-            // M<TAB>rom<TAB>genre<TAB>developer<TAB>year<TAB>players
-            char *fields[5];
+            // M<TAB>rom<TAB>genre<TAB>developer<TAB>year<TAB>players[<TAB>publisher]
+            char *fields[6];
             char *p = line + 2;
             int n = 0;
             fields[n++] = p;
-            while (n < 5 && (p = strchr(p, '\t')) != NULL) {
+            while (n < 6 && (p = strchr(p, '\t')) != NULL) {
                 *p++ = '\0';
                 fields[n++] = p;
             }
-            if (n == 5) {
+            if (n >= 5) {
                 index_meta_t *m = &index_meta[index_meta_count++];
                 m->rom = fields[0];
                 m->genre = fields[1][0] ? fields[1] : NULL;
                 m->developer = fields[2][0] ? fields[2] : NULL;
-                char *players = strchr(fields[4], '\t');
-                if (players) {
-                    *players = '\0';
-                }
                 m->year = fields[3][0] ? fields[3] : NULL;
                 m->players = atoi(fields[4]);
+                m->publisher = NULL;
+                if (n == 6) {
+                    char *end = strchr(fields[5], '\t');
+                    if (end) {
+                        *end = '\0';
+                    }
+                    m->publisher = fields[5][0] ? fields[5] : NULL;
+                }
             }
         } else if (line[0] == 'R' && line[1] == '\t') {
             char *tab = strrchr(line + 2, '\t');
@@ -1260,14 +1265,14 @@ void library_game_details (library_game_t *game, char *buffer, size_t size) {
     details_text(game->genre, game->year, game->developer, game->players, buffer, size);
 }
 
-void library_details_for_path (menu_t *menu, path_t *rom_path, char *buffer, size_t size) {
-    buffer[0] = '\0';
+/** @brief The index's game details line for a ROM, or NULL. */
+static index_meta_t *meta_for_path (menu_t *menu, path_t *rom_path) {
     if (!storage_prefix) {
         storage_prefix = menu->storage_prefix;
     }
     index_load();
     if (index_meta_count == 0) {
-        return;
+        return NULL;
     }
     const char *rel = path_get(rom_path);
     size_t prefix_len = strlen(storage_prefix);
@@ -1277,10 +1282,20 @@ void library_details_for_path (menu_t *menu, path_t *rom_path, char *buffer, siz
     while (*rel == '/') {
         rel++;
     }
-    index_meta_t *m = bsearch(rel, index_meta, index_meta_count, sizeof(index_meta_t), compare_index_meta);
+    return bsearch(rel, index_meta, index_meta_count, sizeof(index_meta_t), compare_index_meta);
+}
+
+void library_details_for_path (menu_t *menu, path_t *rom_path, char *buffer, size_t size) {
+    buffer[0] = '\0';
+    index_meta_t *m = meta_for_path(menu, rom_path);
     if (m) {
         details_text(m->genre, m->year, m->developer, m->players, buffer, size);
     }
+}
+
+const char *library_publisher_for_path (menu_t *menu, path_t *rom_path) {
+    index_meta_t *m = meta_for_path(menu, rom_path);
+    return m ? m->publisher : NULL;
 }
 
 void library_game_group (library_game_t *game, int sort, char *buffer, size_t size) {

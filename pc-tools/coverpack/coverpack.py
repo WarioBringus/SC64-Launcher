@@ -16,7 +16,7 @@ Index format (UTF-8 text, sorted byte-wise so the menu can binary search):
   LCIDX1
   C<TAB><cover path relative to menu/>        one per cover; its line order is its id
   R<TAB><ROM path relative to the card><TAB><cover id or -1>
-  M<TAB><ROM path><TAB><genre><TAB><developer><TAB><year><TAB><players>   (when known, see gamemeta.py)
+  M<TAB><ROM path><TAB><genre><TAB><developer><TAB><year><TAB><players><TAB><publisher>   (when known, see gamemeta.py)
 
 Pack format (big-endian): "CVP1", u32 count, u32 offset[count] (0 = none), then for each cover
 "CVR1", u16 width, u16 height, RGBA5551 pixels.
@@ -271,8 +271,9 @@ def main():
                 cache.save()
             if d:
                 matched += 1
-                meta_lines.append('M\t%s\t%s\t%s\t%s\t%s' % (rom, gamemeta.clean(d.get('genre')), gamemeta.clean(d.get('developer')),
-                                                         gamemeta.clean(d.get('year')), gamemeta.clean(d.get('players'))))
+                meta_lines.append('M\t%s\t%s\t%s\t%s\t%s\t%s' % (rom, gamemeta.clean(d.get('genre')), gamemeta.clean(d.get('developer')),
+                                                             gamemeta.clean(d.get('year')), gamemeta.clean(d.get('players')),
+                                                             gamemeta.clean(d.get('publisher'))))
         cache.save()
         print('Game details found for %d / %d ROMs' % (matched, len(roms)))
     else:

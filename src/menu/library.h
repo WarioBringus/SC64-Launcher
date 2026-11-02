@@ -180,6 +180,9 @@ void library_details_for_path(menu_t *menu, path_t *rom_path, char *buffer, size
  */
 void library_game_group(library_game_t *game, int sort, char *buffer, size_t size);
 
+/** @brief A ROM's publisher from the cover index, or NULL when unknown (owned by the library). */
+const char *library_publisher_for_path(menu_t *menu, path_t *rom_path);
+
 /** @brief Number of game folders, shown or hidden, in the order the library uses. */
 int library_folder_count(void);
 

@@ -19,8 +19,8 @@
 #define TEXT_X              (LAUNCHER_X0 + 184)
 #define TITLE_Y             (64)
 #define DETAILS_Y           (100)
-#define ACCESSORIES_Y       (122)
-#define DESCRIPTION_Y0      (152)
+#define DETAILS_LINE_H      (22)
+#define DESCRIPTION_GAP     (8)
 #define DESCRIPTION_Y1      (408)
 #define COVER_Y             (66)
 #define BACK_COVER_GAP      (16)
@@ -40,11 +40,13 @@ static char *title = NULL;
 static char *cover = NULL;
 static char *back_cover = NULL;
 static char details[160];
+static char origin[96];         /* "USA · Published by Acclaim" */
 static char accessories[160];
 static bool accessories_warning = false;   /* Something the game needs that this console lacks */
 static char *description = NULL;
 static launcher_paragraph_t *paragraph = NULL;
 static int scroll = 0;
+static int description_y0 = 0;      /* Below however many detail lines there are */
 static menu_mode_t back_mode = MENU_MODE_HOME;
 
 
@@ -150,23 +152,28 @@ static const char *region_name (rom_destination_type_t destination) {
 }
 
 /**
- * @brief "USA · Rumble Pak · Controller Pak", from the ROM header and the menu's game database.
+ * @brief Region and publisher ("USA · Published by Acclaim"), then accessories ("Rumble Pak · Controller Pak")
+ * from the ROM header and the menu's game database.
  * Expansion Pak notes only appear when they matter on this console.
  */
-static void load_accessories (path_t *path) {
+static void load_accessories (menu_t *menu, path_t *path) {
+    origin[0] = '\0';
     accessories[0] = '\0';
     accessories_warning = false;
+    const char *publisher = library_publisher_for_path(menu, path);
     rom_info_t info;
     memset(&info, 0, sizeof(info));
-    if (rom_info_load_header(path, &info) != ROM_OK) {
-        return;
+    const char *region = NULL;
+    if (rom_info_load_header(path, &info) == ROM_OK) {
+        region = region_name(info.destination_code);
     }
-    const char *parts[9];
+    snprintf(origin, sizeof(origin), "%s%s%s%s", region ? region : "", region && publisher ? "   \xC2\xB7   " : "",
+        publisher ? "Published by " : "", publisher ? publisher : "");
+    if (!region) {
+        return;     // No header read: no accessories either.
+    }
+    const char *parts[8];
     int n = 0;
-    const char *region = region_name(info.destination_code);
-    if (region) {
-        parts[n++] = region;
-    }
     if (info.features.expansion_pak == EXPANSION_PAK_REQUIRED && !is_memory_expanded()) {
         parts[n++] = "Needs Expansion Pak";
         accessories_warning = true;
@@ -225,7 +232,7 @@ static void process (menu_t *menu) {
     } else if (menu->actions.go_down) {
         scroll += SCROLL_STEP * (menu->actions.go_fast ? 4 : 1);
     }
-    int max_scroll = paragraph ? launcher_paragraph_height(paragraph) - (DESCRIPTION_Y1 - DESCRIPTION_Y0) : 0;
+    int max_scroll = paragraph ? launcher_paragraph_height(paragraph) - (DESCRIPTION_Y1 - description_y0) : 0;
     if (scroll > max_scroll) {
         scroll = max_scroll;
     }
@@ -258,17 +265,22 @@ static void draw (menu_t *menu, surface_t *d) {
 
         int text_w = LAUNCHER_X1 - TEXT_X;
         launcher_title(TEXT_X, TITLE_Y, text_w, ALIGN_LEFT, STL_DEFAULT, title);
+        int y = DETAILS_Y;
         if (details[0]) {
-            launcher_small(TEXT_X, DETAILS_Y, text_w, ALIGN_LEFT, STL_GRAY, details);
+            launcher_small(TEXT_X, y, text_w, ALIGN_LEFT, STL_GRAY, details);
+            y += DETAILS_LINE_H;
+        }
+        if (origin[0]) {
+            launcher_small(TEXT_X, y, text_w, ALIGN_LEFT, STL_GRAY, origin);
+            y += DETAILS_LINE_H;
         }
         if (accessories[0]) {
-            launcher_small(TEXT_X, details[0] ? ACCESSORIES_Y : DETAILS_Y, text_w, ALIGN_LEFT,
-                accessories_warning ? STL_ACCENT : STL_GRAY, accessories);
+            launcher_small(TEXT_X, y, text_w, ALIGN_LEFT, accessories_warning ? STL_ACCENT : STL_GRAY, accessories);
         }
         if (paragraph) {
-            launcher_paragraph_draw(paragraph, TEXT_X, DESCRIPTION_Y0 - scroll, DESCRIPTION_Y0, DESCRIPTION_Y1);
+            launcher_paragraph_draw(paragraph, TEXT_X, description_y0 - scroll, description_y0, DESCRIPTION_Y1);
         } else {
-            launcher_text(TEXT_X, DESCRIPTION_Y0, text_w, ALIGN_LEFT, STL_GRAY, "No description on the SD card");
+            launcher_text(TEXT_X, description_y0, text_w, ALIGN_LEFT, STL_GRAY, "No description on the SD card");
         }
     }
 
@@ -292,7 +304,9 @@ void view_about_init (menu_t *menu) {
     title = library_title_from_path(rom);
     cover = library_find_cover(menu, rom, title);
     library_details_for_path(menu, rom, details, sizeof(details));
-    load_accessories(rom);
+    load_accessories(menu, rom);
+    description_y0 = DETAILS_Y + DESCRIPTION_GAP + DETAILS_LINE_H *
+        ((details[0] ? 1 : 0) + (origin[0] ? 1 : 0) + (accessories[0] ? 1 : 0));
     if (cover) {
         char *front_name = strstr(cover, "boxart_front.png");
         if (front_name) {

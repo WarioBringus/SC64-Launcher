@@ -1,7 +1,7 @@
 """
-Game details (genre, developer, year, players) for the launcher's sort options.
+Game details (genre, developer, year, players, publisher) for the launcher's sort options and About page.
 
-Data: libretro-database's N64 metadat files (genre, developer, releaseyear, maxusers), which key
+Data: libretro-database's N64 metadat files (genre, developer, releaseyear, maxusers, publisher), which key
 games by the CRC32 of the whole ROM in big-endian (z64) byte order and also give the No-Intro name.
 ROMs are matched by CRC first, then by name. CRCs are cached on the PC so later runs only read
 new or changed ROMs.
@@ -14,6 +14,7 @@ FIELDS = {
     'developer': ('developer', 'developer'),
     'releaseyear': ('releaseyear', 'year'),
     'maxusers': ('users', 'players'),
+    'publisher': ('publisher', 'publisher'),
 }
 REGION_WORDS = {'USA': 'usa', 'Europe': 'europe', 'Japan': 'japan', 'China': 'china'}
 
