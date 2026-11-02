@@ -52,6 +52,7 @@ static settings_t init = {
     .launcher_home_resume = true,
     .launcher_home_recent = true,
     .launcher_home_favorites = true,
+    .launcher_home_most_played = true,
 };
 
 
@@ -128,6 +129,7 @@ void settings_load (settings_t *settings) {
     settings->launcher_home_resume = ini_get_bool(ini, "launcher", "home_resume", init.launcher_home_resume);
     settings->launcher_home_recent = ini_get_bool(ini, "launcher", "home_recent", init.launcher_home_recent);
     settings->launcher_home_favorites = ini_get_bool(ini, "launcher", "home_favorites", init.launcher_home_favorites);
+    settings->launcher_home_most_played = ini_get_bool(ini, "launcher", "home_most_played", init.launcher_home_most_played);
     if (settings->launcher_layout < LAUNCHER_LAYOUT_GRID || settings->launcher_layout > LAUNCHER_LAYOUT_CAROUSEL) {
         settings->launcher_layout = init.launcher_layout;
     }
@@ -185,6 +187,7 @@ void settings_save (settings_t *settings) {
     ini_set_bool(ini, "launcher", "home_resume", settings->launcher_home_resume);
     ini_set_bool(ini, "launcher", "home_recent", settings->launcher_home_recent);
     ini_set_bool(ini, "launcher", "home_favorites", settings->launcher_home_favorites);
+    ini_set_bool(ini, "launcher", "home_most_played", settings->launcher_home_most_played);
 
     if (!ini_save(ini, settings_path)) {
         debugf("[SETTINGS] Failed to save settings to %s\n", settings_path);

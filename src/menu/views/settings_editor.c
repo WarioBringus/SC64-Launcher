@@ -193,6 +193,11 @@ static void set_theme_type (menu_t *menu, void *arg) {
     launcher_apply_theme(menu, (int)(uintptr_t)(arg));
 }
 
+static void set_launcher_home_most_played_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_home_most_played = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void set_launcher_quick_launch_type (menu_t *menu, void *arg) {
     menu->settings.launcher_quick_launch = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -506,6 +511,18 @@ static component_context_menu_t set_launcher_tile_size_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_launcher_home_most_played_current_selection (menu_t *menu) {
+    return menu->settings.launcher_home_most_played ? 0 : 1;
+}
+
+static component_context_menu_t set_launcher_home_most_played_context_menu = {
+    .get_default_selection = get_launcher_home_most_played_current_selection,
+    .list = {
+        {.text = "On", .action = set_launcher_home_most_played_type, .arg = (void *)(uintptr_t)(true) },
+        {.text = "Off", .action = set_launcher_home_most_played_type, .arg = (void *)(uintptr_t)(false) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static int get_launcher_quick_launch_current_selection (menu_t *menu) {
     return menu->settings.launcher_quick_launch ? 0 : 1;
 }
@@ -539,6 +556,7 @@ static component_context_menu_t launcher_context_menu = { .list = {
     { .text = "Home: Resume", .submenu = &set_launcher_home_resume_context_menu },
     { .text = "Home: Recent", .submenu = &set_launcher_home_recent_context_menu },
     { .text = "Home: Favorites", .submenu = &set_launcher_home_favorites_context_menu },
+    { .text = "Home: Most Played", .submenu = &set_launcher_home_most_played_context_menu },
     { .text = "Quick Launch", .submenu = &set_launcher_quick_launch_context_menu },
     { .text = "Screen", .submenu = &set_launcher_widescreen_context_menu },
     COMPONENT_CONTEXT_MENU_LIST_END,

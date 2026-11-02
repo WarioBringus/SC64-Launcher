@@ -162,6 +162,19 @@ void library_details_for_path(menu_t *menu, path_t *rom_path, char *buffer, size
  */
 void library_game_group(library_game_t *game, int sort, char *buffer, size_t size);
 
+/**
+ * @brief Count a launch of this ROM (kept in menu/cache/launcher/playcount.txt).
+ */
+void library_record_play(menu_t *menu, path_t *rom_path);
+
+/**
+ * @brief The most launched ROMs, most first.
+ *
+ * @param paths Receives up to max new paths (caller frees each with path_free).
+ * @return How many were written.
+ */
+int library_most_played(menu_t *menu, path_t **paths, int max);
+
 /** @brief Free everything. */
 void library_free(void);
 

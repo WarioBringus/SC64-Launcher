@@ -1,6 +1,6 @@
 /**
  * @file home.c
- * @brief Launcher home screen: resume the last game, recently played and favorites.
+ * @brief Launcher home screen: resume the last game, recently played, most played and favorites.
  * @ingroup view
  */
 
@@ -29,6 +29,9 @@
 #define COVER_CACHE_SIZE    (HISTORY_COUNT + FAVORITES_COUNT)
 
 #define CARD_RADIUS         (10)
+#define CONTENT_TOP         (LAUNCHER_SUBHEADER_Y + 2)
+#define CONTENT_BOTTOM      (412)
+#define ROW_KINDS           (4)
 
 static const launcher_hint_t hints_home[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },
@@ -53,15 +56,22 @@ static const launcher_hint_t hints_empty[] = {
 typedef enum {
     ROW_RESUME,
     ROW_RECENT,
+    ROW_MOST_PLAYED,
     ROW_FAVORITES,
 } row_kind_t;
 
 typedef struct {
     bool favorite;              /**< Index refers to favorite_items rather than history_items */
     int index;                  /**< Index into the bookkeeping list */
-    bookkeeping_item_t *item;
+    bookkeeping_item_t *item;   /**< History/favorite entry, or NULL for a most played entry */
+    path_t *path;               /**< Most played entry's ROM (owned), or NULL */
     char *title;
 } home_item_t;
+
+/** @brief The ROM an entry points at. */
+static path_t *item_path (home_item_t *h) {
+    return h->path ? h->path : h->item->primary_path;
+}
 
 typedef struct {
     row_kind_t kind;
@@ -77,19 +87,25 @@ typedef struct {
     char *cover_path;
 } cover_lookup_t;
 
-static home_row_t rows[3];
+static home_row_t rows[ROW_KINDS];
 static int row_count = 0;
 static int row_selected = 0;
+static int scroll_y = 0;
 static cover_lookup_t cover_lookups[COVER_CACHE_SIZE];
 static int cover_lookup_next = 0;
 
 
+static void free_items (home_row_t *row) {
+    for (int i = 0; i < row->count; i++) {
+        free(row->items[i].title);
+        path_free(row->items[i].path);
+    }
+    row->count = 0;
+}
+
 static void free_rows (void) {
     for (int r = 0; r < row_count; r++) {
-        for (int i = 0; i < rows[r].count; i++) {
-            free(rows[r].items[i].title);
-        }
-        rows[r].count = 0;
+        free_items(&rows[r]);
     }
     row_count = 0;
 }
@@ -102,18 +118,30 @@ static void add_item (home_row_t *row, bookkeeping_item_t *item, bool favorite, 
     h->favorite = favorite;
     h->index = index;
     h->item = item;
+    h->path = NULL;
     h->title = library_title_from_path(item->primary_path);
 }
 
+static void add_path_item (home_row_t *row, path_t *path) {
+    if (row->count >= MAX_ROW_ITEMS) {
+        path_free(path);
+        return;
+    }
+    home_item_t *h = &row->items[row->count++];
+    memset(h, 0, sizeof(*h));
+    h->path = path;
+    h->title = library_title_from_path(path);
+}
+
 static void build_rows (menu_t *menu) {
-    int previous_selected[3] = { 0, 0, 0 };
+    int previous_selected[ROW_KINDS] = { 0, 0, 0, 0 };
     for (int r = 0; r < row_count; r++) {
         previous_selected[rows[r].kind] = rows[r].selected;
     }
     free_rows();
 
     bookkeeping_t *b = &menu->bookkeeping;
-    home_row_t built[3];
+    home_row_t built[ROW_KINDS];
     memset(built, 0, sizeof(built));
 
     built[ROW_RESUME].kind = ROW_RESUME;
@@ -125,17 +153,27 @@ static void build_rows (menu_t *menu) {
         add_item(&built[ROW_RECENT], &b->history_items[i], false, i);
     }
 
+    built[ROW_MOST_PLAYED].kind = ROW_MOST_PLAYED;
+    if (menu->settings.launcher_home_most_played) {
+        path_t *most[MAX_ROW_ITEMS];
+        int n = library_most_played(menu, most, MAX_ROW_ITEMS);
+        for (int i = 0; i < n; i++) {
+            add_path_item(&built[ROW_MOST_PLAYED], most[i]);
+        }
+    }
+
     built[ROW_FAVORITES].kind = ROW_FAVORITES;
     for (int i = 0; i < FAVORITES_COUNT; i++) {
         add_item(&built[ROW_FAVORITES], &b->favorite_items[i], true, i);
     }
 
-    bool show[3] = {
+    bool show[ROW_KINDS] = {
         menu->settings.launcher_home_resume,
         menu->settings.launcher_home_recent,
+        menu->settings.launcher_home_most_played,
         menu->settings.launcher_home_favorites,
     };
-    for (int k = 0; k < 3; k++) {
+    for (int k = 0; k < ROW_KINDS; k++) {
         if (show[k] && built[k].count > 0) {
             rows[row_count] = built[k];
             rows[row_count].selected = previous_selected[k];
@@ -145,9 +183,7 @@ static void build_rows (menu_t *menu) {
             rows[row_count].scroll = 0;
             row_count++;
         } else {
-            for (int i = 0; i < built[k].count; i++) {
-                free(built[k].items[i].title);
-            }
+            free_items(&built[k]);
         }
     }
 
@@ -160,7 +196,7 @@ static void build_rows (menu_t *menu) {
  * @brief Cover path for a history/favorite entry. Looks up at most one new ROM per frame.
  */
 static const char *item_cover (menu_t *menu, home_item_t *h, int *lookups_left, bool *pending) {
-    const char *rom = path_get(h->item->primary_path);
+    const char *rom = path_get(item_path(h));
     for (int i = 0; i < COVER_CACHE_SIZE; i++) {
         if (cover_lookups[i].rom_path && strcmp(cover_lookups[i].rom_path, rom) == 0) {
             *pending = false;
@@ -178,7 +214,7 @@ static const char *item_cover (menu_t *menu, home_item_t *h, int *lookups_left, 
     free(slot->rom_path);
     free(slot->cover_path);
     slot->rom_path = strdup(rom);
-    slot->cover_path = library_find_cover(menu, h->item->primary_path, h->title);
+    slot->cover_path = library_find_cover(menu, item_path(h), h->title);
     *pending = false;
     return slot->cover_path;
 }
@@ -192,6 +228,17 @@ static surface_t *item_image (menu_t *menu, home_item_t *h, int w, int hgt, int 
 }
 
 static void launch (menu_t *menu, home_item_t *h) {
+    if (h->path) {
+        // Most played entries launch by path, like the library.
+        path_free(menu->load.launcher_rom_path);
+        menu->load.launcher_rom_path = path_clone(h->path);
+        menu->load.load_history_id = -1;
+        menu->load.load_favorite_id = -1;
+        menu->load.quick_start = menu->settings.launcher_quick_launch;
+        sound_play_effect(SFX_ENTER);
+        launcher_leave(menu, MENU_MODE_LOAD_ROM);
+        return;
+    }
     if (h->favorite) {
         menu->load.load_favorite_id = h->index;
         menu->load.load_history_id = -1;
@@ -213,7 +260,7 @@ static void process (menu_t *menu) {
     if (menu->actions.settings) {
         path_t *rom = NULL;
         if (row_count > 0 && rows[row_selected].count > 0) {
-            rom = path_clone(rows[row_selected].items[rows[row_selected].selected].item->primary_path);
+            rom = path_clone(item_path(&rows[row_selected].items[rows[row_selected].selected]));
         }
         launcher_menu_show(menu, rom);
         return;
@@ -264,7 +311,7 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
 
     // The folder the game lives in, e.g. "N64 USA".
     char folder[64] = "";
-    path_t *dir = path_clone(h->item->primary_path);
+    path_t *dir = path_clone(item_path(h));
     path_pop(dir);
     snprintf(folder, sizeof(folder), "%s", path_last_get(dir));
     path_free(dir);
@@ -277,7 +324,7 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
     launcher_name(RESUME_TEXT_X, y + 84, text_w, ALIGN_LEFT, STL_GRAY, where);
 
     char details[160];
-    library_details_for_path(menu, h->item->primary_path, details, sizeof(details));
+    library_details_for_path(menu, item_path(h), details, sizeof(details));
     if (details[0]) {
         launcher_small(RESUME_TEXT_X, y + 108, text_w, ALIGN_LEFT, STL_GRAY, details);
     }
@@ -285,8 +332,9 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
 }
 
 static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lookups_left) {
-    launcher_text(LAUNCHER_X0, y, 0, ALIGN_LEFT, focused ? STL_DEFAULT : STL_GRAY, "%s",
-        row->kind == ROW_FAVORITES ? "Favorites" : "Recently played");
+    const char *label = (row->kind == ROW_FAVORITES) ? "Favorites"
+        : (row->kind == ROW_MOST_PLAYED) ? "Most played" : "Recently played";
+    launcher_text(LAUNCHER_X0, y, 0, ALIGN_LEFT, focused ? STL_DEFAULT : STL_GRAY, "%s", label);
 
     // Keep the highlighted tile inside the visible part of the row.
     if (row->selected < row->scroll) {
@@ -334,15 +382,35 @@ static void draw (menu_t *menu, surface_t *d) {
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Press R to browse your library");
         launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
     } else {
-        int y = LAUNCHER_SUBHEADER_Y + 2;
+        // Keep the selected row on screen; rows above or below scroll out of the content area.
+        int row_top = CONTENT_TOP;
+        for (int r = 0; r < row_selected; r++) {
+            row_top += (rows[r].kind == ROW_RESUME) ? RESUME_CARD_H + ROW_GAP : ROW_H;
+        }
+        int row_bottom = row_top + ((rows[row_selected].kind == ROW_RESUME) ? RESUME_CARD_H : ROW_H);
+        if (row_top - scroll_y < CONTENT_TOP) {
+            scroll_y = row_top - CONTENT_TOP;
+        }
+        if (row_bottom - scroll_y > CONTENT_BOTTOM) {
+            scroll_y = row_bottom - CONTENT_BOTTOM;
+        }
+
+        rdpq_set_scissor(0, CONTENT_TOP - LAUNCHER_RING - 2, display_get_width(), CONTENT_BOTTOM + 2);
+        int y = CONTENT_TOP - scroll_y;
         for (int r = 0; r < row_count; r++) {
             bool focused = (r == row_selected);
+            int height = (rows[r].kind == ROW_RESUME) ? RESUME_CARD_H + ROW_GAP : ROW_H;
+            if (y + height < CONTENT_TOP - 10 || y > CONTENT_BOTTOM) {
+                y += height;    // Off screen: skip drawing (and loading its covers).
+                continue;
+            }
             if (rows[r].kind == ROW_RESUME) {
                 y = draw_resume(menu, &rows[r], y, focused, &lookups_left);
             } else {
                 y = draw_row(menu, &rows[r], y, focused, &lookups_left);
             }
         }
+        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         if (rows[row_selected].kind == ROW_FAVORITES) {
             launcher_draw_footer(hints_favorites, HINT_COUNT(hints_favorites));
         } else {
