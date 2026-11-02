@@ -81,6 +81,7 @@ SRCS = \
 	menu/usb_comm.c \
 	menu/views/about.c \
 	menu/views/attract.c \
+	menu/views/intro.c \
 	menu/views/browser.c \
 	menu/views/credits.c \
 	menu/views/datel_code_editor.c \
