@@ -38,6 +38,8 @@
 #define HINT_GAP                (14)
 #define WIDTH_CACHE_SIZE        (48)
 
+#define COVER_ALPHA_THRESHOLD   (128)   /* Scaled covers: filtered alpha below this is transparent */
+
 #define SCREEN_WIDTH_4_3        (640)
 #define SCREEN_WIDTH_16_9       (853)   /* 640 * 4 / 3 */
 #define WIDE_SQUEEZE            (0.75f)
@@ -308,8 +310,7 @@ void launcher_draw_page_title (const char *title) {
     launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
 }
 
-#define GRADIENT_BANDS          (24)
-#define GRADIENT_TOP_TINT       (0.55f)  /* How far the top leans from the background toward the panel color */
+#define GRADIENT_TOP_TINT       (0.6f)  /* How far the top leans from the background toward the panel color */
 
 static bool gradient = true;
 
@@ -330,25 +331,24 @@ static bool gradient_active (void) {
     return gradient && !ui_components_background_get_image();
 }
 
-static color_t band_color (int band) {
+static color_t gradient_top (void) {
     const theme_t *t = theme_current();
-    float f = 1.0f - (float)band / (GRADIENT_BANDS - 1);
-    return mix(t->bg, t->panel, GRADIENT_TOP_TINT * f * f);
+    return mix(t->bg, t->panel, GRADIENT_TOP_TINT);
 }
 
-/** @brief The background's color at a screen row (the gradient band it falls in). */
+/** @brief The background's color at a screen row. */
 static color_t background_at (int y) {
     if (!gradient_active()) {
         return theme_current()->bg;
     }
-    int band = (y * GRADIENT_BANDS) / display_get_height();
-    if (band < 0) {
-        band = 0;
+    float f = (float)y / display_get_height();
+    if (f < 0.0f) {
+        f = 0.0f;
     }
-    if (band >= GRADIENT_BANDS) {
-        band = GRADIENT_BANDS - 1;
+    if (f > 1.0f) {
+        f = 1.0f;
     }
-    return band_color(band);
+    return mix(gradient_top(), theme_current()->bg, f);
 }
 
 void launcher_draw_background (void) {
@@ -356,15 +356,24 @@ void launcher_draw_background (void) {
         ui_components_background_draw();
         return;
     }
-    // A soft vertical gradient: a little lighter (toward the panel color) at the top, the theme
-    // background at the bottom. Full-width bands are cheap to fill.
-    int height = display_get_height();
-    int width = display_get_width();
-    for (int i = 0; i < GRADIENT_BANDS; i++) {
-        int y0 = (height * i) / GRADIENT_BANDS;
-        int y1 = (height * (i + 1)) / GRADIENT_BANDS;
-        ui_components_box_draw(0, y0, width, y1, band_color(i));
-    }
+    // A soft vertical gradient, a little lighter (toward the panel color) at the top. The 16-bit
+    // screen has only 32 levels per channel, so it is drawn as one shaded quad with dithering:
+    // neighbouring levels blend instead of showing as steps.
+    color_t top = gradient_top();
+    color_t bottom = theme_current()->bg;
+    float w = display_get_width();
+    float h = display_get_height();
+    float v0[6] = { 0, 0, top.r / 255.0f, top.g / 255.0f, top.b / 255.0f, 1.0f };
+    float v1[6] = { w, 0, top.r / 255.0f, top.g / 255.0f, top.b / 255.0f, 1.0f };
+    float v2[6] = { 0, h, bottom.r / 255.0f, bottom.g / 255.0f, bottom.b / 255.0f, 1.0f };
+    float v3[6] = { w, h, bottom.r / 255.0f, bottom.g / 255.0f, bottom.b / 255.0f, 1.0f };
+    rdpq_mode_push();
+        rdpq_set_mode_standard();
+        rdpq_mode_combiner(RDPQ_COMBINER_SHADE);
+        rdpq_mode_dithering(DITHER_BAYER_BAYER);
+        rdpq_triangle(&TRIFMT_SHADE, v0, v1, v2);
+        rdpq_triangle(&TRIFMT_SHADE, v1, v3, v2);
+    rdpq_mode_pop();
 }
 
 struct launcher_paragraph_s {
@@ -558,22 +567,49 @@ void launcher_draw_favorite_star (int x, int y, int w) {
     fill_star(cx, cy, 6.0f, theme_current()->accent);
 }
 
+/**
+ * @brief Outline of a rounded rectangle in real pixels: the band between the outer shape and the
+ * inner one (inset by thickness). Only the band is drawn, so whatever is inside shows through.
+ */
+static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, int thickness, float squeeze, color_t color) {
+    int inner_radius = radius - thickness;
+    int t = (int)(thickness * squeeze + 0.5f);
+    flat_begin(color);
+    for (int y = y0; y < y1; y++) {
+        int from_top = y - y0;
+        int from_bottom = y1 - 1 - y;
+        int edge = from_top < from_bottom ? from_top : from_bottom;
+        int outer = (edge < radius) ? (int)(corner_inset(radius, edge) * squeeze + 0.5f) : 0;
+        if (edge < thickness) {
+            rdpq_fill_rectangle(x0 + outer, y, x1 - outer, y + 1);
+            continue;
+        }
+        int inner_edge = edge - thickness;
+        int inner = (inner_radius > 0 && inner_edge < inner_radius) ? (int)(corner_inset(inner_radius, inner_edge) * squeeze + 0.5f) : 0;
+        rdpq_fill_rectangle(x0 + outer, y, x0 + t + inner, y + 1);
+        rdpq_fill_rectangle(x1 - t - inner, y, x1 - outer, y + 1);
+    }
+    flat_end();
+}
+
 void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
-    launcher_fill_rounded(x0 - LAUNCHER_RING, y0 - LAUNCHER_RING, x1 + LAUNCHER_RING, y1 + LAUNCHER_RING,
-        radius + LAUNCHER_RING, theme_current()->accent);
+    outline_rounded_real(px(x0 - LAUNCHER_RING), y0 - LAUNCHER_RING, px(x1 + LAUNCHER_RING), y1 + LAUNCHER_RING,
+        radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, theme_current()->accent);
 }
 
 /**
  * @brief Draw a cover at logical (x, y) at its own size: copied 1:1 in 4:3, squeezed to 3/4 width in 16:9.
  */
 static void blit_cover (surface_t *image, int x, int y) {
+    // Covers keep a 1-bit alpha (e.g. the arch above a cartridge label); transparent pixels are skipped.
     rdpq_mode_push();
     if (widescreen) {
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
         rdpq_tex_blit(image, px(x), y, &(rdpq_blitparms_t) { .scale_x = WIDE_SQUEEZE, .scale_y = 1.0f });
     } else {
-        rdpq_set_mode_copy(false);
+        rdpq_set_mode_copy(true);
         rdpq_tex_blit(image, x, y, NULL);
     }
     rdpq_mode_pop();
@@ -583,7 +619,6 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
     color_t edge = behind;
     if (selected) {
         launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
-        edge = theme_current()->accent;
     }
 
     // Covers that nearly fill the tile are drawn edge to edge; others sit on a rounded panel.
@@ -629,6 +664,7 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
     rdpq_mode_push();
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
         rdpq_tex_blit(image, px(dx), dy, &(rdpq_blitparms_t) {
             .scale_x = scale * (widescreen ? WIDE_SQUEEZE : 1.0f),
             .scale_y = scale,
