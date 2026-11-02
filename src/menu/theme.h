@@ -36,6 +36,9 @@ typedef struct {
 /** @brief Number of built-in themes. */
 int theme_count(void);
 
+/** @brief Number of built-in themes (the theme pickers have one row each). */
+#define THEME_BUILTIN_COUNT     (17)
+
 /** @brief Theme by index, or NULL when out of range. */
 const theme_t *theme_at(int index);
 

@@ -81,7 +81,51 @@ static const theme_t themes[] = {
         .accent = HEX(0xFF2A2A), .accent2 = HEX(0xFF2A2A), .on_accent = HEX(0x000000),
         .text = HEX(0xFF2A2A), .text_muted = HEX(0xA31C1C), BRIGHT_TEXT_STYLES,
     },
+    {
+        .name = "Peach Castle",
+        .bg = HEX(0xF6E3D8), .panel = HEX(0xFFF4EE), .line = HEX(0xE3C7B8), .highlight = HEX(0xF7D3CC),
+        .accent = HEX(0xD7263D), .accent2 = HEX(0xF2A541), .on_accent = HEX(0xFFFFFF),
+        .text = HEX(0x3A1F1A), .text_muted = HEX(0x8A6A60), DEEP_TEXT_STYLES,
+    },
+    {
+        .name = "Banana",
+        .bg = HEX(0xF4E6A6), .panel = HEX(0xFBF3CF), .line = HEX(0xD9C77A), .highlight = HEX(0xDDE4F5),
+        .accent = HEX(0x2C4BA0), .accent2 = HEX(0xC8372D), .on_accent = HEX(0xFFFFFF),
+        .text = HEX(0x2A2410), .text_muted = HEX(0x6E6338), DEEP_TEXT_STYLES,
+    },
+    {
+        .name = "Ocean Shell",
+        .bg = HEX(0x0B2A2D), .panel = HEX(0x123F43), .line = HEX(0x1D5559), .highlight = HEX(0x25666B),
+        .accent = HEX(0xFF8466), .accent2 = HEX(0x4FD1C5), .on_accent = HEX(0x0B2A2D),
+        .text = HEX(0xEAF6F4), .text_muted = HEX(0x96BDB8), BRIGHT_TEXT_STYLES,
+    },
+    {
+        .name = "Arcade",
+        .bg = HEX(0x0A0A12), .panel = HEX(0x161624), .line = HEX(0x26263C), .highlight = HEX(0x2E2E4A),
+        .accent = HEX(0xFF3DAE), .accent2 = HEX(0x34E1FF), .on_accent = HEX(0x0A0A12),
+        .text = HEX(0xF0F0FF), .text_muted = HEX(0x9090B0), BRIGHT_TEXT_STYLES,
+    },
+    {
+        .name = "Sunset",
+        .bg = HEX(0x2B1530), .panel = HEX(0x3F1F45), .line = HEX(0x57305E), .highlight = HEX(0x693A70),
+        .accent = HEX(0xFFB36B), .accent2 = HEX(0xFF6F7D), .on_accent = HEX(0x2B1530),
+        .text = HEX(0xFCEDE6), .text_muted = HEX(0xC9A7BE), BRIGHT_TEXT_STYLES,
+    },
+    {
+        .name = "Haunted",
+        .bg = HEX(0x1B1D26), .panel = HEX(0x262936), .line = HEX(0x363A4B), .highlight = HEX(0x41465A),
+        .accent = HEX(0xB6F2C8), .accent2 = HEX(0x8C7BD8), .on_accent = HEX(0x1B1D26),
+        .text = HEX(0xE8ECF2), .text_muted = HEX(0x9AA1B4), BRIGHT_TEXT_STYLES,
+    },
+    {
+        .name = "Smoke Clear",
+        .bg = HEX(0x2E3440), .panel = HEX(0x3B4252), .line = HEX(0x4C566A), .highlight = HEX(0x56617A),
+        .accent = HEX(0x88C0D0), .accent2 = HEX(0xBF616A), .on_accent = HEX(0x2E3440),
+        .text = HEX(0xECEFF4), .text_muted = HEX(0xAEB6C4), BRIGHT_TEXT_STYLES,
+    },
 };
+
+_Static_assert(sizeof(themes) / sizeof(themes[0]) == THEME_BUILTIN_COUNT, "update THEME_BUILTIN_COUNT in theme.h");
 
 #define THEME_COUNT ((int)(sizeof(themes) / sizeof(themes[0])))
 

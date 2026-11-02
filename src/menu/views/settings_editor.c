@@ -623,6 +623,13 @@ static component_context_menu_t set_theme_context_menu = {
         { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(7) },
         { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(8) },
         { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(9) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(10) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(11) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(12) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(13) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(14) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(15) },
+        { .text = "", .action = set_theme_type, .arg = (void *)(uintptr_t)(16) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
@@ -796,7 +803,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_settings_init (menu_t *menu) {
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < THEME_BUILTIN_COUNT; i++) {
         const theme_t *theme = theme_at(i);
         set_theme_context_menu.list[i].text = theme ? theme->name : "-";
     }
