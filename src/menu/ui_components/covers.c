@@ -47,6 +47,7 @@ static int slot_count = 0;
 static uint32_t frame = 0;
 static bool decoding = false;
 static cover_pack_t packs[MAX_PACKS];
+static bool cartridge_art = false;
 static uint64_t pack_time_used_us = 0;
 static bool pack_read_this_frame = false;
 
@@ -228,12 +229,34 @@ void launcher_covers_begin_frame (void) {
     }
 }
 
+void launcher_set_cartridge_art (bool enabled) {
+    cartridge_art = enabled;
+}
+
+/**
+ * @brief The cartridge image beside a box front, if the cover index has it (so it's in the packs).
+ */
+static bool cartridge_path (const char *box, char *buffer, size_t size) {
+    const char *name = strstr(box, "boxart_front.png");
+    const char *rel = strstr(box, ":/menu/");
+    if (!name || !rel || (size_t)(name - box) + sizeof("gamepak_front.png") > size) {
+        return false;
+    }
+    memcpy(buffer, box, name - box);
+    strcpy(buffer + (name - box), "gamepak_front.png");
+    return library_cover_id(buffer + (rel - box) + strlen(":/menu/")) >= 0;
+}
+
 surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pending) {
     if (pending) {
         *pending = false;
     }
     if (!path) {
         return NULL;
+    }
+    char cartridge[256];
+    if (cartridge_art && cartridge_path(path, cartridge, sizeof(cartridge))) {
+        path = cartridge;
     }
 
     if (slot_count == 0) {

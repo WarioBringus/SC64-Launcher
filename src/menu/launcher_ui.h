@@ -101,6 +101,13 @@ void launcher_fill_rounded_px(int x0, int y0, int x1, int y1, int radius, color_
  */
 surface_t *launcher_cover_get(const char *path, int max_w, int max_h, bool *pending);
 
+/**
+ * @brief Show cartridge label art in place of box fronts where the cover packs have it.
+ *
+ * Views set this from the settings at the start of every frame.
+ */
+void launcher_set_cartridge_art(bool enabled);
+
 /** @brief Mark the start of a frame (for least-recently-used eviction). */
 void launcher_covers_begin_frame(void);
 

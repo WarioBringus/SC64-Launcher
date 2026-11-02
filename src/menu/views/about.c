@@ -237,6 +237,7 @@ void view_about_init (menu_t *menu) {
 
 void view_about_display (menu_t *menu, surface_t *display) {
     launcher_set_widescreen(menu->settings.launcher_widescreen);
+    launcher_set_cartridge_art(false);
 
     process(menu);
 

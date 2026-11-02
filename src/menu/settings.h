@@ -122,6 +122,9 @@ typedef struct {
     /** @brief Minutes idle before the attract mode slideshow starts (0 = never) */
     int launcher_attract_minutes;
 
+    /** @brief Show cartridge label art instead of boxes where the metadata pack has it */
+    bool launcher_cartridge_art;
+
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 

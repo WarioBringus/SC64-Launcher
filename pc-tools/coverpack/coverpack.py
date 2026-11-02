@@ -170,7 +170,14 @@ def main():
         if (i + 1) % 100 == 0:
             print('  matched %d / %d ROMs' % (i + 1, len(roms)))
 
-    covers = sorted({c for c in rom_cover.values() if c}, key=lambda s: s.encode('utf-8'))
+    covers = {c for c in rom_cover.values() if c}
+    # Cartridge label art beside each box (for the launcher's Cover style: Cartridge).
+    for c in list(covers):
+        if c.endswith('/boxart_front.png'):
+            cart = c[:-len('boxart_front.png')] + 'gamepak_front.png'
+            if os.path.isfile(os.path.join(menu_dir, cart)):
+                covers.add(cart)
+    covers = sorted(covers, key=lambda s: s.encode('utf-8'))
     cover_id = {c: i for i, c in enumerate(covers)}
     print('%d ROMs, %d with covers, %d distinct covers' % (len(roms), sum(1 for c in rom_cover.values() if c), len(covers)))
 

@@ -646,6 +646,24 @@ static component_context_menu_t sort_menu = {
     }
 };
 
+static void set_cover_style (menu_t *menu, void *arg) {
+    menu->settings.launcher_cartridge_art = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_cover_style_selection (menu_t *menu) {
+    return menu->settings.launcher_cartridge_art ? 1 : 0;
+}
+
+static component_context_menu_t cover_style_menu = {
+    .get_default_selection = get_cover_style_selection,
+    .list = {
+        { .text = "Box", .action = set_cover_style, .arg = (void *)(uintptr_t)(false) },
+        { .text = "Cartridge", .action = set_cover_style, .arg = (void *)(uintptr_t)(true) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static void set_titles (menu_t *menu, void *arg) {
     menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -798,6 +816,7 @@ static component_context_menu_t start_menu = {
         { .text = "Surprise me", .action = surprise_me },
         { .text = "Theme", .submenu = &theme_menu },
         { .text = "Tile size", .submenu = &tile_size_menu },
+        { .text = "Cover style", .submenu = &cover_style_menu },
         { .text = "Layout", .submenu = &layout_menu },
         { .text = "Game titles", .submenu = &titles_menu },
         { .text = "Rescan folders", .action = rescan_folders },
