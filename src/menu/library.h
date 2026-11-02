@@ -26,6 +26,10 @@ typedef struct {
     path_t *directory;          /**< Folder holding the file (owned by the category) */
     library_cover_state_t cover_state;
     char *cover_path;           /**< Full path to the cover PNG when found */
+    const char *genre;          /**< Game details from the cover index, or NULL when unknown */
+    const char *developer;
+    const char *year;
+    int players;                /**< Maximum players, 0 when unknown */
 } library_game_t;
 
 /** @brief One category (a folder of ROMs). */
@@ -37,6 +41,7 @@ typedef struct {
     bool from_index;            /**< Games come from the cover index rather than a folder listing */
     int index_first;            /**< First index entry of this folder (-1: root files) */
     int index_count;            /**< Number of index entries of this folder */
+    int sort;                   /**< Order games[] is in (launcher_sort_t) */
     library_game_t *games;
     int count;
 } library_category_t;
@@ -111,6 +116,20 @@ char *library_title_from_path(path_t *rom_path);
  * @return Its id (its position in the thumbnail packs), or -1 when not indexed.
  */
 int library_cover_id(const char *cover_rel);
+
+/**
+ * @brief Put a category's games in the given order (title within each group).
+ *
+ * @return true if the order changed.
+ */
+bool library_sort_category(library_category_t *category, int sort);
+
+/**
+ * @brief The group a game falls in for a sort order: its first letter, genre, developer, year or player count.
+ *
+ * @param buffer Receives the label, e.g. "M", "Racing", "1998", "4 players".
+ */
+void library_game_group(library_game_t *game, int sort, char *buffer, size_t size);
 
 /** @brief Free everything. */
 void library_free(void);

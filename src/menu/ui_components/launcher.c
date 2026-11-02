@@ -36,6 +36,9 @@
 #define BUTTON_A_COLOR          RGBA32(0x4C, 0x7B, 0xE0, 0xFF)
 #define BUTTON_B_COLOR          RGBA32(0x3F, 0xA3, 0x4D, 0xFF)
 #define BUTTON_START_COLOR      RGBA32(0xE0, 0x30, 0x2A, 0xFF)
+#define BUTTON_C_COLOR          RGBA32(0xF5, 0xC5, 0x18, 0xFF)
+#define BUTTON_C_INK            RGBA32(0x2A, 0x22, 0x00, 0xFF)
+#define C_ARROWS_WIDTH          (9)     /* Room for the drawn arrows beside the "C" */
 
 
 /**
@@ -242,6 +245,28 @@ int launcher_draw_pill (int x, int y, const char *name, bool active) {
     return w;
 }
 
+/**
+ * @brief Small solid triangle pointing up, down, left or right, centered on (cx, cy).
+ */
+static void draw_arrow (int cx, int cy, int dx, int dy) {
+    flat_begin(BUTTON_C_INK);
+    for (int i = 0; i < 3; i++) {
+        int half = i;       // rows widen by one pixel each side
+        if (dy != 0) {
+            int y = (dy < 0) ? cy - 1 + i : cy + 1 - i;
+            rdpq_fill_rectangle(cx - half, y, cx + half + 1, y + 1);
+        } else {
+            int x = (dx < 0) ? cx - 1 + i : cx + 1 - i;
+            rdpq_fill_rectangle(x, cy - half, x + 1, cy + half + 1);
+        }
+    }
+    flat_end();
+}
+
+static bool is_c_button (launcher_button_t kind) {
+    return kind == LAUNCHER_BUTTON_C_UP_DOWN || kind == LAUNCHER_BUTTON_C_LEFT_RIGHT;
+}
+
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     ui_components_box_draw(LAUNCHER_X0, LAUNCHER_FOOTER_Y, LAUNCHER_X1, LAUNCHER_FOOTER_Y + 1, theme_current()->line);
 
@@ -254,7 +279,7 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     }
     // Measured widths are glyph extents; a little slack keeps the last letter from touching the next icon.
     for (int i = 0; i < count; i++) {
-        int bw = text_width_font(FNT_SMALL, hints[i].button) + 9;
+        int bw = text_width_font(FNT_SMALL, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
         button_w[i] = (bw < HINT_BUTTON_SIZE) ? HINT_BUTTON_SIZE : bw;
         label_w[i] = text_width_font(FNT_SMALL, hints[i].label) + 2;
         total += button_w[i] + HINT_ICON_GAP + label_w[i] + (i > 0 ? HINT_GAP : 0);
@@ -269,10 +294,27 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             case LAUNCHER_BUTTON_A: color = BUTTON_A_COLOR; break;
             case LAUNCHER_BUTTON_B: color = BUTTON_B_COLOR; break;
             case LAUNCHER_BUTTON_START: color = BUTTON_START_COLOR; break;
+            case LAUNCHER_BUTTON_C_UP_DOWN:
+            case LAUNCHER_BUTTON_C_LEFT_RIGHT: color = BUTTON_C_COLOR; break;
             default: color = theme_current()->text_muted; break;
         }
         launcher_fill_rounded(x, y, x + button_w[i], y + HINT_BUTTON_SIZE, HINT_BUTTON_SIZE / 2, color);
-        text_box_font(FNT_SMALL, x, text_y, button_w[i], HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
+        if (is_c_button(hints[i].kind)) {
+            // "C" on the left, a pair of arrows drawn on the right.
+            int letter_w = button_w[i] - C_ARROWS_WIDTH;
+            text_box_font(FNT_SMALL, x + 1, text_y, letter_w, HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_C_BUTTON, hints[i].button);
+            int ax = x + letter_w + 1;
+            int cy = y + HINT_BUTTON_SIZE / 2;
+            if (hints[i].kind == LAUNCHER_BUTTON_C_UP_DOWN) {
+                draw_arrow(ax, cy - 3, 0, -1);
+                draw_arrow(ax, cy + 3, 0, 1);
+            } else {
+                draw_arrow(ax - 2, cy, -1, 0);
+                draw_arrow(ax + 3, cy, 1, 0);
+            }
+        } else {
+            text_box_font(FNT_SMALL, x, text_y, button_w[i], HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
+        }
         x += button_w[i] + HINT_ICON_GAP;
         // No width: the label is never cut short, whatever the measurement said.
         text_box_font(FNT_SMALL, x, text_y, 0, HINT_TEXT_HEIGHT, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
@@ -441,6 +483,27 @@ static component_context_menu_t layout_menu = {
     }
 };
 
+static void set_sort (menu_t *menu, void *arg) {
+    menu->settings.launcher_sort = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_sort_selection (menu_t *menu) {
+    return menu->settings.launcher_sort;
+}
+
+static component_context_menu_t sort_menu = {
+    .get_default_selection = get_sort_selection,
+    .list = {
+        { .text = "Title", .action = set_sort, .arg = (void *)(uintptr_t)(LAUNCHER_SORT_TITLE) },
+        { .text = "Genre", .action = set_sort, .arg = (void *)(uintptr_t)(LAUNCHER_SORT_GENRE) },
+        { .text = "Developer", .action = set_sort, .arg = (void *)(uintptr_t)(LAUNCHER_SORT_DEVELOPER) },
+        { .text = "Year", .action = set_sort, .arg = (void *)(uintptr_t)(LAUNCHER_SORT_YEAR) },
+        { .text = "Players", .action = set_sort, .arg = (void *)(uintptr_t)(LAUNCHER_SORT_PLAYERS) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static void set_titles (menu_t *menu, void *arg) {
     menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -467,6 +530,7 @@ static void rescan_folders (menu_t *menu, void *arg) {
 
 static component_context_menu_t start_menu = {
     .list = {
+        { .text = "Sort by", .submenu = &sort_menu },
         { .text = "Theme", .submenu = &theme_menu },
         { .text = "Tile size", .submenu = &tile_size_menu },
         { .text = "Layout", .submenu = &layout_menu },

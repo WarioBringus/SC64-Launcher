@@ -53,6 +53,18 @@ static const char **index_covers = NULL;
 static int index_cover_count = 0;
 static index_rom_t *index_roms = NULL;
 static int index_rom_count = 0;
+
+/* Game details lines (M) from the index: genre, developer, year, players. */
+typedef struct {
+    const char *rom;
+    const char *genre;
+    const char *developer;
+    const char *year;
+    int players;
+} index_meta_t;
+
+static index_meta_t *index_meta = NULL;
+static int index_meta_count = 0;
 static bool index_tried = false;
 static bool index_lists_disabled = false;
 
@@ -257,11 +269,14 @@ static void index_free (void) {
     free(index_text);
     free(index_covers);
     free(index_roms);
+    free(index_meta);
     index_text = NULL;
     index_covers = NULL;
     index_roms = NULL;
+    index_meta = NULL;
     index_cover_count = 0;
     index_rom_count = 0;
+    index_meta_count = 0;
     index_tried = false;
 }
 
@@ -310,6 +325,7 @@ static void index_load (void) {
     }
     index_covers = malloc(lines * sizeof(char *));
     index_roms = malloc(lines * sizeof(index_rom_t));
+    index_meta = malloc(lines * sizeof(index_meta_t));
 
     // Lines are already sorted byte-wise by the PC tool, so both lists can be binary searched.
     char *line = index_text;
@@ -320,6 +336,28 @@ static void index_load (void) {
         }
         if (line[0] == 'C' && line[1] == '\t') {
             index_covers[index_cover_count++] = line + 2;
+        } else if (line[0] == 'M' && line[1] == '\t') {
+            // M<TAB>rom<TAB>genre<TAB>developer<TAB>year<TAB>players
+            char *fields[5];
+            char *p = line + 2;
+            int n = 0;
+            fields[n++] = p;
+            while (n < 5 && (p = strchr(p, '\t')) != NULL) {
+                *p++ = '\0';
+                fields[n++] = p;
+            }
+            if (n == 5) {
+                index_meta_t *m = &index_meta[index_meta_count++];
+                m->rom = fields[0];
+                m->genre = fields[1][0] ? fields[1] : NULL;
+                m->developer = fields[2][0] ? fields[2] : NULL;
+                char *players = strchr(fields[4], '\t');
+                if (players) {
+                    *players = '\0';
+                }
+                m->year = fields[3][0] ? fields[3] : NULL;
+                m->players = atoi(fields[4]);
+            }
         } else if (line[0] == 'R' && line[1] == '\t') {
             char *tab = strrchr(line + 2, '\t');
             if (tab) {
@@ -339,6 +377,10 @@ static int compare_index_cover (const void *key, const void *element) {
 
 static int compare_index_rom (const void *key, const void *element) {
     return strcmp((const char *)key, ((const index_rom_t *)element)->rom);
+}
+
+static int compare_index_meta (const void *key, const void *element) {
+    return strcmp((const char *)key, ((const index_meta_t *)element)->rom);
 }
 
 /**
@@ -442,6 +484,16 @@ static void load_index_games (library_category_t *c) {
         g->file_name = strdup(file);
         g->title = title_from_file_name(file);
         g->directory = c->directory;
+
+        if (index_meta_count > 0) {
+            index_meta_t *m = bsearch(rel, index_meta, index_meta_count, sizeof(index_meta_t), compare_index_meta);
+            if (m) {
+                g->genre = m->genre;
+                g->developer = m->developer;
+                g->year = m->year;
+                g->players = m->players;
+            }
+        }
 
         int id = index_roms[k].cover;
         if (id >= 0 && id < index_cover_count) {
@@ -735,6 +787,84 @@ bool library_category_is_quick (int index) {
         return all_games.loaded;
     }
     return index >= 0 && index < folder_count && (folders[index].loaded || folders[index].from_index);
+}
+
+/* Sort order used by compare_sorted (qsort has no context argument). */
+static int sort_order = 0;
+
+/** @brief The key a game sorts by; NULL means unknown, which sorts last. */
+static const char *sort_key (const library_game_t *g) {
+    switch (sort_order) {
+        case LAUNCHER_SORT_GENRE: return g->genre;
+        case LAUNCHER_SORT_DEVELOPER: return g->developer;
+        case LAUNCHER_SORT_YEAR: return g->year;
+        default: return NULL;
+    }
+}
+
+static int compare_sorted (const void *a, const void *b) {
+    const library_game_t *ga = a;
+    const library_game_t *gb = b;
+    if (sort_order == LAUNCHER_SORT_PLAYERS) {
+        // Most players first (party games together); unknown last.
+        int pa = ga->players > 0 ? ga->players : -1;
+        int pb = gb->players > 0 ? gb->players : -1;
+        if (pa != pb) {
+            return pb - pa;
+        }
+    } else if (sort_order != LAUNCHER_SORT_TITLE) {
+        const char *ka = sort_key(ga);
+        const char *kb = sort_key(gb);
+        if (!ka != !kb) {
+            return ka ? -1 : 1;
+        }
+        if (ka && kb) {
+            int r = strcasecmp(ka, kb);
+            if (r != 0) {
+                return r;
+            }
+        }
+    }
+    return strcasecmp(ga->title, gb->title);
+}
+
+bool library_sort_category (library_category_t *category, int sort) {
+    if (!category || category->sort == sort) {
+        return false;
+    }
+    sort_order = sort;
+    qsort(category->games, category->count, sizeof(library_game_t), compare_sorted);
+    category->sort = sort;
+    return true;
+}
+
+void library_game_group (library_game_t *game, int sort, char *buffer, size_t size) {
+    switch (sort) {
+        case LAUNCHER_SORT_GENRE:
+            snprintf(buffer, size, "%s", game->genre ? game->genre : "Unknown genre");
+            return;
+        case LAUNCHER_SORT_DEVELOPER:
+            snprintf(buffer, size, "%s", game->developer ? game->developer : "Unknown developer");
+            return;
+        case LAUNCHER_SORT_YEAR:
+            snprintf(buffer, size, "%s", game->year ? game->year : "Unknown year");
+            return;
+        case LAUNCHER_SORT_PLAYERS:
+            if (game->players > 0) {
+                snprintf(buffer, size, game->players == 1 ? "1 player" : "%d players", game->players);
+            } else {
+                snprintf(buffer, size, "Unknown players");
+            }
+            return;
+        default: {
+            char c = game->title[0];
+            if (c >= 'a' && c <= 'z') {
+                c -= 'a' - 'A';
+            }
+            snprintf(buffer, size, "%c", (c >= 'A' && c <= 'Z') ? c : '#');
+            return;
+        }
+    }
 }
 
 void library_rescan (menu_t *menu) {

@@ -22,6 +22,7 @@ static void apply_styles (rdpq_font_t *font) {
     rdpq_font_style(font, STL_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->accent }));
     rdpq_font_style(font, STL_ON_ACCENT, &((rdpq_fontstyle_t) { .color = theme_current()->on_accent }));
     rdpq_font_style(font, STL_ON_BUTTON, &((rdpq_fontstyle_t) { .color = RGBA32(0xFF, 0xFF, 0xFF, 0xFF) }));
+    rdpq_font_style(font, STL_ON_C_BUTTON, &((rdpq_fontstyle_t) { .color = RGBA32(0x2A, 0x22, 0x00, 0xFF) }));
 }
 
 static void apply_font_styles (void) {

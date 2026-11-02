@@ -16,11 +16,15 @@ Index format (UTF-8 text, sorted byte-wise so the menu can binary search):
   LCIDX1
   C<TAB><cover path relative to menu/>        one per cover; its line order is its id
   R<TAB><ROM path relative to the card><TAB><cover id or -1>
+  M<TAB><ROM path><TAB><genre><TAB><developer><TAB><year><TAB><players>   (when known, see gamemeta.py)
 
 Pack format (big-endian): "CVP1", u32 count, u32 offset[count] (0 = none), then for each cover
 "CVR1", u16 width, u16 height, RGBA5551 pixels.
 """
 import argparse, os, shutil, struct, subprocess, sys, tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gamemeta  # noqa: E402
 
 ROM_EXTENSIONS = ('.z64', '.n64', '.v64', '.rom')
 SKIPPED_FOLDERS = {'system volume information', 'menu'}
@@ -103,6 +107,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--card', default='I:')
     ap.add_argument('--tool', default='C:/n64/tools/coverimg.exe')
+    ap.add_argument('--metadata', default='C:/n64/downloads/libretro-db',
+                    help='folder with the libretro-database N64 genre/developer/releaseyear/maxusers .dat files')
+    ap.add_argument('--crc-cache', default='C:/n64/cache/rom_crc.json')
     args = ap.parse_args()
     card = args.card.rstrip('/\\') + '/'
     menu_dir = card + 'menu'
@@ -169,11 +176,32 @@ def main():
         os.replace(path + '.tmp', path)
         total += os.path.getsize(path)
 
+    # Game details for the library's sort options.
+    meta_lines = []
+    if os.path.isdir(args.metadata):
+        by_crc, by_name = gamemeta.load_dats(args.metadata)
+        cache = gamemeta.CrcCache(args.crc_cache)
+        matched = 0
+        for i, rom in enumerate(sorted(roms, key=lambda s: s.encode('utf-8'))):
+            d = gamemeta.match(rom, cache.get(rom, card + rom), by_crc, by_name)
+            if (i + 1) % 50 == 0:
+                print('  checked %d / %d ROMs for game details' % (i + 1, len(roms)))
+                cache.save()
+            if d:
+                matched += 1
+                meta_lines.append('M\t%s\t%s\t%s\t%s\t%s' % (rom, gamemeta.clean(d.get('genre')), gamemeta.clean(d.get('developer')),
+                                                         gamemeta.clean(d.get('year')), gamemeta.clean(d.get('players'))))
+        cache.save()
+        print('Game details found for %d / %d ROMs' % (matched, len(roms)))
+    else:
+        print('No game details at %s, so sorting by genre/developer/year/players will be empty.' % args.metadata)
+
     lines = ['LCIDX1']
     lines += ['C\t' + c for c in covers]
     for rom in sorted(roms, key=lambda s: s.encode('utf-8')):
         c = rom_cover[rom]
         lines.append('R\t%s\t%d' % (rom, cover_id[c] if c else -1))
+    lines += meta_lines
     with open(out_dir + '/covers.idx.tmp', 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     os.replace(out_dir + '/covers.idx.tmp', out_dir + '/covers.idx')

@@ -14,6 +14,15 @@ typedef enum {
     LAUNCHER_LAYOUT_CAROUSEL = 1, /**< Horizontal carousel of covers */
 } launcher_layout_t;
 
+/** @brief Launcher library sort order */
+typedef enum {
+    LAUNCHER_SORT_TITLE = 0,
+    LAUNCHER_SORT_GENRE = 1,
+    LAUNCHER_SORT_DEVELOPER = 2,
+    LAUNCHER_SORT_YEAR = 3,
+    LAUNCHER_SORT_PLAYERS = 4,
+} launcher_sort_t;
+
 /** @brief Launcher grid tile size */
 typedef enum {
     LAUNCHER_TILE_SMALL = 0, /**< Most tiles on screen */
@@ -100,6 +109,9 @@ typedef struct {
 
     /** @brief Grid tile size (launcher_tile_size_t) */
     int launcher_tile_size;
+
+    /** @brief Library sort order (launcher_sort_t) */
+    int launcher_sort;
 
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;

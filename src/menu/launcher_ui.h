@@ -35,6 +35,8 @@ typedef enum {
     LAUNCHER_BUTTON_A,
     LAUNCHER_BUTTON_B,
     LAUNCHER_BUTTON_START,
+    LAUNCHER_BUTTON_C_UP_DOWN,      /**< Yellow "C" with up/down arrows */
+    LAUNCHER_BUTTON_C_LEFT_RIGHT,   /**< Yellow "C" with left/right arrows */
     LAUNCHER_BUTTON_OTHER,
 } launcher_button_t;
 

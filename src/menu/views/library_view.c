@@ -27,16 +27,28 @@
 #define CAROUSEL_FAST_STEP          (5)
 #define CAROUSEL_TITLE_Y            (330)
 
-#define LETTER_BADGE_SIZE           (84)
-#define LETTER_BADGE_MS             (700)
+#define GROUP_BADGE_HEIGHT          (64)
+#define GROUP_BADGE_MIN_WIDTH       (84)
+#define GROUP_BADGE_PADDING         (28)
+#define GROUP_BADGE_MS              (800)
 
 #define CATEGORY_PILL_Y             (LAUNCHER_SUBHEADER_Y - 2)
 
-static const launcher_hint_t hints_library[] = {
+static const launcher_hint_t hints_grid[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
     { LAUNCHER_BUTTON_B, "B", "Home" },
     { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
-    { LAUNCHER_BUTTON_OTHER, "C", "Letter" },
+    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Jump" },
+    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Size" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
+};
+
+static const launcher_hint_t hints_carousel[] = {
+    { LAUNCHER_BUTTON_A, "A", "Open" },
+    { LAUNCHER_BUTTON_B, "B", "Home" },
+    { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
+    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Layout" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
@@ -53,8 +65,9 @@ static bool category_restored = false;
 static int selections[MAX_REMEMBERED_CATEGORIES];
 static int top_row = 0;
 static float carousel_position = 0.0f;
-static char letter_badge = 0;
-static uint64_t letter_badge_until_ms = 0;
+static char group_badge[48] = "";
+static uint64_t group_badge_until_ms = 0;
+static int current_sort = LAUNCHER_SORT_TITLE;
 
 typedef struct {
     int cols;
@@ -117,46 +130,58 @@ static void switch_category (menu_t *menu, int delta) {
     }
 }
 
-/** @brief Index letter of a title: A-Z, or '#' for anything else. */
-static char title_letter (const char *title) {
-    char c = title[0];
-    if (c >= 'a' && c <= 'z') {
-        c -= 'a' - 'A';
+/** @brief Whether two games fall in the same group for the current sort. */
+static bool same_group (library_game_t *a, library_game_t *b) {
+    char ga[48], gb[48];
+    library_game_group(a, current_sort, ga, sizeof(ga));
+    library_game_group(b, current_sort, gb, sizeof(gb));
+    return strcmp(ga, gb) == 0;
+}
+
+/** @brief First game of the group containing sel. */
+static int group_start (library_category_t *c, int sel) {
+    while (sel > 0 && same_group(&c->games[sel - 1], &c->games[sel])) {
+        sel--;
     }
-    return (c >= 'A' && c <= 'Z') ? c : '#';
+    return sel;
 }
 
 /**
- * @brief Move to the first game of the next letter, or back to the start of this letter / the previous one.
+ * @brief Move to the first game of the next group, or back to the start of this group / the previous one.
+ * Groups are letters when sorted by title, otherwise genres, developers, years or player counts.
  */
-static int jump_letter (library_category_t *c, int sel, int direction) {
-    char current = title_letter(c->games[sel].title);
+static int jump_group (library_category_t *c, int sel, int direction) {
     if (direction > 0) {
         for (int i = sel + 1; i < c->count; i++) {
-            if (title_letter(c->games[i].title) != current) {
+            if (!same_group(&c->games[i], &c->games[sel])) {
                 return i;
             }
         }
         return sel;
     }
-    int start = sel;
-    while (start > 0 && title_letter(c->games[start - 1].title) == current) {
-        start--;
-    }
+    int start = group_start(c, sel);
     if (start < sel || start == 0) {
         return start;
     }
-    char previous = title_letter(c->games[start - 1].title);
-    start--;
-    while (start > 0 && title_letter(c->games[start - 1].title) == previous) {
-        start--;
-    }
-    return start;
+    return group_start(c, start - 1);
 }
 
-static void show_letter_badge (library_category_t *c, int sel) {
-    letter_badge = title_letter(c->games[sel].title);
-    letter_badge_until_ms = get_ticks_ms() + LETTER_BADGE_MS;
+static void show_group_badge (library_category_t *c, int sel) {
+    library_game_group(&c->games[sel], current_sort, group_badge, sizeof(group_badge));
+    group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+}
+
+/**
+ * @brief Bring a category into the current sort order. A new order starts back at its first game.
+ */
+static void apply_sort (library_category_t *c, int index) {
+    if (library_sort_category(c, current_sort)) {
+        selections[index % MAX_REMEMBERED_CATEGORIES] = 0;
+        if (index == category_index) {
+            top_row = 0;
+            carousel_position = 0.0f;
+        }
+    }
 }
 
 static void launch (menu_t *menu, library_game_t *game) {
@@ -225,6 +250,7 @@ static void process (menu_t *menu) {
     if (!c || c->count == 0) {
         return;
     }
+    apply_sort(c, category_index);
 
     int *sel = current_selection();
     if (*sel >= c->count) {
@@ -234,8 +260,8 @@ static void process (menu_t *menu) {
 
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
         if (menu->actions.go_fast && (menu->actions.go_left || menu->actions.go_right)) {
-            *sel = jump_letter(c, *sel, menu->actions.go_right ? 1 : -1);
-            show_letter_badge(c, *sel);
+            *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
+            show_group_badge(c, *sel);
         } else if (menu->actions.go_left && *sel > 0) {
             *sel -= 1;
         } else if (menu->actions.go_right && *sel < c->count - 1) {
@@ -259,8 +285,8 @@ static void process (menu_t *menu) {
         return;
     }
     if (menu->actions.go_fast && (menu->actions.go_up || menu->actions.go_down)) {
-        *sel = jump_letter(c, *sel, menu->actions.go_down ? 1 : -1);
-        show_letter_badge(c, *sel);
+        *sel = jump_group(c, *sel, menu->actions.go_down ? 1 : -1);
+        show_group_badge(c, *sel);
         if (*sel != previous) {
             sound_play_effect(SFX_CURSOR);
         }
@@ -331,6 +357,7 @@ static void preload_category (menu_t *menu, int index, int *lookups_left) {
     if (!c || c->count == 0) {
         return;
     }
+    apply_sort(c, index);
     int sel = selections[index % MAX_REMEMBERED_CATEGORIES];
     if (sel >= c->count) {
         sel = c->count - 1;
@@ -350,6 +377,47 @@ static void preload_category (menu_t *menu, int index, int *lookups_left) {
     int first = grid_first_visible(&g, sel);
     for (int i = first; i < first + g.cols * g.rows && i < c->count; i++) {
         game_cover(menu, &c->games[i], g.w, g.h, lookups_left, &pending);
+    }
+}
+
+/**
+ * @brief Load the covers shown after jumping to the next or previous group, so jumps land on ready covers.
+ */
+static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, int *lookups_left) {
+    bool pending;
+    // Finding group edges scans the list, so only redo it when the selection, list or sort changes.
+    static library_category_t *cached_category = NULL;
+    static int cached_sel = -1;
+    static int cached_sort = -1;
+    static int targets[2];
+    if (c != cached_category || sel != cached_sel || current_sort != cached_sort) {
+        targets[0] = jump_group(c, sel, 1);
+        targets[1] = jump_group(c, sel, -1);
+        cached_category = c;
+        cached_sel = sel;
+        cached_sort = current_sort;
+    }
+    for (int t = 0; t < 2; t++) {
+        int target = targets[t];
+        if (target == sel) {
+            continue;
+        }
+        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+            int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
+            int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+            for (int i = target - 2; i <= target + 2; i++) {
+                if (i >= 0 && i < c->count) {
+                    game_cover(menu, &c->games[i], cw, ch, lookups_left, &pending);
+                }
+            }
+        } else {
+            grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
+            int row = target / g.cols;
+            int top = (row < top_row) ? row : ((row >= top_row + g.rows) ? row - g.rows + 1 : top_row);
+            for (int i = top * g.cols; i < (top + g.rows) * g.cols && i < c->count; i++) {
+                game_cover(menu, &c->games[i], g.w, g.h, lookups_left, &pending);
+            }
+        }
     }
 }
 
@@ -417,8 +485,9 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         any_pending |= pending;
     }
 
-    // Once this screen is complete, get the categories either side ready.
+    // Once this screen is complete, get group jumps and then the categories either side ready.
     if (!any_pending) {
+        preload_group_jumps(menu, c, sel, &lookups_left);
         preload_neighbours(menu, &lookups_left);
     }
 }
@@ -487,9 +556,16 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
         }
     }
 
-    char position[64];
-    snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->count);
+    char position[128];
+    char group[48];
+    library_game_group(&c->games[sel], current_sort, group, sizeof(group));
+    if (current_sort == LAUNCHER_SORT_TITLE) {
+        snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->count);
+    } else {
+        snprintf(position, sizeof(position), "%s  -  %s  -  %d of %d", c->name, group, sel + 1, c->count);
+    }
     if (!pending && carousel_position == (float)sel) {
+        preload_group_jumps(menu, c, sel, &lookups_left);
         preload_neighbours(menu, &lookups_left);
     }
 
@@ -513,6 +589,7 @@ static void draw (menu_t *menu, surface_t *d) {
         launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
     } else {
         draw_category_tabs();
+        apply_sort(c, category_index);
         int *sel = current_selection();
         if (c->count == 0) {
             launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "This folder has no games");
@@ -523,19 +600,33 @@ static void draw (menu_t *menu, surface_t *d) {
             if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
                 draw_carousel(menu, c, *sel);
             } else {
-                launcher_text(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%c   %d / %d",
-                    title_letter(c->games[*sel].title), *sel + 1, c->count);
+                char group[48];
+                char counter[96];
+                library_game_group(&c->games[*sel], current_sort, group, sizeof(group));
+                snprintf(counter, sizeof(counter), "%s   %d / %d", group, *sel + 1, c->count);
+                launcher_name(LAUNCHER_X0 + 300, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH - 300, ALIGN_RIGHT, STL_GRAY, counter);
                 draw_grid(menu, c, *sel);
             }
         }
-        launcher_draw_footer(hints_library, HINT_COUNT(hints_library));
+        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+            launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
+        } else {
+            launcher_draw_footer(hints_grid, HINT_COUNT(hints_grid));
+        }
 
-        if (letter_badge && get_ticks_ms() < letter_badge_until_ms) {
-            int x0 = 320 - LETTER_BADGE_SIZE / 2;
-            int y0 = 222 - LETTER_BADGE_SIZE / 2;
-            launcher_fill_rounded(x0, y0, x0 + LETTER_BADGE_SIZE, y0 + LETTER_BADGE_SIZE, 16, theme_current()->accent);
-            char letter[2] = { letter_badge, '\0' };
-            launcher_title(x0, y0 + (LETTER_BADGE_SIZE - 30) / 2, LETTER_BADGE_SIZE, ALIGN_CENTER, STL_ON_ACCENT, letter);
+        if (group_badge[0] && get_ticks_ms() < group_badge_until_ms) {
+            // A pill wide enough for the group name ("M", "Racing", "1998"...).
+            int w = (int)strlen(group_badge) * 14 + GROUP_BADGE_PADDING;
+            if (w < GROUP_BADGE_MIN_WIDTH) {
+                w = GROUP_BADGE_MIN_WIDTH;
+            }
+            if (w > LAUNCHER_WIDTH - 40) {
+                w = LAUNCHER_WIDTH - 40;
+            }
+            int x0 = 320 - w / 2;
+            int y0 = 222 - GROUP_BADGE_HEIGHT / 2;
+            launcher_fill_rounded(x0, y0, x0 + w, y0 + GROUP_BADGE_HEIGHT, 16, theme_current()->accent);
+            launcher_title(x0 + 8, y0 + (GROUP_BADGE_HEIGHT - 30) / 2, w - 16, ALIGN_CENTER, STL_ON_ACCENT, group_badge);
         }
     }
 
@@ -563,6 +654,8 @@ void view_library_init (menu_t *menu) {
 }
 
 void view_library_display (menu_t *menu, surface_t *display) {
+    current_sort = menu->settings.launcher_sort;
+
     // "Rescan folders" in the Start menu can change the number of categories.
     if (category_index >= library_category_count()) {
         category_index = 0;
