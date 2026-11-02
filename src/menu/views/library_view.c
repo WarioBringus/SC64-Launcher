@@ -40,12 +40,10 @@
 #define PICKER_ROW_H                (26)
 #define PICKER_ROWS                 ((PICKER_BOTTOM - PICKER_FIRST_ROW_Y - 8) / PICKER_ROW_H)
 
-#define CATEGORY_PILL_Y             (LAUNCHER_SUBHEADER_Y - 2)
 
 static const launcher_hint_t hints_grid[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
-    { LAUNCHER_BUTTON_B, "B", "Home" },
-    { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
+    { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Jump" },
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Size" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
@@ -54,15 +52,14 @@ static const launcher_hint_t hints_grid[] = {
 
 static const launcher_hint_t hints_carousel[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
-    { LAUNCHER_BUTTON_B, "B", "Home" },
-    { LAUNCHER_BUTTON_OTHER, "L R", "Category" },
+    { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
 static const launcher_hint_t hints_empty[] = {
-    { LAUNCHER_BUTTON_B, "B", "Home" },
+    { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
@@ -164,12 +161,12 @@ static int *current_selection (void) {
     return &selections[category_index % MAX_REMEMBERED_CATEGORIES];
 }
 
-static void switch_category (menu_t *menu, int delta) {
-    int count = library_category_count();
-    if (count < 2) {
+/** @brief Show another folder (Start > Folder), starting where it was last left. */
+static void set_category (menu_t *menu, int index) {
+    if (index < 0 || index >= library_category_count()) {
         return;
     }
-    category_index = (category_index + delta + count) % count;
+    category_index = index;
     top_row = 0;
     carousel_position = (float)(*current_selection());
     sound_play_effect(SFX_CURSOR);
@@ -604,6 +601,14 @@ static void process (menu_t *menu) {
         folders_show();
         return;
     }
+    if (request == LAUNCHER_REQUEST_CATEGORY) {
+        set_category(menu, launcher_requested_category());
+        // Say where you landed, in the badge used for letter jumps.
+        const char *name = library_category_name(category_index);
+        snprintf(group_badge, sizeof(group_badge), "%s", name ? name : "");
+        group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+        return;
+    }
     if (request == LAUNCHER_REQUEST_FILTER) {
         picker_show_fields();
         return;
@@ -631,18 +636,11 @@ static void process (menu_t *menu) {
         }
         return;
     }
-    if (menu->actions.back) {
-        sound_play_effect(SFX_EXIT);
+    // L (the Home tab is to the left) or B goes back to Home; R on Home comes here.
+    if (menu->actions.back || menu->actions.shoulder_l) {
+        sound_play_effect(menu->actions.back ? SFX_EXIT : SFX_CURSOR);
         settings_save(&menu->settings);
         menu->next_mode = MENU_MODE_HOME;
-        return;
-    }
-    if (menu->actions.shoulder_l) {
-        switch_category(menu, -1);
-        return;
-    }
-    if (menu->actions.shoulder_r) {
-        switch_category(menu, 1);
         return;
     }
 
@@ -722,18 +720,11 @@ static void process (menu_t *menu) {
     }
 }
 
-static void draw_category_tabs (void) {
-    int count = library_category_count();
-    if (count < 2) {
-        const char *name = library_category_name(0);
-        if (name) {
-            launcher_name(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, 0, ALIGN_LEFT, STL_GRAY, name);
-        }
-        return;
-    }
-    int x = LAUNCHER_X0;
-    for (int i = 0; i < count && x < LAUNCHER_X1 - 80; i++) {
-        x += launcher_draw_pill(x, CATEGORY_PILL_Y, library_category_name(i), i == category_index) + 8;
+/** @brief The folder being shown, small at the left of the line under the tabs (Start > Folder switches). */
+static void draw_category_name (void) {
+    const char *name = library_category_name(category_index);
+    if (name) {
+        launcher_name(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH / 2, ALIGN_LEFT, STL_GRAY, name);
     }
 }
 
@@ -1003,7 +994,7 @@ static void draw (menu_t *menu, surface_t *d) {
             "Use Start > File browser to find your ROMs");
         launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
     } else {
-        draw_category_tabs();
+        draw_category_name();
         apply_sort(c, category_index);
         int *sel = current_selection();
         if (c->shown == 0) {

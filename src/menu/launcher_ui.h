@@ -254,10 +254,14 @@ typedef enum {
     LAUNCHER_REQUEST_FILTER,
     LAUNCHER_REQUEST_HIDDEN,
     LAUNCHER_REQUEST_FOLDERS,
+    LAUNCHER_REQUEST_CATEGORY,      /**< Show the folder launcher_requested_category() returns */
 } launcher_request_t;
 
 /** @brief Take (and clear) the pending Start menu request. */
 launcher_request_t launcher_take_request(void);
+
+/** @brief The folder (category index) chosen in Start > Folder, for LAUNCHER_REQUEST_CATEGORY. */
+int launcher_requested_category(void);
 
 /** @brief Whether favorites changed since last asked (clears the flag). */
 bool launcher_take_favorites_changed(void);

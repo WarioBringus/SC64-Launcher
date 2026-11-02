@@ -805,6 +805,8 @@ static char pause_label[24] = "Pause";
 static char music_label[24] = "Music";
 static char order_label[32] = "Order";
 static char volume_label[32] = "Volume";
+static char folder_label[64] = "Folder";
+static int requested_category = 0;
 
 static int favorite_index (menu_t *menu, path_t *rom) {
     for (int i = 0; rom && i < FAVORITES_COUNT; i++) {
@@ -938,6 +940,10 @@ static void open_filter (menu_t *menu, void *arg) {
     request(menu, LAUNCHER_REQUEST_FILTER);
 }
 
+int launcher_requested_category (void) {
+    return requested_category;
+}
+
 launcher_request_t launcher_take_request (void) {
     launcher_request_t r = pending_request;
     pending_request = LAUNCHER_REQUEST_NONE;
@@ -1069,6 +1075,42 @@ static component_context_menu_t music_menu = {
     }
 };
 
+#define FOLDER_MENU_ROWS    (16)
+
+static void choose_folder (menu_t *menu, void *arg) {
+    requested_category = (int)(uintptr_t)(arg);
+    request(menu, LAUNCHER_REQUEST_CATEGORY);
+}
+
+static int get_folder_selection (menu_t *menu) {
+    int index = library_category_find(menu->settings.launcher_category);
+    return index >= 0 ? index : 0;
+}
+
+// Rows are filled with the folder names in prepare_menus; the row after the last folder ends the list.
+static component_context_menu_t folder_menu = {
+    .get_default_selection = get_folder_selection,
+    .list = {
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(0) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(1) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(2) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(3) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(4) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(5) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(6) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(7) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(8) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(9) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(10) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(11) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(12) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(13) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(14) },
+        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(15) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t files_menu = {
     .list = {
         { .text = rescan_label, .action = rescan_folders },
@@ -1094,6 +1136,7 @@ static component_context_menu_t system_menu = {
 static component_context_menu_t start_menu = {
     .list = {
         { .text = "Surprise me", .action = surprise_me },
+        { .text = folder_label, .submenu = &folder_menu },
         { .text = "Browse", .submenu = &browse_menu },
         { .text = "Look", .submenu = &look_menu },
         { .text = "Music", .submenu = &music_menu },
@@ -1143,6 +1186,18 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     snprintf(titles_label, sizeof(titles_label), "Game titles: %s",
         menu->settings.launcher_titles_highlight_only ? "Highlighted" : "Always");
     snprintf(pause_label, sizeof(pause_label), "%s", sound_bgm_is_paused() ? "Resume" : "Pause");
+
+    // Folders, in the order set in Library > Folders.
+    library_init(menu);
+    int folders = library_category_count();
+    for (int i = 0; i < FOLDER_MENU_ROWS; i++) {
+        folder_menu.list[i].text = (i < folders) ? library_category_name(i) : NULL;
+    }
+    if (folders == 0) {
+        folder_menu.list[0].text = "No folders";     // An empty submenu can't be drawn.
+    }
+    const char *shown = library_category_name(get_folder_selection(menu));
+    snprintf(folder_label, sizeof(folder_label), "Folder: %s", shown ? shown : "-");
     snprintf(music_label, sizeof(music_label), "Music: %s", current_choice(menu, &music_onoff_menu));
     snprintf(order_label, sizeof(order_label), "Order: %s", current_choice(menu, &music_order_menu));
     snprintf(volume_label, sizeof(volume_label), "Volume: %s", current_choice(menu, &music_volume_menu));
