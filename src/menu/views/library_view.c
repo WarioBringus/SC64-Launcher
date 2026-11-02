@@ -103,6 +103,20 @@ static const launcher_hint_t hints_hidden[] = {
     { LAUNCHER_BUTTON_B, "B", "Back" },
 };
 
+/* Folders list (Start > Library > Folders): A shows or hides a folder, C up/down moves it. */
+static bool folders_open = false;
+static bool folders_dirty = false;
+static int folders_sel = 0;
+static int folders_top = 0;
+static char folders_category[64];   /* Category shown when the list opened, to come back to */
+static uint64_t folders_refused_until_ms = 0;
+
+static const launcher_hint_t hints_folders[] = {
+    { LAUNCHER_BUTTON_A, "A", "Show / Hide" },
+    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Move" },
+    { LAUNCHER_BUTTON_B, "B", "Done" },
+};
+
 static const launcher_hint_t hints_picker[] = {
     { LAUNCHER_BUTTON_A, "A", "Choose" },
     { LAUNCHER_BUTTON_B, "B", "Back" },
@@ -422,6 +436,102 @@ static void hidden_draw (menu_t *menu) {
     }
 }
 
+static void folders_show (void) {
+    folders_open = true;
+    folders_dirty = false;
+    folders_sel = 0;
+    folders_top = 0;
+    const char *name = library_category_name(category_index);
+    snprintf(folders_category, sizeof(folders_category), "%s", name ? name : "");
+}
+
+static void folders_close (menu_t *menu) {
+    folders_open = false;
+    if (!folders_dirty) {
+        return;
+    }
+    library_folders_save();
+    // Category numbers changed: stay on the same folder (and game) if it is still shown.
+    int keep = *current_selection();
+    memset(selections, 0, sizeof(selections));
+    int found = library_category_find(folders_category);
+    category_index = found >= 0 ? found : 0;
+    if (found >= 0) {
+        *current_selection() = keep;
+    }
+    top_row = 0;
+    carousel_position = (float)(*current_selection());
+    const char *name = library_category_name(category_index);
+    if (name) {
+        free(menu->settings.launcher_category);
+        menu->settings.launcher_category = strdup(name);
+    }
+}
+
+static void folders_process (menu_t *menu) {
+    int count = library_folder_count();
+    if (menu->actions.back) {
+        sound_play_effect(SFX_EXIT);
+        folders_close(menu);
+        return;
+    }
+    if (count == 0) {
+        return;
+    }
+    if (menu->actions.go_up && folders_sel > 0) {
+        folders_sel = menu->actions.go_fast ? library_folder_move(folders_sel, -1) : folders_sel - 1;
+        folders_dirty |= menu->actions.go_fast;
+        sound_play_effect(SFX_CURSOR);
+    } else if (menu->actions.go_down && folders_sel < count - 1) {
+        folders_sel = menu->actions.go_fast ? library_folder_move(folders_sel, 1) : folders_sel + 1;
+        folders_dirty |= menu->actions.go_fast;
+        sound_play_effect(SFX_CURSOR);
+    } else if (menu->actions.enter) {
+        if (library_folder_set_hidden(folders_sel, !library_folder_hidden(folders_sel))) {
+            folders_dirty = true;
+            sound_play_effect(SFX_SETTING);
+        } else {
+            folders_refused_until_ms = get_ticks_ms() + 2000;
+            sound_play_effect(SFX_ERROR);
+        }
+    }
+    if (folders_sel < folders_top) {
+        folders_top = folders_sel;
+    }
+    if (folders_sel >= folders_top + PICKER_ROWS) {
+        folders_top = folders_sel - PICKER_ROWS + 1;
+    }
+}
+
+static void folders_draw (menu_t *menu) {
+    launcher_fill_rounded(LAUNCHER_X0 - 2, PICKER_TOP - 2, LAUNCHER_X1 + 2, PICKER_BOTTOM + 2, 14, theme_current()->line);
+    launcher_fill_rounded(LAUNCHER_X0, PICKER_TOP, LAUNCHER_X1, PICKER_BOTTOM, 12, theme_current()->panel);
+    launcher_title(LAUNCHER_X0 + 20, PICKER_TOP + 10, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_DEFAULT, "Folders");
+    int count = library_folder_count();
+    for (int r = 0; r < PICKER_ROWS; r++) {
+        int i = folders_top + r;
+        if (i >= count) {
+            break;
+        }
+        int y = PICKER_FIRST_ROW_Y + r * PICKER_ROW_H;
+        if (i == folders_sel) {
+            launcher_fill_rounded(LAUNCHER_X0 + 12, y - 3, LAUNCHER_X1 - 12, y + PICKER_ROW_H - 5, 6, theme_current()->highlight);
+        }
+        bool hidden = library_folder_hidden(i);
+        launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 200, ALIGN_LEFT, hidden ? STL_GRAY : STL_DEFAULT, library_folder_name(i));
+        launcher_name(LAUNCHER_X1 - 180, y, 156, ALIGN_RIGHT, hidden ? STL_GRAY : STL_ACCENT, hidden ? "Hidden" : "Shown");
+    }
+    const char *note = NULL;
+    if (get_ticks_ms() < folders_refused_until_ms) {
+        note = "At least one folder stays shown";
+    } else if (!menu->settings.launcher_categories_enabled) {
+        note = "Folder categories are off: hidden folders are left out of All Games";
+    }
+    if (note) {
+        launcher_small(LAUNCHER_X0 + 24, PICKER_BOTTOM - 22, LAUNCHER_WIDTH - 48, ALIGN_LEFT, STL_GRAY, note);
+    }
+}
+
 static void launch (menu_t *menu, library_game_t *game) {
     path_free(menu->load.launcher_rom_path);
     menu->load.launcher_rom_path = library_game_path(game);
@@ -478,12 +588,20 @@ static void process (menu_t *menu) {
         hidden_process(menu);
         return;
     }
+    if (folders_open) {
+        folders_process(menu);
+        return;
+    }
 
     launcher_request_t request = launcher_take_request();
     if (request == LAUNCHER_REQUEST_HIDDEN) {
         hidden_open = true;
         hidden_sel = 0;
         hidden_top = 0;
+        return;
+    }
+    if (request == LAUNCHER_REQUEST_FOLDERS) {
+        folders_show();
         return;
     }
     if (request == LAUNCHER_REQUEST_FILTER) {
@@ -923,6 +1041,9 @@ static void draw (menu_t *menu, surface_t *d) {
         if (hidden_open) {
             hidden_draw(menu);
             launcher_draw_footer(hints_hidden, HINT_COUNT(hints_hidden));
+        } else if (folders_open) {
+            folders_draw(menu);
+            launcher_draw_footer(hints_folders, HINT_COUNT(hints_folders));
         } else if (picker_open) {
             picker_draw();
             launcher_draw_footer(hints_picker, HINT_COUNT(hints_picker));

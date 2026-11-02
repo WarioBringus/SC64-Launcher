@@ -43,6 +43,7 @@ typedef struct {
     bool loaded;                /**< games[] has been listed */
     bool portrait;              /**< Covers in this folder are mostly portrait (Japanese boxes) */
     bool from_index;            /**< Games come from the cover index rather than a folder listing */
+    bool folder_hidden;         /**< Left out of the library (Start > Library > Folders) */
     int index_first;            /**< First index entry of this folder (-1: root files) */
     int index_count;            /**< Number of index entries of this folder */
     int sort;                   /**< Order games[] is in (launcher_sort_t) */
@@ -178,6 +179,32 @@ void library_details_for_path(menu_t *menu, path_t *rom_path, char *buffer, size
  * @param buffer Receives the label, e.g. "M", "Racing", "1998", "4 players".
  */
 void library_game_group(library_game_t *game, int sort, char *buffer, size_t size);
+
+/** @brief Number of game folders, shown or hidden, in the order the library uses. */
+int library_folder_count(void);
+
+/** @brief A game folder's name (index 0 .. library_folder_count() - 1). */
+const char *library_folder_name(int index);
+
+/** @brief Whether a game folder is left out of the library. */
+bool library_folder_hidden(int index);
+
+/**
+ * @brief Show or hide a game folder (kept until library_folders_save).
+ *
+ * @return false when this would hide the last shown folder.
+ */
+bool library_folder_set_hidden(int index, bool hidden);
+
+/**
+ * @brief Move a game folder up (delta -1) or down (+1) in the order.
+ *
+ * @return The folder's new index.
+ */
+int library_folder_move(int index, int delta);
+
+/** @brief Save the folder order and hidden folders (menu/cache/launcher/folders.txt). */
+void library_folders_save(void);
 
 /**
  * @brief Walk the folders a little (for about budget_us) looking for ROMs the cover index doesn't

@@ -884,6 +884,11 @@ static void open_hidden (menu_t *menu, void *arg) {
     request(menu, LAUNCHER_REQUEST_HIDDEN);
 }
 
+static void open_folders (menu_t *menu, void *arg) {
+    (void)arg;
+    request(menu, LAUNCHER_REQUEST_FOLDERS);
+}
+
 static void open_filter (menu_t *menu, void *arg) {
     (void)arg;
     request(menu, LAUNCHER_REQUEST_FILTER);
@@ -941,6 +946,7 @@ static component_context_menu_t look_menu = {
 static component_context_menu_t files_menu = {
     .list = {
         { .text = rescan_label, .action = rescan_folders },
+        { .text = "Folders", .action = open_folders },
         { .text = "File browser", .action = open_file_browser },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }

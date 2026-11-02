@@ -253,6 +253,7 @@ typedef enum {
     LAUNCHER_REQUEST_SURPRISE,
     LAUNCHER_REQUEST_FILTER,
     LAUNCHER_REQUEST_HIDDEN,
+    LAUNCHER_REQUEST_FOLDERS,
 } launcher_request_t;
 
 /** @brief Take (and clear) the pending Start menu request. */

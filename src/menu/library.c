@@ -26,6 +26,7 @@
 #define PORTRAIT_SAMPLE_SIZE    (8)
 #define COVER_INDEX_FILE        "menu/cache/launcher/covers.idx"
 #define HIDDEN_FILE             "menu/cache/launcher/hidden.txt"
+#define FOLDERS_FILE            "menu/cache/launcher/folders.txt"
 #define MAX_HIDDEN              (256)
 #define COVER_INDEX_MAGIC       "LCIDX1"
 
@@ -37,6 +38,8 @@ static library_category_t *folders = NULL;
 static int folder_count = 0;
 
 /* Single merged category used when categories are off. */
+static int *visible = NULL;             /* Category index -> folders[] index, shown folders only */
+static int visible_count = 0;
 static library_category_t all_games;
 static bool categories_enabled = true;
 static bool one_per_game = true;
@@ -620,6 +623,9 @@ static bool has_better_copy (library_game_t *games, const uint32_t *keys, const 
 static void load_all_games (void) {
     int total = 0;
     for (int i = 0; i < folder_count; i++) {
+        if (folders[i].folder_hidden) {
+            continue;
+        }
         if (!folders[i].loaded) {
             load_folder_games(&folders[i]);
         }
@@ -630,7 +636,7 @@ static void load_all_games (void) {
     library_game_t *everything = malloc((total > 0 ? total : 1) * sizeof(library_game_t));
     int n = 0;
     for (int i = 0; i < folder_count; i++) {
-        for (int j = 0; j < folders[i].count; j++) {
+        for (int j = 0; !folders[i].folder_hidden && j < folders[i].count; j++) {
             everything[n++] = folders[i].games[j];
         }
     }
@@ -821,6 +827,116 @@ static bool scan_from_index (void) {
     return true;
 }
 
+/* Folder order and hidden folders: "+Name" (shown) or "-Name" (hidden) per line, in order. */
+static void folders_update_visible (void) {
+    free(visible);
+    visible = malloc((folder_count > 0 ? folder_count : 1) * sizeof(int));
+    visible_count = 0;
+    for (int i = 0; i < folder_count; i++) {
+        if (!folders[i].folder_hidden) {
+            visible[visible_count++] = i;
+        }
+    }
+}
+
+static void folders_load_order (void) {
+    path_t *file = path_init(storage_prefix, FOLDERS_FILE);
+    FILE *f = fopen(path_get(file), "r");
+    path_free(file);
+    if (f) {
+        // Listed folders go first, in the saved order; new ones keep their place after them.
+        int placed = 0;
+        char line[256];
+        while (fgets(line, sizeof(line), f) && placed < folder_count) {
+            line[strcspn(line, "\r\n")] = '\0';
+            if (line[0] != '+' && line[0] != '-') {
+                continue;
+            }
+            for (int i = placed; i < folder_count; i++) {
+                if (strcmp(folders[i].name, line + 1) == 0) {
+                    library_category_t c = folders[i];
+                    memmove(&folders[placed + 1], &folders[placed], (i - placed) * sizeof(library_category_t));
+                    folders[placed] = c;
+                    folders[placed].folder_hidden = (line[0] == '-');
+                    placed++;
+                    break;
+                }
+            }
+        }
+        fclose(f);
+    }
+    folders_update_visible();
+    if (visible_count == 0 && folder_count > 0) {
+        // Never hide everything.
+        for (int i = 0; i < folder_count; i++) {
+            folders[i].folder_hidden = false;
+        }
+        folders_update_visible();
+    }
+}
+
+void library_folders_save (void) {
+    path_t *file = path_init(storage_prefix, FOLDERS_FILE);
+    FILE *f = fopen(path_get(file), "w");
+    path_free(file);
+    if (f) {
+        for (int i = 0; i < folder_count; i++) {
+            fprintf(f, "%c%s\n", folders[i].folder_hidden ? '-' : '+', folders[i].name);
+        }
+        fclose(f);
+    }
+}
+
+static void folders_changed (void) {
+    folders_update_visible();
+
+    // All Games is built from the shown folders.
+    if (all_games.games) {
+        for (int i = 0; i < all_games.count; i++) {
+            free(all_games.games[i].cover_path);
+        }
+        free(all_games.games);
+    }
+    memset(&all_games, 0, sizeof(all_games));
+    all_games.name = ALL_GAMES_NAME;
+}
+
+int library_folder_count (void) {
+    return folder_count;
+}
+
+const char *library_folder_name (int index) {
+    return (index >= 0 && index < folder_count) ? folders[index].name : NULL;
+}
+
+bool library_folder_hidden (int index) {
+    return index >= 0 && index < folder_count && folders[index].folder_hidden;
+}
+
+bool library_folder_set_hidden (int index, bool hidden) {
+    if (index < 0 || index >= folder_count || folders[index].folder_hidden == hidden) {
+        return true;
+    }
+    if (hidden && visible_count <= 1) {
+        return false;
+    }
+    folders[index].folder_hidden = hidden;
+    folders_changed();
+    return true;
+}
+
+int library_folder_move (int index, int delta) {
+    int to = index + delta;
+    if (index < 0 || index >= folder_count || to < 0 || to >= folder_count) {
+        return index;
+    }
+    library_category_t c = folders[index];
+    folders[index] = folders[to];
+    folders[to] = c;
+    folders_changed();
+    return to;
+}
+
 void library_init (menu_t *menu) {
     const char *root_setting = menu->settings.launcher_library_root;
     if (!root_setting || root_setting[0] == '\0') {
@@ -846,6 +962,7 @@ void library_init (menu_t *menu) {
         scan_folders(root);
         path_free(root);
     }
+    folders_load_order();
 
     memset(&all_games, 0, sizeof(all_games));
     all_games.name = ALL_GAMES_NAME;
@@ -854,16 +971,16 @@ void library_init (menu_t *menu) {
 
 int library_category_count (void) {
     if (!categories_enabled) {
-        return folder_count > 0 ? 1 : 0;
+        return visible_count > 0 ? 1 : 0;
     }
-    return folder_count;
+    return visible_count;
 }
 
 const char *library_category_name (int index) {
     if (!categories_enabled) {
-        return (index == 0 && folder_count > 0) ? ALL_GAMES_NAME : NULL;
+        return (index == 0 && visible_count > 0) ? ALL_GAMES_NAME : NULL;
     }
-    return (index >= 0 && index < folder_count) ? folders[index].name : NULL;
+    return (index >= 0 && index < visible_count) ? folders[visible[index]].name : NULL;
 }
 
 int library_category_find (const char *name) {
@@ -871,10 +988,10 @@ int library_category_find (const char *name) {
         return -1;
     }
     if (!categories_enabled) {
-        return folder_count > 0 ? 0 : -1;
+        return visible_count > 0 ? 0 : -1;
     }
-    for (int i = 0; i < folder_count; i++) {
-        if (strcasecmp(folders[i].name, name) == 0) {
+    for (int i = 0; i < visible_count; i++) {
+        if (strcasecmp(folders[visible[i]].name, name) == 0) {
             return i;
         }
     }
@@ -885,7 +1002,11 @@ bool library_category_is_quick (int index) {
     if (!categories_enabled) {
         return all_games.loaded;
     }
-    return index >= 0 && index < folder_count && (folders[index].loaded || folders[index].from_index);
+    if (index < 0 || index >= visible_count) {
+        return false;
+    }
+    library_category_t *c = &folders[visible[index]];
+    return c->loaded || c->from_index;
 }
 
 /* Hidden ROMs: full paths, one per line in HIDDEN_FILE. */
@@ -1244,7 +1365,7 @@ void library_rescan (menu_t *menu) {
 
 library_category_t *library_category (int index) {
     if (!categories_enabled) {
-        if (index != 0 || folder_count == 0) {
+        if (index != 0 || visible_count == 0) {
             return NULL;
         }
         if (!all_games.loaded) {
@@ -1252,13 +1373,14 @@ library_category_t *library_category (int index) {
         }
         return &all_games;
     }
-    if (index < 0 || index >= folder_count) {
+    if (index < 0 || index >= visible_count) {
         return NULL;
     }
-    if (!folders[index].loaded) {
-        load_folder_games(&folders[index]);
+    library_category_t *c = &folders[visible[index]];
+    if (!c->loaded) {
+        load_folder_games(c);
     }
-    return &folders[index];
+    return c;
 }
 
 path_t *library_game_path (library_game_t *game) {
@@ -1309,6 +1431,9 @@ void library_free (void) {
     free(folders);
     folders = NULL;
     folder_count = 0;
+    free(visible);
+    visible = NULL;
+    visible_count = 0;
 
     free(scanned_root);
     scanned_root = NULL;
