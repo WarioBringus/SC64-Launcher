@@ -11,6 +11,7 @@
 #include "views.h"
 #include "../launcher_ui.h"
 #include "../library.h"
+#include "../rom_info.h"
 #include "../sound.h"
 #include "../theme.h"
 #include "utils/fs.h"
@@ -18,7 +19,8 @@
 #define TEXT_X              (LAUNCHER_X0 + 184)
 #define TITLE_Y             (64)
 #define DETAILS_Y           (100)
-#define DESCRIPTION_Y0      (128)
+#define ACCESSORIES_Y       (122)
+#define DESCRIPTION_Y0      (152)
 #define DESCRIPTION_Y1      (408)
 #define COVER_Y             (66)
 #define BACK_COVER_GAP      (16)
@@ -38,6 +40,8 @@ static char *title = NULL;
 static char *cover = NULL;
 static char *back_cover = NULL;
 static char details[160];
+static char accessories[160];
+static bool accessories_warning = false;   /* Something the game needs that this console lacks */
 static char *description = NULL;
 static launcher_paragraph_t *paragraph = NULL;
 static int scroll = 0;
@@ -119,6 +123,80 @@ static char *find_beside_cover (const char *file_name) {
     return NULL;
 }
 
+/** @brief Where a game is from, by the last letter of its game code. */
+static const char *region_name (rom_destination_type_t destination) {
+    switch (destination) {
+        case MARKET_JAPANESE_MULTI: return "Japan & USA";
+        case MARKET_BRAZILIAN: return "Brazil";
+        case MARKET_CHINESE: return "China";
+        case MARKET_GERMAN: return "Germany";
+        case MARKET_NORTH_AMERICA: return "USA";
+        case MARKET_FRENCH: return "France";
+        case MARKET_DUTCH: return "Netherlands";
+        case MARKET_ITALIAN: return "Italy";
+        case MARKET_JAPANESE: return "Japan";
+        case MARKET_KOREAN: return "Korea";
+        case MARKET_CANADIAN: return "Canada";
+        case MARKET_SPANISH: return "Spain";
+        case MARKET_AUSTRALIAN: return "Australia";
+        case MARKET_SCANDINAVIAN: return "Scandinavia";
+        case MARKET_GATEWAY64_NTSC:
+        case MARKET_GATEWAY64_PAL: return "Gateway 64";
+        case MARKET_EUROPEAN_BASIC:
+        case MARKET_OTHER_X:
+        case MARKET_OTHER_Y: return "Europe";
+        default: return NULL;
+    }
+}
+
+/**
+ * @brief "USA · Rumble Pak · Controller Pak", from the ROM header and the menu's game database.
+ * Expansion Pak notes only appear when they matter on this console.
+ */
+static void load_accessories (path_t *path) {
+    accessories[0] = '\0';
+    accessories_warning = false;
+    rom_info_t info;
+    memset(&info, 0, sizeof(info));
+    if (rom_info_load_header(path, &info) != ROM_OK) {
+        return;
+    }
+    const char *parts[9];
+    int n = 0;
+    const char *region = region_name(info.destination_code);
+    if (region) {
+        parts[n++] = region;
+    }
+    if (info.features.expansion_pak == EXPANSION_PAK_REQUIRED && !is_memory_expanded()) {
+        parts[n++] = "Needs Expansion Pak";
+        accessories_warning = true;
+    } else if (info.features.expansion_pak == EXPANSION_PAK_RECOMMENDED && !is_memory_expanded()) {
+        parts[n++] = "Better with Expansion Pak";
+    } else if (info.features.expansion_pak == EXPANSION_PAK_FAULTY && is_memory_expanded()) {
+        parts[n++] = "Has issues with Expansion Pak";
+        accessories_warning = true;
+    }
+    if (info.features.rumble_pak) {
+        parts[n++] = "Rumble Pak";
+    }
+    if (info.features.controller_pak) {
+        parts[n++] = "Controller Pak";
+    }
+    if (info.features.transfer_pak) {
+        parts[n++] = "Transfer Pak";
+    }
+    if (info.features.voice_recognition_unit) {
+        parts[n++] = "Voice Recognition Unit";
+    }
+    if (info.features.real_time_clock) {
+        parts[n++] = "Clock";
+    }
+    size_t used = 0;
+    for (int i = 0; i < n && used < sizeof(accessories); i++) {
+        used += snprintf(accessories + used, sizeof(accessories) - used, "%s%s", i ? "   \xC2\xB7   " : "", parts[i]);
+    }
+}
+
 static void play (menu_t *menu, bool quick) {
     path_free(menu->load.launcher_rom_path);
     menu->load.launcher_rom_path = path_clone(rom);
@@ -183,6 +261,10 @@ static void draw (menu_t *menu, surface_t *d) {
         if (details[0]) {
             launcher_small(TEXT_X, DETAILS_Y, text_w, ALIGN_LEFT, STL_GRAY, details);
         }
+        if (accessories[0]) {
+            launcher_small(TEXT_X, details[0] ? ACCESSORIES_Y : DETAILS_Y, text_w, ALIGN_LEFT,
+                accessories_warning ? STL_ACCENT : STL_GRAY, accessories);
+        }
         if (paragraph) {
             launcher_paragraph_draw(paragraph, TEXT_X, DESCRIPTION_Y0 - scroll, DESCRIPTION_Y0, DESCRIPTION_Y1);
         } else {
@@ -210,6 +292,7 @@ void view_about_init (menu_t *menu) {
     title = library_title_from_path(rom);
     cover = library_find_cover(menu, rom, title);
     library_details_for_path(menu, rom, details, sizeof(details));
+    load_accessories(rom);
     if (cover) {
         char *front_name = strstr(cover, "boxart_front.png");
         if (front_name) {
