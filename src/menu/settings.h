@@ -119,6 +119,9 @@ typedef struct {
     /** @brief A starts the game straight away, skipping the ROM details screen */
     bool launcher_quick_launch;
 
+    /** @brief Open the launcher on the Library rather than Home */
+    bool launcher_start_in_library;
+
     /** @brief Minutes idle before the attract mode slideshow starts (0 = never) */
     int launcher_attract_minutes;
 

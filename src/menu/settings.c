@@ -48,6 +48,7 @@ static settings_t init = {
     .launcher_sort = LAUNCHER_SORT_TITLE,
     .launcher_widescreen = false,
     .launcher_quick_launch = false,
+    .launcher_start_in_library = false,
     .launcher_attract_minutes = 5,
     .launcher_cartridge_art = false,
     .launcher_one_per_game = true,
@@ -124,6 +125,7 @@ void settings_load (settings_t *settings) {
     settings->launcher_sort = ini_get_int(ini, "launcher", "sort", init.launcher_sort);
     settings->launcher_widescreen = ini_get_bool(ini, "launcher", "widescreen", init.launcher_widescreen);
     settings->launcher_quick_launch = ini_get_bool(ini, "launcher", "quick_launch", init.launcher_quick_launch);
+    settings->launcher_start_in_library = ini_get_bool(ini, "launcher", "start_in_library", init.launcher_start_in_library);
     settings->launcher_attract_minutes = ini_get_int(ini, "launcher", "attract_minutes", init.launcher_attract_minutes);
     settings->launcher_cartridge_art = ini_get_bool(ini, "launcher", "cartridge_art", init.launcher_cartridge_art);
     settings->launcher_one_per_game = ini_get_bool(ini, "launcher", "one_per_game", init.launcher_one_per_game);
@@ -190,6 +192,7 @@ void settings_save (settings_t *settings) {
     ini_set_int(ini, "launcher", "sort", settings->launcher_sort);
     ini_set_bool(ini, "launcher", "widescreen", settings->launcher_widescreen);
     ini_set_bool(ini, "launcher", "quick_launch", settings->launcher_quick_launch);
+    ini_set_bool(ini, "launcher", "start_in_library", settings->launcher_start_in_library);
     ini_set_int(ini, "launcher", "attract_minutes", settings->launcher_attract_minutes);
     ini_set_bool(ini, "launcher", "cartridge_art", settings->launcher_cartridge_art);
     ini_set_bool(ini, "launcher", "one_per_game", settings->launcher_one_per_game);

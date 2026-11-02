@@ -203,6 +203,11 @@ static void set_launcher_one_per_game_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_launcher_start_in_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_start_in_library = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
 static void set_launcher_quick_launch_type (menu_t *menu, void *arg) {
     menu->settings.launcher_quick_launch = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -571,8 +576,21 @@ static component_context_menu_t set_launcher_widescreen_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static int get_launcher_start_in_current_selection (menu_t *menu) {
+    return menu->settings.launcher_start_in_library ? 1 : 0;
+}
+
+static component_context_menu_t set_launcher_start_in_context_menu = {
+    .get_default_selection = get_launcher_start_in_current_selection,
+    .list = {
+        {.text = "Home", .action = set_launcher_start_in_type, .arg = (void *)(uintptr_t)(false) },
+        {.text = "Library", .action = set_launcher_start_in_type, .arg = (void *)(uintptr_t)(true) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t launcher_context_menu = { .list = {
     { .text = "Launcher", .submenu = &set_launcher_enabled_context_menu },
+    { .text = "Start In", .submenu = &set_launcher_start_in_context_menu },
     { .text = "Folder Categories", .submenu = &set_launcher_categories_enabled_context_menu },
     { .text = "Duplicates", .submenu = &set_launcher_one_per_game_context_menu },
     { .text = "Library Layout", .submenu = &set_launcher_layout_context_menu },
