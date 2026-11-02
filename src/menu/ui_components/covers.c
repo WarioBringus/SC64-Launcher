@@ -17,6 +17,7 @@
 /* Pack reads stop for the frame once this much time has gone on them (at least one read per frame),
    so a screen full of new covers fills in over a few smooth frames instead of stalling one. */
 #define PACK_READ_BUDGET_US     (3500)
+#define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps */
 #define MAX_PACKS               (12)
 #define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d.pak"
 
@@ -37,6 +38,7 @@ typedef struct {
     surface_t *image;
     bool loading;
     bool failed;
+    uint32_t failed_frame;      /**< When it failed; it is retried after FAILED_RETRY_FRAMES */
     uint32_t last_used;
 } cover_slot_t;
 
@@ -45,13 +47,13 @@ static int slot_count = 0;
 static uint32_t frame = 0;
 static bool decoding = false;
 static cover_pack_t packs[MAX_PACKS];
-static uint64_t pack_budget_start_us = 0;
+static uint64_t pack_time_used_us = 0;
 static bool pack_read_this_frame = false;
 
 
-/** @brief Whether another pack read fits in this frame's time budget. */
+/** @brief Whether another pack read fits in this frame's budget (time spent reading packs only). */
 static bool pack_budget_left (void) {
-    return !pack_read_this_frame || (get_ticks_us() - pack_budget_start_us) < PACK_READ_BUDGET_US;
+    return !pack_read_this_frame || pack_time_used_us < PACK_READ_BUDGET_US;
 }
 
 
@@ -117,21 +119,28 @@ static cover_pack_t *pack_for (const char *path, int w, int h) {
 }
 
 /**
- * @brief Read a pre-scaled cover from its pack: one seek and one read, no PNG decoding.
+ * @brief Find a cover's pack and id; NULL when this cover isn't in the pack for this size.
  */
-static surface_t *pack_read (const char *path, int w, int h) {
+static cover_pack_t *pack_lookup (const char *path, int w, int h, int *id) {
     const char *rel = strstr(path, ":/menu/");
     if (!rel) {
         return NULL;
     }
-    int id = library_cover_id(rel + strlen(":/menu/"));
-    if (id < 0) {
+    *id = library_cover_id(rel + strlen(":/menu/"));
+    if (*id < 0) {
         return NULL;
     }
     cover_pack_t *p = pack_for(path, w, h);
-    if (!p || (uint32_t)id >= p->count || p->offsets[id] == 0) {
+    if (!p || (uint32_t)*id >= p->count || p->offsets[*id] == 0) {
         return NULL;
     }
+    return p;
+}
+
+/**
+ * @brief Read a pre-scaled cover from its pack: one seek and one read, no PNG decoding.
+ */
+static surface_t *pack_read (cover_pack_t *p, int id, int w, int h) {
 
     uint8_t head[8];
     if (fseek(p->f, p->offsets[id], SEEK_SET) != 0 || fread(head, 1, sizeof(head), p->f) != sizeof(head) ||
@@ -189,6 +198,7 @@ static void decode_done (png_err_t err, surface_t *decoded_image, void *callback
         slot->image = decoded_image;
     } else {
         slot->failed = true;
+        slot->failed_frame = frame;
         if (decoded_image) {
             surface_free(decoded_image);
             free(decoded_image);
@@ -211,7 +221,7 @@ static void slot_free (cover_slot_t *slot) {
 
 void launcher_covers_begin_frame (void) {
     frame++;
-    pack_budget_start_us = get_ticks_us();
+    pack_time_used_us = 0;
     pack_read_this_frame = false;
     if (slot_count == 0) {
         slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
@@ -233,6 +243,11 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];
         if (s->path && s->max_w == max_w && s->max_h == max_h && strcmp(s->path, path) == 0) {
+            if (s->failed && (frame - s->failed_frame) > FAILED_RETRY_FRAMES) {
+                // Give a failed cover another try rather than leaving it blank.
+                slot_free(s);
+                break;
+            }
             s->last_used = frame;
             if (pending) {
                 *pending = s->loading;
@@ -244,8 +259,11 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     if (pending) {
         *pending = true;
     }
-    bool can_read_pack = pack_budget_left();
-    if (decoding && !can_read_pack) {
+
+    // Covers in a pack wait for read budget; only covers missing from the packs use the PNG decoder.
+    int id = -1;
+    cover_pack_t *pack = pack_lookup(path, max_w, max_h, &id);
+    if (pack ? !pack_budget_left() : decoding) {
         return NULL;
     }
 
@@ -271,20 +289,22 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     victim->max_h = max_h;
     victim->last_used = frame;
 
-    if (can_read_pack) {
+    if (pack) {
+        uint64_t started = get_ticks_us();
+        victim->image = pack_read(pack, id, max_w, max_h);
+        pack_time_used_us += get_ticks_us() - started;
         pack_read_this_frame = true;
-        victim->image = pack_read(path, max_w, max_h);
         if (victim->image) {
             if (pending) {
                 *pending = false;
             }
             return victim->image;
         }
-    }
-    if (decoding) {
-        // Not in a pack and the decoder is busy: try again next frame.
-        free(victim->path);
-        memset(victim, 0, sizeof(*victim));
+        victim->failed = true;
+        victim->failed_frame = frame;
+        if (pending) {
+            *pending = false;
+        }
         return NULL;
     }
 
@@ -300,6 +320,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     } else {
         victim->loading = false;
         victim->failed = true;
+        victim->failed_frame = frame;
         if (pending) {
             *pending = false;
         }
