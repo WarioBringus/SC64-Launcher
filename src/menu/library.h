@@ -42,6 +42,9 @@ typedef struct {
     int index_first;            /**< First index entry of this folder (-1: root files) */
     int index_count;            /**< Number of index entries of this folder */
     int sort;                   /**< Order games[] is in (launcher_sort_t) */
+    int filter_field;           /**< Filter games[] is arranged for (a launcher_sort_t field, or -1) */
+    char filter_value[64];      /**< Group label the filter keeps */
+    int shown;                  /**< Games to show: all of them, or the ones matching the filter (they come first) */
     library_game_t *games;
     int count;
 } library_category_t;
@@ -118,11 +121,39 @@ char *library_title_from_path(path_t *rom_path);
 int library_cover_id(const char *cover_rel);
 
 /**
- * @brief Put a category's games in the given order (title within each group).
+ * @brief Put a category's games in the given order (title within each group), with games matching
+ * the filter first and `shown` set to how many match.
  *
- * @return true if the order changed.
+ * @param sort Sort order (launcher_sort_t).
+ * @param filter_field Field to filter on (LAUNCHER_SORT_GENRE...PLAYERS), or -1 for no filter.
+ * @param filter_value Group label to keep (as library_game_group writes it).
+ * @return true if the arrangement changed.
  */
-bool library_sort_category(library_category_t *category, int sort);
+bool library_arrange_category(library_category_t *category, int sort, int filter_field, const char *filter_value);
+
+/** @brief One group in a category, for the filter picker. */
+typedef struct {
+    char label[64];
+    int count;
+} library_group_t;
+
+/**
+ * @brief The distinct groups of a field in a category, with how many games each has.
+ *
+ * @param groups Receives a malloc'd array (free it with free()).
+ * @return Number of groups.
+ */
+int library_category_groups(library_category_t *category, int field, library_group_t **groups);
+
+/**
+ * @brief One-line game details, e.g. "Racing  ·  1997  ·  Nintendo EAD  ·  4 players". Empty when unknown.
+ */
+void library_game_details(library_game_t *game, char *buffer, size_t size);
+
+/**
+ * @brief Details line for any ROM path (looked up in the cover index), for the home screen.
+ */
+void library_details_for_path(menu_t *menu, path_t *rom_path, char *buffer, size_t size);
 
 /**
  * @brief The group a game falls in for a sort order: its first letter, genre, developer, year or player count.

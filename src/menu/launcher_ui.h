@@ -190,8 +190,32 @@ void launcher_leave(menu_t *menu, menu_mode_t next_mode);
  */
 void launcher_apply_theme(menu_t *menu, int index);
 
-/** @brief Open the Start menu (quick settings, file browser, settings, info screens). */
-void launcher_menu_show(void);
+/**
+ * @brief Open the Start menu (favorite, sort, filter, quick settings, file browser, settings, info screens).
+ *
+ * @param selected_rom The highlighted game's ROM (for "Add to favorites"); the menu keeps it. May be NULL.
+ */
+void launcher_menu_show(menu_t *menu, path_t *selected_rom);
+
+/** @brief Requests from the Start menu that the library view carries out. */
+typedef enum {
+    LAUNCHER_REQUEST_NONE,
+    LAUNCHER_REQUEST_SURPRISE,
+    LAUNCHER_REQUEST_FILTER,
+} launcher_request_t;
+
+/** @brief Take (and clear) the pending Start menu request. */
+launcher_request_t launcher_take_request(void);
+
+/** @brief Whether favorites changed since last asked (clears the flag). */
+bool launcher_take_favorites_changed(void);
+
+/**
+ * @brief Draw a short line in the small font (game details, filter rows).
+ *
+ * @return Logical width of the drawn text.
+ */
+int launcher_small(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text);
 
 /** @brief Handle input for the Start menu. Returns true while it is open. */
 bool launcher_menu_process(menu_t *menu);

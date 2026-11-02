@@ -510,6 +510,8 @@ static void load_index_games (library_category_t *c) {
 
     qsort(c->games, c->count, sizeof(library_game_t), compare_games);
     c->portrait = with_cover > 0 && (japan * 2 > with_cover);
+    c->filter_field = -1;
+    c->shown = c->count;
     c->loaded = true;
 }
 
@@ -542,6 +544,8 @@ static void load_folder_games (library_category_t *c) {
 
     qsort(c->games, c->count, sizeof(library_game_t), compare_games);
     c->portrait = detect_portrait(c);
+    c->filter_field = -1;
+    c->shown = c->count;
     c->loaded = true;
 }
 
@@ -570,6 +574,8 @@ static void load_all_games (void) {
     }
     qsort(all_games.games, all_games.count, sizeof(library_game_t), compare_games);
     all_games.portrait = false;
+    all_games.filter_field = -1;
+    all_games.shown = all_games.count;
     all_games.loaded = true;
 }
 
@@ -789,8 +795,19 @@ bool library_category_is_quick (int index) {
     return index >= 0 && index < folder_count && (folders[index].loaded || folders[index].from_index);
 }
 
-/* Sort order used by compare_sorted (qsort has no context argument). */
+/* Sort order and filter used by compare_sorted (qsort has no context argument). */
 static int sort_order = 0;
+static int filter_field_now = -1;
+static const char *filter_value_now = NULL;
+
+static bool game_matches_filter (const library_game_t *g) {
+    if (filter_field_now < 0) {
+        return true;
+    }
+    char label[64];
+    library_game_group((library_game_t *)g, filter_field_now, label, sizeof(label));
+    return strcmp(label, filter_value_now) == 0;
+}
 
 /** @brief The key a game sorts by; NULL means unknown, which sorts last. */
 static const char *sort_key (const library_game_t *g) {
@@ -805,6 +822,14 @@ static const char *sort_key (const library_game_t *g) {
 static int compare_sorted (const void *a, const void *b) {
     const library_game_t *ga = a;
     const library_game_t *gb = b;
+    if (filter_field_now >= 0) {
+        // Games the filter keeps come first; only they are shown.
+        bool ma = game_matches_filter(ga);
+        bool mb = game_matches_filter(gb);
+        if (ma != mb) {
+            return ma ? -1 : 1;
+        }
+    }
     if (sort_order == LAUNCHER_SORT_PLAYERS) {
         // Most players first (party games together); unknown last.
         int pa = ga->players > 0 ? ga->players : -1;
@@ -828,14 +853,125 @@ static int compare_sorted (const void *a, const void *b) {
     return strcasecmp(ga->title, gb->title);
 }
 
-bool library_sort_category (library_category_t *category, int sort) {
-    if (!category || category->sort == sort) {
+bool library_arrange_category (library_category_t *category, int sort, int filter_field, const char *filter_value) {
+    if (!category) {
+        return false;
+    }
+    if (filter_field < 0 || !filter_value) {
+        filter_field = -1;
+        filter_value = "";
+    }
+    if (category->sort == sort && category->filter_field == filter_field &&
+        (filter_field < 0 || strcmp(category->filter_value, filter_value) == 0)) {
         return false;
     }
     sort_order = sort;
+    filter_field_now = filter_field;
+    filter_value_now = filter_value;
     qsort(category->games, category->count, sizeof(library_game_t), compare_sorted);
+
+    category->shown = category->count;
+    if (filter_field >= 0) {
+        category->shown = 0;
+        while (category->shown < category->count && game_matches_filter(&category->games[category->shown])) {
+            category->shown++;
+        }
+    }
     category->sort = sort;
+    category->filter_field = filter_field;
+    snprintf(category->filter_value, sizeof(category->filter_value), "%s", filter_value);
+    filter_field_now = -1;
     return true;
+}
+
+static int compare_groups (const void *a, const void *b) {
+    const library_group_t *ga = a;
+    const library_group_t *gb = b;
+    // "Unknown ..." goes last.
+    bool ua = strncmp(ga->label, "Unknown", 7) == 0;
+    bool ub = strncmp(gb->label, "Unknown", 7) == 0;
+    if (ua != ub) {
+        return ua ? 1 : -1;
+    }
+    return strcasecmp(ga->label, gb->label);
+}
+
+int library_category_groups (library_category_t *category, int field, library_group_t **groups) {
+    int capacity = 32;
+    int count = 0;
+    library_group_t *list = malloc(capacity * sizeof(library_group_t));
+    for (int i = 0; i < category->count; i++) {
+        char label[64];
+        library_game_group(&category->games[i], field, label, sizeof(label));
+        int k = 0;
+        while (k < count && strcmp(list[k].label, label) != 0) {
+            k++;
+        }
+        if (k == count) {
+            if (count == capacity) {
+                capacity *= 2;
+                list = realloc(list, capacity * sizeof(library_group_t));
+            }
+            snprintf(list[count].label, sizeof(list[count].label), "%s", label);
+            list[count].count = 0;
+            count++;
+        }
+        list[k].count++;
+    }
+    qsort(list, count, sizeof(library_group_t), compare_groups);
+    *groups = list;
+    return count;
+}
+
+static void details_text (const char *genre, const char *year, const char *developer, int players, char *buffer, size_t size) {
+    buffer[0] = '\0';
+    const char *parts[4];
+    char players_text[16];
+    int n = 0;
+    if (genre) {
+        parts[n++] = genre;
+    }
+    if (year) {
+        parts[n++] = year;
+    }
+    if (developer) {
+        parts[n++] = developer;
+    }
+    if (players > 0) {
+        snprintf(players_text, sizeof(players_text), players == 1 ? "1 player" : "%d players", players);
+        parts[n++] = players_text;
+    }
+    size_t used = 0;
+    for (int i = 0; i < n && used < size; i++) {
+        used += snprintf(buffer + used, size - used, "%s%s", i ? "   \xC2\xB7   " : "", parts[i]);
+    }
+}
+
+void library_game_details (library_game_t *game, char *buffer, size_t size) {
+    details_text(game->genre, game->year, game->developer, game->players, buffer, size);
+}
+
+void library_details_for_path (menu_t *menu, path_t *rom_path, char *buffer, size_t size) {
+    buffer[0] = '\0';
+    if (!storage_prefix) {
+        storage_prefix = menu->storage_prefix;
+    }
+    index_load();
+    if (index_meta_count == 0) {
+        return;
+    }
+    const char *rel = path_get(rom_path);
+    size_t prefix_len = strlen(storage_prefix);
+    if (strncmp(rel, storage_prefix, prefix_len) == 0) {
+        rel += prefix_len;
+    }
+    while (*rel == '/') {
+        rel++;
+    }
+    index_meta_t *m = bsearch(rel, index_meta, index_meta_count, sizeof(index_meta_t), compare_index_meta);
+    if (m) {
+        details_text(m->genre, m->year, m->developer, m->players, buffer, size);
+    }
 }
 
 void library_game_group (library_game_t *game, int sort, char *buffer, size_t size) {

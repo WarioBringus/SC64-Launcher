@@ -32,6 +32,13 @@
 #define GROUP_BADGE_PADDING         (28)
 #define GROUP_BADGE_MS              (800)
 
+#define INFO_LINE_Y                 (398)   /* Game details under the grid, above the hints */
+#define PICKER_TOP                  (56)
+#define PICKER_BOTTOM               (412)
+#define PICKER_FIRST_ROW_Y          (100)
+#define PICKER_ROW_H                (26)
+#define PICKER_ROWS                 ((PICKER_BOTTOM - PICKER_FIRST_ROW_Y - 8) / PICKER_ROW_H)
+
 #define CATEGORY_PILL_Y             (LAUNCHER_SUBHEADER_Y - 2)
 
 static const launcher_hint_t hints_grid[] = {
@@ -68,6 +75,28 @@ static float carousel_position = 0.0f;
 static char group_badge[48] = "";
 static uint64_t group_badge_until_ms = 0;
 static int current_sort = LAUNCHER_SORT_TITLE;
+
+/* Filter (for this session): a field and the group label it keeps, or no filter. */
+static int filter_field = -1;
+static char filter_value[64] = "";
+
+/* Filter picker: first a field, then one of its groups. */
+static const char *picker_field_names[] = { "No filter", "Genre", "Developer", "Year", "Players" };
+static const int picker_field_ids[] = { -1, LAUNCHER_SORT_GENRE, LAUNCHER_SORT_DEVELOPER, LAUNCHER_SORT_YEAR, LAUNCHER_SORT_PLAYERS };
+#define PICKER_FIELD_COUNT (5)
+static bool picker_open = false;
+static int picker_stage = 0;
+static int picker_sel = 0;
+static int picker_top = 0;
+static int picker_field = -1;
+static library_group_t *picker_groups = NULL;
+static int picker_group_count = 0;
+
+static const launcher_hint_t hints_picker[] = {
+    { LAUNCHER_BUTTON_A, "A", "Choose" },
+    { LAUNCHER_BUTTON_B, "B", "Back" },
+    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Page" },
+};
 
 typedef struct {
     int cols;
@@ -150,7 +179,7 @@ static int group_start (library_category_t *c, int sel) {
  */
 static int jump_group (library_category_t *c, int sel, int direction) {
     if (direction > 0) {
-        for (int i = sel + 1; i < c->count; i++) {
+        for (int i = sel + 1; i < c->shown; i++) {
             if (!same_group(&c->games[i], &c->games[sel])) {
                 return i;
             }
@@ -173,7 +202,7 @@ static void show_group_badge (library_category_t *c, int sel) {
  * @brief Bring a category into the current sort order. A new order starts back at its first game.
  */
 static void apply_sort (library_category_t *c, int index) {
-    if (library_sort_category(c, current_sort)) {
+    if (library_arrange_category(c, current_sort, filter_field, filter_value)) {
         selections[index % MAX_REMEMBERED_CATEGORIES] = 0;
         if (index == category_index) {
             top_row = 0;
@@ -182,11 +211,128 @@ static void apply_sort (library_category_t *c, int index) {
     }
 }
 
+static void picker_close (void) {
+    picker_open = false;
+    free(picker_groups);
+    picker_groups = NULL;
+    picker_group_count = 0;
+}
+
+static void picker_show_fields (void) {
+    picker_close();
+    picker_open = true;
+    picker_stage = 0;
+    picker_sel = 0;
+    for (int i = 0; i < PICKER_FIELD_COUNT; i++) {
+        if (picker_field_ids[i] == filter_field) {
+            picker_sel = i;
+        }
+    }
+    picker_top = 0;
+}
+
+static void picker_process (menu_t *menu, library_category_t *c) {
+    int count = (picker_stage == 0) ? PICKER_FIELD_COUNT : picker_group_count;
+    int step = menu->actions.go_fast ? PICKER_ROWS : 1;
+
+    if (menu->actions.go_up && picker_sel > 0) {
+        picker_sel = (picker_sel - step < 0) ? 0 : picker_sel - step;
+        sound_play_effect(SFX_CURSOR);
+    } else if (menu->actions.go_down && picker_sel < count - 1) {
+        picker_sel = (picker_sel + step > count - 1) ? count - 1 : picker_sel + step;
+        sound_play_effect(SFX_CURSOR);
+    } else if (menu->actions.back) {
+        sound_play_effect(SFX_EXIT);
+        if (picker_stage == 1) {
+            picker_show_fields();
+        } else {
+            picker_close();
+        }
+        return;
+    } else if (menu->actions.enter) {
+        sound_play_effect(SFX_ENTER);
+        if (picker_stage == 0) {
+            if (picker_field_ids[picker_sel] < 0 || !c) {
+                filter_field = -1;
+                filter_value[0] = '\0';
+                picker_close();
+                return;
+            }
+            picker_field = picker_field_ids[picker_sel];
+            free(picker_groups);
+            picker_group_count = library_category_groups(c, picker_field, &picker_groups);
+            picker_stage = 1;
+            picker_sel = 0;
+            picker_top = 0;
+        } else if (picker_group_count > 0) {
+            filter_field = picker_field;
+            snprintf(filter_value, sizeof(filter_value), "%s", picker_groups[picker_sel].label);
+            picker_close();
+        }
+        return;
+    }
+
+    if (picker_sel < picker_top) {
+        picker_top = picker_sel;
+    }
+    if (picker_sel >= picker_top + PICKER_ROWS) {
+        picker_top = picker_sel - PICKER_ROWS + 1;
+    }
+}
+
+static void picker_draw (void) {
+    color_t line = theme_current()->line;
+    launcher_fill_rounded(LAUNCHER_X0 - 2, PICKER_TOP - 2, LAUNCHER_X1 + 2, PICKER_BOTTOM + 2, 14, line);
+    launcher_fill_rounded(LAUNCHER_X0, PICKER_TOP, LAUNCHER_X1, PICKER_BOTTOM, 12, theme_current()->panel);
+
+    char title[96];
+    if (picker_stage == 0) {
+        snprintf(title, sizeof(title), "Filter");
+    } else {
+        snprintf(title, sizeof(title), "Filter");
+        for (int i = 0; i < PICKER_FIELD_COUNT; i++) {
+            if (picker_field_ids[i] == picker_field) {
+                snprintf(title, sizeof(title), "Filter by %s", picker_field_names[i]);
+            }
+        }
+    }
+    launcher_title(LAUNCHER_X0 + 20, PICKER_TOP + 10, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_DEFAULT, title);
+
+    int count = (picker_stage == 0) ? PICKER_FIELD_COUNT : picker_group_count;
+    if (count == 0) {
+        launcher_text(LAUNCHER_X0, PICKER_FIRST_ROW_Y + 40, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No game details here");
+        return;
+    }
+    for (int r = 0; r < PICKER_ROWS; r++) {
+        int i = picker_top + r;
+        if (i >= count) {
+            break;
+        }
+        int y = PICKER_FIRST_ROW_Y + r * PICKER_ROW_H;
+        if (i == picker_sel) {
+            launcher_fill_rounded(LAUNCHER_X0 + 12, y - 3, LAUNCHER_X1 - 12, y + PICKER_ROW_H - 5, 6, theme_current()->highlight);
+        }
+        if (picker_stage == 0) {
+            launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH / 2, ALIGN_LEFT, STL_DEFAULT, picker_field_names[i]);
+            if (picker_field_ids[i] >= 0 && picker_field_ids[i] == filter_field) {
+                launcher_name(LAUNCHER_X0 + LAUNCHER_WIDTH / 2, y, LAUNCHER_WIDTH / 2 - 24, ALIGN_RIGHT, STL_ACCENT, filter_value);
+            }
+        } else {
+            launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 110, ALIGN_LEFT, STL_DEFAULT, picker_groups[i].label);
+            launcher_text(LAUNCHER_X1 - 84, y, 60, ALIGN_RIGHT, STL_GRAY, "%d", picker_groups[i].count);
+        }
+    }
+    if (picker_top + PICKER_ROWS < count) {
+        launcher_small(LAUNCHER_X0, PICKER_BOTTOM - 22, LAUNCHER_WIDTH - 24, ALIGN_RIGHT, STL_GRAY, "more below");
+    }
+}
+
 static void launch (menu_t *menu, library_game_t *game) {
     path_free(menu->load.launcher_rom_path);
     menu->load.launcher_rom_path = library_game_path(game);
     menu->load.load_history_id = -1;
     menu->load.load_favorite_id = -1;
+    menu->load.quick_start = menu->settings.launcher_quick_launch;
     sound_play_effect(SFX_ENTER);
     launcher_leave(menu, MENU_MODE_LOAD_ROM);
 }
@@ -216,8 +362,38 @@ static void process (menu_t *menu) {
         return;
     }
 
+    library_category_t *current = library_category(category_index);
+    if (current) {
+        apply_sort(current, category_index);
+    }
+
+    if (picker_open) {
+        picker_process(menu, current);
+        return;
+    }
+
+    launcher_request_t request = launcher_take_request();
+    if (request == LAUNCHER_REQUEST_FILTER) {
+        picker_show_fields();
+        return;
+    }
+    if (request == LAUNCHER_REQUEST_SURPRISE && current && current->shown > 0) {
+        static bool seeded = false;
+        if (!seeded) {
+            srand(TICKS_READ());
+            seeded = true;
+        }
+        *current_selection() = rand() % current->shown;
+        snprintf(group_badge, sizeof(group_badge), "Surprise!");
+        group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+        sound_play_effect(SFX_ENTER);
+        return;
+    }
+
     if (menu->actions.settings) {
-        launcher_menu_show();
+        int sel = *current_selection();
+        path_t *rom = (current && sel < current->shown) ? library_game_path(&current->games[sel]) : NULL;
+        launcher_menu_show(menu, rom);
         return;
     }
     if (menu->actions.back) {
@@ -245,14 +421,14 @@ static void process (menu_t *menu) {
     }
 
     library_category_t *c = library_category(category_index);
-    if (!c || c->count == 0) {
+    if (!c || c->shown == 0) {
         return;
     }
     apply_sort(c, category_index);
 
     int *sel = current_selection();
-    if (*sel >= c->count) {
-        *sel = c->count - 1;
+    if (*sel >= c->shown) {
+        *sel = c->shown - 1;
     }
     int previous = *sel;
 
@@ -262,7 +438,7 @@ static void process (menu_t *menu) {
             show_group_badge(c, *sel);
         } else if (menu->actions.go_left && *sel > 0) {
             *sel -= 1;
-        } else if (menu->actions.go_right && *sel < c->count - 1) {
+        } else if (menu->actions.go_right && *sel < c->shown - 1) {
             *sel += 1;
         }
         if (*sel != previous) {
@@ -296,18 +472,18 @@ static void process (menu_t *menu) {
 
     if (menu->actions.go_left && *sel > 0) {
         *sel -= 1;
-    } else if (menu->actions.go_right && *sel < c->count - 1) {
+    } else if (menu->actions.go_right && *sel < c->shown - 1) {
         *sel += 1;
     } else if (menu->actions.go_up) {
         if (*sel - step >= 0) {
             *sel -= step;
         }
     } else if (menu->actions.go_down) {
-        if (*sel + step < c->count) {
+        if (*sel + step < c->shown) {
             *sel += step;
-        } else if ((*sel / g.cols) < ((c->count - 1) / g.cols)) {
+        } else if ((*sel / g.cols) < ((c->shown - 1) / g.cols)) {
             // A shorter last row: land on its last game.
-            *sel = c->count - 1;
+            *sel = c->shown - 1;
         }
     }
 
@@ -352,20 +528,20 @@ static void preload_category (menu_t *menu, int index, int *lookups_left) {
         return;
     }
     library_category_t *c = library_category(index);
-    if (!c || c->count == 0) {
+    if (!c || c->shown == 0) {
         return;
     }
     apply_sort(c, index);
     int sel = selections[index % MAX_REMEMBERED_CATEGORIES];
-    if (sel >= c->count) {
-        sel = c->count - 1;
+    if (sel >= c->shown) {
+        sel = c->shown - 1;
     }
     bool pending;
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
         int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
         int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
         for (int i = sel - 2; i <= sel + 2; i++) {
-            if (i >= 0 && i < c->count) {
+            if (i >= 0 && i < c->shown) {
                 game_cover(menu, &c->games[i], cw, ch, lookups_left, &pending);
             }
         }
@@ -373,7 +549,7 @@ static void preload_category (menu_t *menu, int index, int *lookups_left) {
     }
     grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
     int first = grid_first_visible(&g, sel);
-    for (int i = first; i < first + g.cols * g.rows && i < c->count; i++) {
+    for (int i = first; i < first + g.cols * g.rows && i < c->shown; i++) {
         game_cover(menu, &c->games[i], g.w, g.h, lookups_left, &pending);
     }
 }
@@ -404,7 +580,7 @@ static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, i
             int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
             int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
             for (int i = target - 2; i <= target + 2; i++) {
-                if (i >= 0 && i < c->count) {
+                if (i >= 0 && i < c->shown) {
                     game_cover(menu, &c->games[i], cw, ch, lookups_left, &pending);
                 }
             }
@@ -412,7 +588,7 @@ static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, i
             grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
             int row = target / g.cols;
             int top = (row < top_row) ? row : ((row >= top_row + g.rows) ? row - g.rows + 1 : top_row);
-            for (int i = top * g.cols; i < (top + g.rows) * g.cols && i < c->count; i++) {
+            for (int i = top * g.cols; i < (top + g.rows) * g.cols && i < c->shown; i++) {
                 game_cover(menu, &c->games[i], g.w, g.h, lookups_left, &pending);
             }
         }
@@ -447,8 +623,8 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
     int first = top_row * g.cols;
     int last = first + g.rows * g.cols;
-    if (last > c->count) {
-        last = c->count;
+    if (last > c->shown) {
+        last = c->shown;
     }
 
     for (int i = first; i < last; i++) {
@@ -478,7 +654,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
     // Preload the row below so scrolling down shows covers straight away.
     bool any_pending = false;
-    for (int i = first; i < last + g.cols && i < c->count; i++) {
+    for (int i = first; i < last + g.cols && i < c->shown; i++) {
         game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
         any_pending |= pending;
     }
@@ -529,7 +705,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
                 continue;
             }
             int i = (int)roundf(carousel_position) + side * reach;
-            if (i < 0 || i >= c->count) {
+            if (i < 0 || i >= c->shown) {
                 continue;
             }
             float center_x, scale;
@@ -558,9 +734,9 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     char group[48];
     library_game_group(&c->games[sel], current_sort, group, sizeof(group));
     if (current_sort == LAUNCHER_SORT_TITLE) {
-        snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->count);
+        snprintf(position, sizeof(position), "%s  -  %d of %d", c->name, sel + 1, c->shown);
     } else {
-        snprintf(position, sizeof(position), "%s  -  %s  -  %d of %d", c->name, group, sel + 1, c->count);
+        snprintf(position, sizeof(position), "%s  -  %s  -  %d of %d", c->name, group, sel + 1, c->shown);
     }
     if (!pending && carousel_position == (float)sel) {
         preload_group_jumps(menu, c, sel, &lookups_left);
@@ -569,6 +745,12 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 
     launcher_title(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
     launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y + 32, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, position);
+
+    char details[160];
+    library_game_details(&c->games[sel], details, sizeof(details));
+    if (details[0]) {
+        launcher_small(LAUNCHER_X0, CAROUSEL_TITLE_Y + 58, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
+    }
 }
 
 static void draw (menu_t *menu, surface_t *d) {
@@ -589,24 +771,42 @@ static void draw (menu_t *menu, surface_t *d) {
         draw_category_tabs();
         apply_sort(c, category_index);
         int *sel = current_selection();
-        if (c->count == 0) {
-            launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "This folder has no games");
+        if (c->shown == 0) {
+            if (filter_field >= 0) {
+                launcher_name(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No games here match the filter");
+                launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Start > Filter to change it");
+            } else {
+                launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "This folder has no games");
+            }
         } else {
-            if (*sel >= c->count) {
-                *sel = c->count - 1;
+            if (*sel >= c->shown) {
+                *sel = c->shown - 1;
             }
             if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
                 draw_carousel(menu, c, *sel);
             } else {
                 char group[48];
-                char counter[96];
+                char counter[128];
                 library_game_group(&c->games[*sel], current_sort, group, sizeof(group));
-                snprintf(counter, sizeof(counter), "%s   %d / %d", group, *sel + 1, c->count);
+                if (filter_field >= 0) {
+                    snprintf(counter, sizeof(counter), "Filter: %s   %d / %d", filter_value, *sel + 1, c->shown);
+                } else {
+                    snprintf(counter, sizeof(counter), "%s   %d / %d", group, *sel + 1, c->shown);
+                }
                 launcher_name(LAUNCHER_X0 + 300, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH - 300, ALIGN_RIGHT, STL_GRAY, counter);
                 draw_grid(menu, c, *sel);
+
+                char details[160];
+                library_game_details(&c->games[*sel], details, sizeof(details));
+                if (details[0]) {
+                    launcher_small(LAUNCHER_X0, INFO_LINE_Y, LAUNCHER_WIDTH, ALIGN_LEFT, STL_GRAY, details);
+                }
             }
         }
-        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+        if (picker_open) {
+            picker_draw();
+            launcher_draw_footer(hints_picker, HINT_COUNT(hints_picker));
+        } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
             launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
         } else {
             launcher_draw_footer(hints_grid, HINT_COUNT(hints_grid));

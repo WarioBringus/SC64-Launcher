@@ -208,6 +208,12 @@ int launcher_name (int x, int y, int width, rdpq_align_t align, menu_font_style_
     return text_box(x, y, width, TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
+int launcher_small (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text) {
+    char escaped[256];
+    escape_text_codes(text, escaped, sizeof(escaped));
+    return text_box_font(font_for(escaped, FNT_SMALL), x, y, width, HINT_TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
+}
+
 int launcher_title (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name) {
     char escaped[256];
     escape_text_codes(name, escaped, sizeof(escaped));
@@ -592,24 +598,6 @@ static component_context_menu_t sort_menu = {
     }
 };
 
-static void set_screen (menu_t *menu, void *arg) {
-    menu->settings.launcher_widescreen = (bool)(uintptr_t)(arg);
-    settings_save(&menu->settings);
-}
-
-static int get_screen_selection (menu_t *menu) {
-    return menu->settings.launcher_widescreen ? 1 : 0;
-}
-
-static component_context_menu_t screen_menu = {
-    .get_default_selection = get_screen_selection,
-    .list = {
-        { .text = "4:3", .action = set_screen, .arg = (void *)(uintptr_t)(false) },
-        { .text = "16:9 (stretched by the TV)", .action = set_screen, .arg = (void *)(uintptr_t)(true) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
-
 static void set_titles (menu_t *menu, void *arg) {
     menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
     settings_save(&menu->settings);
@@ -628,6 +616,66 @@ static component_context_menu_t titles_menu = {
     }
 };
 
+/* Start menu state: the highlighted game, and requests for the library view. */
+static path_t *selected_rom = NULL;
+static launcher_request_t pending_request = LAUNCHER_REQUEST_NONE;
+static bool favorites_changed = false;
+static char favorite_label[32] = "Add to favorites";
+
+static int favorite_index (menu_t *menu, path_t *rom) {
+    for (int i = 0; rom && i < FAVORITES_COUNT; i++) {
+        bookkeeping_item_t *item = &menu->bookkeeping.favorite_items[i];
+        if (item->bookkeeping_type == BOOKKEEPING_TYPE_ROM && path_are_match(item->primary_path, rom)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void toggle_favorite (menu_t *menu, void *arg) {
+    (void)arg;
+    if (!selected_rom) {
+        return;
+    }
+    int index = favorite_index(menu, selected_rom);
+    if (index >= 0) {
+        bookkeeping_favorite_remove(&menu->bookkeeping, index);
+    } else {
+        bookkeeping_favorite_add(&menu->bookkeeping, selected_rom, NULL, BOOKKEEPING_TYPE_ROM);
+    }
+    favorites_changed = true;
+}
+
+static void request (menu_t *menu, launcher_request_t r) {
+    pending_request = r;
+    // These act on the library; from Home, go there first.
+    if (menu->mode == MENU_MODE_HOME) {
+        menu->next_mode = MENU_MODE_LIBRARY;
+    }
+}
+
+static void surprise_me (menu_t *menu, void *arg) {
+    (void)arg;
+    request(menu, LAUNCHER_REQUEST_SURPRISE);
+}
+
+static void open_filter (menu_t *menu, void *arg) {
+    (void)arg;
+    request(menu, LAUNCHER_REQUEST_FILTER);
+}
+
+launcher_request_t launcher_take_request (void) {
+    launcher_request_t r = pending_request;
+    pending_request = LAUNCHER_REQUEST_NONE;
+    return r;
+}
+
+bool launcher_take_favorites_changed (void) {
+    bool changed = favorites_changed;
+    favorites_changed = false;
+    return changed;
+}
+
 static void rescan_folders (menu_t *menu, void *arg) {
     (void)arg;
     launcher_covers_reset();
@@ -636,12 +684,14 @@ static void rescan_folders (menu_t *menu, void *arg) {
 
 static component_context_menu_t start_menu = {
     .list = {
+        { .text = favorite_label, .action = toggle_favorite },
         { .text = "Sort by", .submenu = &sort_menu },
+        { .text = "Filter", .action = open_filter },
+        { .text = "Surprise me", .action = surprise_me },
         { .text = "Theme", .submenu = &theme_menu },
         { .text = "Tile size", .submenu = &tile_size_menu },
         { .text = "Layout", .submenu = &layout_menu },
         { .text = "Game titles", .submenu = &titles_menu },
-        { .text = "Screen", .submenu = &screen_menu },
         { .text = "Rescan folders", .action = rescan_folders },
         { .text = "File browser", .action = open_file_browser },
         { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
@@ -662,7 +712,11 @@ void launcher_menu_init (void) {
     ui_components_context_menu_init(&start_menu);
 }
 
-void launcher_menu_show (void) {
+void launcher_menu_show (menu_t *menu, path_t *rom) {
+    path_free(selected_rom);
+    selected_rom = rom;
+    snprintf(favorite_label, sizeof(favorite_label), "%s",
+        favorite_index(menu, rom) >= 0 ? "Remove from favorites" : "Add to favorites");
     ui_components_context_menu_show(&start_menu);
     sound_play_effect(SFX_SETTING);
 }

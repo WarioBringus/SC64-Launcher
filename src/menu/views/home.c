@@ -200,7 +200,9 @@ static void launch (menu_t *menu, home_item_t *h) {
         menu->load.load_favorite_id = -1;
     }
     sound_play_effect(SFX_ENTER);
-    launcher_leave(menu, (h->item->bookkeeping_type == BOOKKEEPING_TYPE_DISK) ? MENU_MODE_LOAD_DISK : MENU_MODE_LOAD_ROM);
+    bool disk = (h->item->bookkeeping_type == BOOKKEEPING_TYPE_DISK);
+    menu->load.quick_start = !disk && menu->settings.launcher_quick_launch;
+    launcher_leave(menu, disk ? MENU_MODE_LOAD_DISK : MENU_MODE_LOAD_ROM);
 }
 
 static void process (menu_t *menu) {
@@ -209,7 +211,11 @@ static void process (menu_t *menu) {
     }
 
     if (menu->actions.settings) {
-        launcher_menu_show();
+        path_t *rom = NULL;
+        if (row_count > 0 && rows[row_selected].count > 0) {
+            rom = path_clone(rows[row_selected].items[rows[row_selected].selected].item->primary_path);
+        }
+        launcher_menu_show(menu, rom);
         return;
     }
     if (menu->actions.shoulder_r) {
@@ -269,6 +275,12 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
     snprintf(where, sizeof(where), "Last played  -  %s", folder);
     launcher_title(RESUME_TEXT_X, y + 50, text_w, ALIGN_LEFT, STL_DEFAULT, h->title);
     launcher_name(RESUME_TEXT_X, y + 84, text_w, ALIGN_LEFT, STL_GRAY, where);
+
+    char details[160];
+    library_details_for_path(menu, h->item->primary_path, details, sizeof(details));
+    if (details[0]) {
+        launcher_small(RESUME_TEXT_X, y + 108, text_w, ALIGN_LEFT, STL_GRAY, details);
+    }
     return y + RESUME_CARD_H + ROW_GAP;
 }
 
@@ -351,6 +363,9 @@ void view_home_init (menu_t *menu) {
 
 void view_home_display (menu_t *menu, surface_t *display) {
     launcher_set_widescreen(menu->settings.launcher_widescreen);
+    if (launcher_take_favorites_changed()) {
+        build_rows(menu);
+    }
 
     process(menu);
 

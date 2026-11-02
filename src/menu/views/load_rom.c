@@ -988,6 +988,10 @@ static void deinit (void) {
 
 
 void view_load_rom_init (menu_t *menu) {
+    // Launcher quick launch: start the game once this screen has loaded it (same checks as pressing A).
+    bool quick_start = menu->load.quick_start;
+    menu->load.quick_start = false;
+
     // Must run unconditionally before any rom_info_free_meta()/rom_config_load() below:
     // metadata_image_names may hold borrowed pointers into the ROM metadata about to be
     // freed/replaced (e.g. on the Datel code editor return path, which skips deinit()).
@@ -1086,6 +1090,13 @@ void view_load_rom_init (menu_t *menu) {
     }
 #endif
 
+    if (quick_start) {
+        if (rom_requires_missing_expansion_pak(menu)) {
+            show_expansion_pak_warning = true;
+        } else {
+            menu->load_pending.rom_file = true;
+        }
+    }
 }
 
 void view_load_rom_display (menu_t *menu, surface_t *display) {

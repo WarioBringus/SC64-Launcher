@@ -143,6 +143,7 @@ typedef struct {
         int32_t load_history_id;
         int32_t load_favorite_id;
         path_t *launcher_rom_path;
+        bool quick_start;       /**< Start the ROM as soon as its screen has loaded (launcher quick launch) */
         bool combined_disk_rom;
     } load;
 

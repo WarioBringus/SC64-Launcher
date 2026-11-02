@@ -47,6 +47,7 @@ static settings_t init = {
     .launcher_tile_size = LAUNCHER_TILE_MEDIUM,
     .launcher_sort = LAUNCHER_SORT_TITLE,
     .launcher_widescreen = false,
+    .launcher_quick_launch = false,
     .launcher_titles_highlight_only = true,
     .launcher_home_resume = true,
     .launcher_home_recent = true,
@@ -119,6 +120,7 @@ void settings_load (settings_t *settings) {
     settings->launcher_tile_size = ini_get_int(ini, "launcher", "tile_size", init.launcher_tile_size);
     settings->launcher_sort = ini_get_int(ini, "launcher", "sort", init.launcher_sort);
     settings->launcher_widescreen = ini_get_bool(ini, "launcher", "widescreen", init.launcher_widescreen);
+    settings->launcher_quick_launch = ini_get_bool(ini, "launcher", "quick_launch", init.launcher_quick_launch);
     if (settings->launcher_sort < LAUNCHER_SORT_TITLE || settings->launcher_sort > LAUNCHER_SORT_PLAYERS) {
         settings->launcher_sort = init.launcher_sort;
     }
@@ -178,6 +180,7 @@ void settings_save (settings_t *settings) {
     ini_set_int(ini, "launcher", "tile_size", settings->launcher_tile_size);
     ini_set_int(ini, "launcher", "sort", settings->launcher_sort);
     ini_set_bool(ini, "launcher", "widescreen", settings->launcher_widescreen);
+    ini_set_bool(ini, "launcher", "quick_launch", settings->launcher_quick_launch);
     ini_set_bool(ini, "launcher", "titles_highlight_only", settings->launcher_titles_highlight_only);
     ini_set_bool(ini, "launcher", "home_resume", settings->launcher_home_resume);
     ini_set_bool(ini, "launcher", "home_recent", settings->launcher_home_recent);

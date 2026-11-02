@@ -116,6 +116,9 @@ typedef struct {
     /** @brief Draw the launcher for a 16:9 display (the TV or Analogue 3D stretches it) */
     bool launcher_widescreen;
 
+    /** @brief A starts the game straight away, skipping the ROM details screen */
+    bool launcher_quick_launch;
+
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 
