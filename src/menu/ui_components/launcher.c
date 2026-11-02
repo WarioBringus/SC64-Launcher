@@ -26,6 +26,8 @@
 
 #define HEADER_TAB_SPACING      (24)
 #define HEADER_UNDERLINE_Y      (LAUNCHER_HEADER_Y + 21)
+#define HEADER_NOTE_X           (150)   /* Header notes start right of the Home / Library tabs... */
+#define HEADER_CLOCK_W          (90)    /* ...and stop short of the clock */
 #define TEXT_HEIGHT             (24)
 #define TITLE_HEIGHT            (30)
 #define TILE_RADIUS             (6)
@@ -350,7 +352,35 @@ void launcher_draw_new_games_notice (void) {
     }
     char text[128];
     snprintf(text, sizeof(text), "%d new game%s: run the cover tool", count, count == 1 ? "" : "s");
-    launcher_small(LAUNCHER_X0 + 150, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH - 150 - 90, ALIGN_RIGHT, STL_ACCENT, text);
+    launcher_small(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W,
+        ALIGN_RIGHT, STL_ACCENT, text);
+}
+
+#define NOW_PLAYING_MS      (4000)
+
+static uint32_t now_playing_generation = 0;
+static uint64_t now_playing_until_ms = 0;
+
+/**
+ * @brief "Now playing: ..." in the header between the tabs and the clock, for a few seconds when a track starts.
+ *
+ * @return Whether it was drawn.
+ */
+static bool draw_now_playing (void) {
+    uint32_t generation = sound_bgm_track_generation();
+    if (generation != now_playing_generation) {
+        now_playing_generation = generation;
+        now_playing_until_ms = get_ticks_ms() + NOW_PLAYING_MS;
+    }
+    const char *name = sound_bgm_track_name();
+    if (!name || !sound_bgm_is_playing() || get_ticks_ms() > now_playing_until_ms) {
+        return false;
+    }
+    char text[128];
+    snprintf(text, sizeof(text), "Now playing: %s", name);
+    launcher_small(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W,
+        ALIGN_RIGHT, STL_GRAY, text);
+    return true;
 }
 
 void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
@@ -373,7 +403,10 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
         strftime(clock, sizeof(clock), "%I:%M %p", t);
         launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock[0] == '0' ? clock + 1 : clock);
     }
-    launcher_draw_new_games_notice();
+    // The music note takes the spot for its few seconds; the new games notice comes back after.
+    if (!draw_now_playing()) {
+        launcher_draw_new_games_notice();
+    }
 }
 
 int launcher_draw_pill (int x, int y, const char *name, bool active) {
@@ -409,31 +442,6 @@ static bool is_c_button (launcher_button_t kind) {
     return kind == LAUNCHER_BUTTON_C_UP_DOWN || kind == LAUNCHER_BUTTON_C_LEFT_RIGHT;
 }
 
-#define NOW_PLAYING_MS      (4000)
-
-static uint32_t now_playing_generation = 0;
-static uint64_t now_playing_until_ms = 0;
-
-/** @brief "Now playing: ..." at the left of the footer, in the width the hints leave. */
-static void draw_now_playing (int x1, int y) {
-    uint32_t generation = sound_bgm_track_generation();
-    if (generation != now_playing_generation) {
-        now_playing_generation = generation;
-        now_playing_until_ms = get_ticks_ms() + NOW_PLAYING_MS;
-    }
-    const char *name = sound_bgm_track_name();
-    if (!name || !sound_bgm_is_playing() || get_ticks_ms() > now_playing_until_ms) {
-        return;
-    }
-    int width = x1 - LAUNCHER_X0;
-    if (width < 80) {
-        return;
-    }
-    char text[128];
-    snprintf(text, sizeof(text), "Now playing: %s", name);
-    launcher_small(LAUNCHER_X0, y, width, ALIGN_LEFT, STL_GRAY, text);
-}
-
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
 
@@ -455,7 +463,6 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     int x = LAUNCHER_X1 - total;
     int y = LAUNCHER_FOOTER_Y + 12;
     int text_y = y - (HINT_TEXT_HEIGHT - HINT_BUTTON_SIZE) / 2;
-    draw_now_playing(x - HINT_GAP * 2, text_y);
     for (int i = 0; i < count; i++) {
         color_t color;
         switch (hints[i].kind) {
