@@ -23,6 +23,7 @@
 #include "../theme.h"
 #include "../ui_components.h"
 #include "utils/fs.h"
+#include "constants.h"
 
 #define HEADER_TAB_SPACING      (24)
 #define HEADER_UNDERLINE_Y      (LAUNCHER_HEADER_Y + 21)
@@ -362,10 +363,97 @@ void launcher_draw_new_games_notice (void) {
 #define LOADING_BAR_H       (8)
 #define LOADING_STATUS_Y    (246)
 
+#define LAUNCH_COVER_MAX_W  (240)
+#define LAUNCH_COVER_MAX_H  (180)
+#define LAUNCH_COVER_ZOOM   (1.5f)  /* Covers are tile-sized thumbnails: grow them no more than this */
+#define LAUNCH_GROW_MS      (300)
+
+static surface_t *focused_image = NULL;     /* Cover in the focused tile this frame (owned by the cover cache) */
+static int focused_x, focused_y;
+static surface_t launch_cover;              /* Our own copy: the cover cache is freed when the launcher is left */
+static bool launch_cover_valid = false;
+static int launch_from_x, launch_from_y;
+static uint64_t launch_grow_start_ms = 0;
+
+void launcher_note_focused_cover (surface_t *image, int x, int y, int w, int h) {
+    if (!image) {
+        return;
+    }
+    focused_image = image;
+    focused_x = x + (w - image->width) / 2;
+    focused_y = y + (h - image->height) / 2;
+}
+
+void launcher_clear_focused_cover (void) {
+    focused_image = NULL;
+}
+
+void launcher_launch_cover_free (void) {
+    if (launch_cover_valid) {
+        surface_free(&launch_cover);
+        launch_cover_valid = false;
+    }
+}
+
+static void launch_cover_take (void) {
+    launcher_launch_cover_free();
+    if (!focused_image || !focused_image->buffer) {
+        return;
+    }
+    tex_format_t format = surface_get_format(focused_image);
+    if (format != FMT_RGBA16 && format != FMT_RGBA32) {
+        return;     // Palette formats would need their palette too; just skip the animation.
+    }
+    launch_cover = surface_alloc(format, focused_image->width, focused_image->height);
+    if (!launch_cover.buffer) {
+        return;
+    }
+    int row_bytes = TEX_FORMAT_PIX2BYTES(format, focused_image->width);
+    for (int row = 0; row < focused_image->height; row++) {
+        memcpy((uint8_t *)launch_cover.buffer + row * launch_cover.stride,
+               (uint8_t *)focused_image->buffer + row * focused_image->stride, row_bytes);
+    }
+    launch_cover_valid = true;
+    launch_from_x = focused_x;
+    launch_from_y = focused_y;
+    launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
+}
+
 void launcher_draw_loading (const char *title, float progress, const char *status) {
     launcher_draw_background();
+
+    int title_y = LOADING_TITLE_Y;
+    int bar_y = LOADING_BAR_Y;
+    int status_y = LOADING_STATUS_Y;
+    if (launch_cover_valid) {
+        // The cover sits above the name, and the whole block stays centered on screen.
+        float scale = fminf(LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
+                                                     (float)LAUNCH_COVER_MAX_H / launch_cover.height));
+        int dw = (int)(launch_cover.width * scale);
+        int dh = (int)(launch_cover.height * scale);
+        int block_h = dh + (LOADING_STATUS_Y - LOADING_TITLE_Y) + 44;
+        int dy = (DISPLAY_HEIGHT - block_h) / 2;
+        int dx = LAUNCHER_CENTER_X - dw / 2;
+        title_y = dy + dh + 26;
+        bar_y = title_y + (LOADING_BAR_Y - LOADING_TITLE_Y);
+        status_y = title_y + (LOADING_STATUS_Y - LOADING_TITLE_Y);
+
+        // Grow from the tile it was launched from, easing out.
+        uint64_t now = get_ticks_ms();
+        if (launch_grow_start_ms == 0) {
+            launch_grow_start_ms = now;
+        }
+        float t = (progress >= 1.0f) ? 1.0f : fminf(1.0f, (float)(now - launch_grow_start_ms) / LAUNCH_GROW_MS);
+        float e = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+        int x = launch_from_x + (int)((dx - launch_from_x) * e);
+        int y = launch_from_y + (int)((dy - launch_from_y) * e);
+        int w = launch_cover.width + (int)((dw - launch_cover.width) * e);
+        int h = launch_cover.height + (int)((dh - launch_cover.height) * e);
+        launcher_draw_cover_scaled(&launch_cover, x, y, w, h, theme_current()->bg);
+    }
+
     if (title && title[0]) {
-        launcher_title(LAUNCHER_X0, LOADING_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, title);
+        launcher_title(LAUNCHER_X0, title_y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, title);
     }
 
     if (progress < 0.0f) {
@@ -376,10 +464,10 @@ void launcher_draw_loading (const char *title, float progress, const char *statu
     }
     int x0 = LAUNCHER_CENTER_X - LOADING_BAR_W / 2;
     int x1 = x0 + LOADING_BAR_W;
-    launcher_fill_rounded(x0, LOADING_BAR_Y, x1, LOADING_BAR_Y + LOADING_BAR_H, LOADING_BAR_H / 2, theme_current()->panel);
+    launcher_fill_rounded(x0, bar_y, x1, bar_y + LOADING_BAR_H, LOADING_BAR_H / 2, theme_current()->panel);
     int filled = (int)(progress * LOADING_BAR_W);
     if (filled >= LOADING_BAR_H) {
-        launcher_fill_rounded(x0, LOADING_BAR_Y, x0 + filled, LOADING_BAR_Y + LOADING_BAR_H, LOADING_BAR_H / 2, theme_current()->accent);
+        launcher_fill_rounded(x0, bar_y, x0 + filled, bar_y + LOADING_BAR_H, LOADING_BAR_H / 2, theme_current()->accent);
     }
 
     char text[64];
@@ -387,7 +475,7 @@ void launcher_draw_loading (const char *title, float progress, const char *statu
         snprintf(text, sizeof(text), "Loading %d%%", (int)(progress * 100.0f));
         status = text;
     }
-    launcher_small(LAUNCHER_X0, LOADING_STATUS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, status);
+    launcher_small(LAUNCHER_X0, status_y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, status);
 }
 
 #define NOW_PLAYING_MS      (4000)
@@ -610,6 +698,7 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
     color_t edge = behind;
     if (selected) {
         launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
+        launcher_note_focused_cover(image, x, y, w, h);
     }
 
     // Covers that nearly fill the tile are drawn edge to edge; others sit on a rounded panel.
@@ -668,6 +757,11 @@ void launcher_leave (menu_t *menu, menu_mode_t next_mode) {
     // Category, tile size and layout changes made with the controller are saved here, in one write,
     // rather than on every button press (an SD card write is a visible stall).
     settings_save(&menu->settings);
+    if (next_mode == MENU_MODE_LOAD_ROM && menu->load.quick_start) {
+        launch_cover_take();
+    } else {
+        launcher_launch_cover_free();
+    }
     menu->launcher_return_mode = menu->mode;
     menu->next_mode = next_mode;
 }

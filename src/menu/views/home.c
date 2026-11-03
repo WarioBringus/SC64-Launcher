@@ -264,6 +264,9 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
     int cover_y = y + (RESUME_CARD_H - LAUNCHER_COVER_H) / 2;
     surface_t *image = item_image(menu, h, LAUNCHER_COVER_W, LAUNCHER_COVER_H, lookups_left, &pending);
     launcher_draw_tile(RESUME_COVER_X, cover_y, LAUNCHER_COVER_W, LAUNCHER_COVER_H, image, pending, h->title, false, theme_current()->panel);
+    if (focused) {
+        launcher_note_focused_cover(image, RESUME_COVER_X, cover_y, LAUNCHER_COVER_W, LAUNCHER_COVER_H);
+    }
 
     // The folder the game lives in, e.g. "N64 USA".
     char folder[64] = "";

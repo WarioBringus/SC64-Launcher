@@ -222,6 +222,7 @@ static void slot_free (cover_slot_t *slot) {
 
 void launcher_covers_begin_frame (void) {
     frame++;
+    launcher_clear_focused_cover();
     pack_time_used_us = 0;
     pack_read_this_frame = false;
     if (slot_count == 0) {

@@ -182,6 +182,15 @@ void launcher_draw_new_games_notice(void);
  */
 void launcher_draw_loading(const char *title, float progress, const char *status);
 
+/** @brief Note the cover in the focused tile this frame (the one a quick launch grows from). */
+void launcher_note_focused_cover(surface_t *image, int x, int y, int w, int h);
+
+/** @brief Forget the focused cover; called at the start of every launcher frame. */
+void launcher_clear_focused_cover(void);
+
+/** @brief Drop the copy of the launched game's cover shown on the loading card. */
+void launcher_launch_cover_free(void);
+
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 

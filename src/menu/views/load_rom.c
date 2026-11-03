@@ -1035,6 +1035,9 @@ void view_load_rom_init (menu_t *menu) {
     bool quick_start = menu->load.quick_start;
     menu->load.quick_start = false;
     quick_loading = false;
+    if (!quick_start) {
+        launcher_launch_cover_free();
+    }
     launcher_loader = menu->settings.launcher_enabled;
 
     // Must run unconditionally before any rom_info_free_meta()/rom_config_load() below:
