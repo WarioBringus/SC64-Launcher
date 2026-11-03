@@ -40,6 +40,7 @@
 #define HINT_ICON_GAP           (5)
 #define HINT_GAP                (14)
 #define WIDTH_CACHE_SIZE        (48)
+#define FIT_SLACK               (32)    // physical pixels, wider than any glyph's advance
 
 #define COVER_ALPHA_THRESHOLD   (128)   /* Scaled covers: filtered alpha below this is transparent */
 
@@ -127,6 +128,41 @@ static const char *escape_text_codes (const char *text, char *buffer, size_t siz
  */
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     int real_w = (w > 0) ? px(x + w) - px(x) : 0;
+    if (real_w > 0) {
+        // libdragon cuts a line once its last glyph plus that glyph's advance passes the box, so text
+        // that fits (Dr. Mario 64) could still end in "...". Lay it out with room to spare and keep
+        // that layout when it really fits.
+        int nbytes = (int)strlen(text);
+        rdpq_paragraph_t *layout = rdpq_paragraph_build(
+            &(rdpq_textparms_t) {
+                .style_id = style,
+                .width = real_w + FIT_SLACK,
+                .height = h,
+                .valign = valign,
+                .wrap = WRAP_ELLIPSES,
+            },
+            launcher_font(font),
+            text,
+            &nbytes
+        );
+        float text_w = layout->bbox.x1 + 1 - layout->bbox.x0;
+        if (layout->nlines == 1 && text_w <= real_w) {
+            float dx = 0;
+            if (align == ALIGN_CENTER) {
+                dx = (real_w - text_w) * 0.5f;
+            } else if (align == ALIGN_RIGHT) {
+                dx = real_w - text_w;
+            }
+            if (align != ALIGN_LEFT) {
+                dx -= layout->bbox.x0;
+            }
+            rdpq_paragraph_render(layout, px(x) + (int)dx, y);
+            int advance = (int)layout->advance_x;
+            rdpq_paragraph_free(layout);
+            return logical_width(advance);
+        }
+        rdpq_paragraph_free(layout);
+    }
     rdpq_textmetrics_t metrics = rdpq_text_printn(
         &(rdpq_textparms_t) {
             .style_id = style,
