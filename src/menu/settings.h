@@ -12,6 +12,7 @@
 typedef enum {
     LAUNCHER_LAYOUT_GRID = 0, /**< Grid of cover tiles */
     LAUNCHER_LAYOUT_CAROUSEL = 1, /**< Horizontal carousel of covers */
+    LAUNCHER_LAYOUT_SHELF = 2, /**< Box spines on a shelf, the selected game opened to its front */
 } launcher_layout_t;
 
 /** @brief Launcher library sort order */

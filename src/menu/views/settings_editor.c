@@ -505,6 +505,7 @@ static component_context_menu_t set_launcher_layout_context_menu = {
     .list = {
         {.text = "Grid", .action = set_launcher_layout_type, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_GRID) },
         {.text = "Carousel", .action = set_launcher_layout_type, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_CAROUSEL) },
+        {.text = "Shelf", .action = set_launcher_layout_type, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_SHELF) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 

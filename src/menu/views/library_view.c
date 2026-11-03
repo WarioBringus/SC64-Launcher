@@ -659,7 +659,7 @@ static void process (menu_t *menu) {
     }
     int previous = *sel;
 
-    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
         if (menu->actions.go_fast && (menu->actions.go_left || menu->actions.go_right)) {
             *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
             show_group_badge(c, *sel);
@@ -753,6 +753,9 @@ static void preload_category (menu_t *menu, int index, int *lookups_left) {
 }
 
 static void preload_category_covers (menu_t *menu, int index, int *lookups_left) {
+    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
+        return;     // The shelf reads its spines as they come into view.
+    }
     library_category_t *c = library_category(index);
     if (!c || c->shown == 0) {
         return;
@@ -784,6 +787,9 @@ static void preload_category_covers (menu_t *menu, int index, int *lookups_left)
  * @brief Load the covers shown after jumping to the next or previous group, so jumps land on ready covers.
  */
 static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, int *lookups_left) {
+    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
+        return;
+    }
     bool pending;
     // Finding group edges scans the list, so only redo it when the selection, list or sort changes.
     static library_category_t *cached_category = NULL;
@@ -1064,6 +1070,84 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     }
 }
 
+
+#define SHELF_BASE_Y        (300)   /* Top of the shelf plank: spines and the open box stand on it */
+#define SHELF_GAP           (3)
+#define SHELF_OPEN_GAP      (10)    /* Space either side of the open box */
+#define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
+#define SHELF_DETAILS_Y     (SHELF_BASE_Y + 60)
+
+static float shelf_position = 0.0f;     /* Drawn selection, gliding toward it (fractional while moving) */
+
+static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
+    int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
+    int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+    int lookups_left = 1;
+    bool pending;
+
+    // A different folder, or a jump of more than a shelf's width, appears in place.
+    static library_category_t *shelf_category = NULL;
+    if (c != shelf_category || fabsf(sel - shelf_position) > 30.0f) {
+        shelf_category = c;
+        shelf_position = (float)sel;
+        launcher_focus_reset();
+    } else {
+        shelf_position = launcher_ease(shelf_position, (float)sel);
+    }
+    motion_snap = true;     // Back in the grid, it appears in place.
+
+    // The open box sits in the middle; the shelf glides to it.
+    int lift = launcher_focus_lift(category_index * 100000 + sel);
+    int step = LAUNCHER_SPINE_W + SHELF_GAP;
+    int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step);
+
+    // The open box's cover first; while scrolling fast it is the only cover read.
+    surface_t *front = game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
+    bool front_pending = pending;
+    launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
+
+    int clip_x0 = launcher_px(LAUNCHER_X0 - 8);
+    int clip_x1 = launcher_px(LAUNCHER_X1 + 8);
+    rdpq_set_scissor(clip_x0 < 0 ? 0 : clip_x0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2,
+        clip_x1 > display_get_width() ? display_get_width() : clip_x1, SHELF_BASE_Y);
+
+    int spine_y = SHELF_BASE_Y - LAUNCHER_SPINE_H;
+    // Spines to the left, then to the right, until they leave the screen.
+    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - LAUNCHER_SPINE_W; i >= 0 && x + LAUNCHER_SPINE_W > LAUNCHER_X0 - 8; i--, x -= step) {
+        const char *path = library_game_cover(menu, &c->games[i]);
+        launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+    }
+    for (int i = sel + 1, x = open_x + cw + SHELF_OPEN_GAP; i < c->shown && x < LAUNCHER_X1 + 8; i++, x += step) {
+        const char *path = library_game_cover(menu, &c->games[i]);
+        launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+    }
+
+    // The open box, lifted a little, with the selection ring.
+    int open_y = SHELF_BASE_Y - ch - lift;
+    launcher_draw_tile(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg);
+    launcher_note_focused_cover(front, open_x, open_y, cw, ch);
+    if (game_is_favorite(menu, &c->games[sel])) {
+        launcher_draw_favorite_star(open_x, open_y, cw);
+    }
+    launcher_draw_focus_ring_tile(LAUNCHER_CENTER_X - cw / 2, SHELF_BASE_Y - ch - lift, cw, ch);
+    rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+
+    // The shelf itself.
+    launcher_fill_rounded(LAUNCHER_X0 - 8, SHELF_BASE_Y, LAUNCHER_X1 + 8, SHELF_BASE_Y + 8, 2, theme_current()->line);
+    launcher_fill_rounded(LAUNCHER_X0 - 8, SHELF_BASE_Y + 8, LAUNCHER_X1 + 8, SHELF_BASE_Y + 12, 2, theme_current()->panel);
+
+    launcher_title(LAUNCHER_X0, SHELF_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
+    char details[160];
+    library_game_details(&c->games[sel], details, sizeof(details));
+    if (details[0]) {
+        launcher_small(LAUNCHER_X0, SHELF_DETAILS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
+    }
+
+    if (!front_pending && shelf_position == (float)sel) {
+        library_check_new_games(NEW_GAMES_CHECK_US);
+    }
+}
+
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
@@ -1095,6 +1179,13 @@ static void draw (menu_t *menu, surface_t *d) {
             }
             if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
                 draw_carousel(menu, c, *sel);
+            } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
+                char group[48];
+                char counter[128];
+                library_game_group(&c->games[*sel], current_sort, group, sizeof(group));
+                snprintf(counter, sizeof(counter), "%s   %d / %d", group, *sel + 1, c->shown);
+                launcher_name(LAUNCHER_X0 + 300, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH - 300, ALIGN_RIGHT, STL_GRAY, counter);
+                draw_shelf(menu, c, *sel);
             } else {
                 char group[48];
                 char counter[128];
@@ -1123,7 +1214,7 @@ static void draw (menu_t *menu, surface_t *d) {
         } else if (picker_open) {
             picker_draw();
             launcher_draw_footer(hints_picker, HINT_COUNT(hints_picker));
-        } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+        } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
             launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
         } else {
             launcher_draw_footer(hints_grid, HINT_COUNT(hints_grid));
@@ -1188,6 +1279,7 @@ void view_library_init (menu_t *menu) {
         top_row = 0;
     }
     carousel_position = (float)(*current_selection());
+    shelf_position = carousel_position;
 }
 
 void view_library_display (menu_t *menu, surface_t *display) {

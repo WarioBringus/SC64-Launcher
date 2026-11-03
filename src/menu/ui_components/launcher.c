@@ -954,6 +954,19 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
     }
 }
 
+#define SPINE_RADIUS        (2)
+
+void launcher_draw_spine (int x, int y, surface_t *image) {
+    if (!image) {
+        launcher_fill_rounded(x, y, x + LAUNCHER_SPINE_W, y + LAUNCHER_SPINE_H, SPINE_RADIUS, theme_current()->panel);
+        return;
+    }
+    int ix = x + (LAUNCHER_SPINE_W - image->width) / 2;
+    int iy = y + (LAUNCHER_SPINE_H - image->height);    // Stand on the shelf.
+    blit_cover(image, ix, iy);
+    mask_corners(ix, iy, ix + image->width, iy + image->height, SPINE_RADIUS, theme_current()->bg);
+}
+
 void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, color_t behind) {
     float scale = fminf((float)w / image->width, (float)h / image->height);
     int dw = (int)(image->width * scale);
@@ -1091,6 +1104,7 @@ static component_context_menu_t layout_menu = {
     .list = {
         { .text = "Grid", .action = set_layout, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_GRID) },
         { .text = "Carousel", .action = set_layout, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_CAROUSEL) },
+        { .text = "Shelf", .action = set_layout, .arg = (void *)(uintptr_t)(LAUNCHER_LAYOUT_SHELF) },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };

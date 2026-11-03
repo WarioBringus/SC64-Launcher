@@ -350,7 +350,7 @@ static bool cartridge_path (const char *box, char *buffer, size_t size) {
     return library_cover_id(buffer + (rel - box) + strlen(":/menu/")) >= 0;
 }
 
-surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pending) {
+static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pending, bool spine) {
     if (pending) {
         *pending = false;
     }
@@ -358,7 +358,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
         return NULL;
     }
     char cartridge[256];
-    if (cartridge_art && cartridge_path(path, cartridge, sizeof(cartridge))) {
+    if (!spine && cartridge_art && cartridge_path(path, cartridge, sizeof(cartridge))) {
         path = cartridge;
     }
     bool want_wide = launcher_is_widescreen();
@@ -398,6 +398,12 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     bool wide_pack = (pack != NULL);
     if (!pack) {
         pack = pack_lookup(path, max_w, max_h, &id);
+    }
+    if (!pack && spine) {
+        if (pending) {
+            *pending = false;   // Spines only come from their pack.
+        }
+        return NULL;
     }
     if (pack ? !pack_budget_left() : decoding) {
         return NULL;
@@ -481,6 +487,14 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
         }
     }
     return NULL;
+}
+
+surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pending) {
+    return cover_get(path, max_w, max_h, pending, false);
+}
+
+surface_t *launcher_spine_get (const char *front_path, bool *pending) {
+    return cover_get(front_path, LAUNCHER_SPINE_W, LAUNCHER_SPINE_H, pending, true);
 }
 
 void launcher_covers_reset (void) {

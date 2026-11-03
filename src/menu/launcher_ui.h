@@ -108,6 +108,19 @@ surface_t *launcher_cover_get(const char *path, int max_w, int max_h, bool *pend
  */
 void launcher_set_cartridge_art(bool enabled);
 
+/** @brief Spine size in the spine pack (pc-tools/coverpack SPINE_PACKS). */
+#define LAUNCHER_SPINE_W        (22)
+#define LAUNCHER_SPINE_H        (158)
+
+/**
+ * @brief A game's box spine for the shelf layout, by its front cover's path. From the spine pack
+ * only: NULL when there is none (pending says whether it is still to be read).
+ */
+surface_t *launcher_spine_get(const char *front_path, bool *pending);
+
+/** @brief Draw a spine (or, without one, a plain panel) with slightly rounded corners. */
+void launcher_draw_spine(int x, int y, surface_t *image);
+
 /**
  * @brief Read a cover on screen again at a larger pack size (max_w x max_h), straight from its pack.
  * Returns a surface the caller frees, or NULL when the pack has no such cover.

@@ -139,7 +139,7 @@ void settings_load (settings_t *settings) {
     settings->launcher_home_resume = ini_get_bool(ini, "launcher", "home_resume", init.launcher_home_resume);
     settings->launcher_home_recent = ini_get_bool(ini, "launcher", "home_recent", init.launcher_home_recent);
     settings->launcher_home_favorites = ini_get_bool(ini, "launcher", "home_favorites", init.launcher_home_favorites);
-    if (settings->launcher_layout < LAUNCHER_LAYOUT_GRID || settings->launcher_layout > LAUNCHER_LAYOUT_CAROUSEL) {
+    if (settings->launcher_layout < LAUNCHER_LAYOUT_GRID || settings->launcher_layout > LAUNCHER_LAYOUT_SHELF) {
         settings->launcher_layout = init.launcher_layout;
     }
     if (settings->launcher_tile_size < LAUNCHER_TILE_SMALL || settings->launcher_tile_size > LAUNCHER_TILE_LARGE) {
