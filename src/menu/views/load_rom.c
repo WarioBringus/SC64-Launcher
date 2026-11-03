@@ -886,6 +886,15 @@ static void draw (menu_t *menu, surface_t *d) {
 
 static void draw_progress (float progress) {
     sound_bgm_keep_alive();
+
+    // The load calls this often to keep the music fed; the bar only needs ~30 redraws a second.
+    static uint64_t last_draw_ms = 0;
+    uint64_t now = get_ticks_ms();
+    if (progress < 1.0f && now - last_draw_ms < 33) {
+        return;
+    }
+    last_draw_ms = now;
+
     surface_t *d = (progress >= 1.0f) ? display_get() : display_try_get();
 
     if (d) {

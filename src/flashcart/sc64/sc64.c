@@ -377,7 +377,8 @@ static flashcart_err_t sc64_load_rom (char *rom_path, flashcart_progress_callbac
     size_t shadow_size = shadow_enabled ? MIN(rom_size - sdram_size, KiB(128)) : 0;
     size_t extended_size = extended_enabled ? rom_size - MiB(64) : 0;
 
-    size_t chunk_size = KiB(128);
+    // Small chunks: the progress callback keeps the menu music fed between them.
+    size_t chunk_size = KiB(32);
     for (unsigned int offset = 0; offset < sdram_size; offset += chunk_size) {
         size_t block_size = MIN(sdram_size - offset, chunk_size);
         if (f_read(&fil, (void *) (ROM_ADDRESS + offset), block_size, &br) != FR_OK) {
