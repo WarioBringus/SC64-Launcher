@@ -53,6 +53,7 @@ static settings_t init = {
     .launcher_cartridge_art = false,
     .launcher_one_per_game = true,
     .launcher_titles_highlight_only = true,
+    .launcher_large_text = false,
     .launcher_home_resume = true,
     .launcher_home_recent = true,
     .launcher_home_favorites = true,
@@ -136,6 +137,7 @@ void settings_load (settings_t *settings) {
         settings->launcher_sort = init.launcher_sort;
     }
     settings->launcher_titles_highlight_only = ini_get_bool(ini, "launcher", "titles_highlight_only", init.launcher_titles_highlight_only);
+    settings->launcher_large_text = ini_get_bool(ini, "launcher", "large_text", init.launcher_large_text);
     settings->launcher_home_resume = ini_get_bool(ini, "launcher", "home_resume", init.launcher_home_resume);
     settings->launcher_home_recent = ini_get_bool(ini, "launcher", "home_recent", init.launcher_home_recent);
     settings->launcher_home_favorites = ini_get_bool(ini, "launcher", "home_favorites", init.launcher_home_favorites);
@@ -197,6 +199,7 @@ void settings_save (settings_t *settings) {
     ini_set_bool(ini, "launcher", "cartridge_art", settings->launcher_cartridge_art);
     ini_set_bool(ini, "launcher", "one_per_game", settings->launcher_one_per_game);
     ini_set_bool(ini, "launcher", "titles_highlight_only", settings->launcher_titles_highlight_only);
+    ini_set_bool(ini, "launcher", "large_text", settings->launcher_large_text);
     ini_set_bool(ini, "launcher", "home_resume", settings->launcher_home_resume);
     ini_set_bool(ini, "launcher", "home_recent", settings->launcher_home_recent);
     ini_set_bool(ini, "launcher", "home_favorites", settings->launcher_home_favorites);

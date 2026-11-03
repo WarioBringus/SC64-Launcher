@@ -135,6 +135,9 @@ typedef struct {
     /** @brief Show a game's title only while it is highlighted */
     bool launcher_titles_highlight_only;
 
+    /** @brief Larger game titles and details (Look > Text size) */
+    bool launcher_large_text;
+
     /** @brief Show the "resume last game" row on the home screen */
     bool launcher_home_resume;
 

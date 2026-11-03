@@ -99,6 +99,7 @@ uint8_t launcher_font (uint8_t font) {
         case FNT_LAUNCHER: return FNT_LAUNCHER_WIDE;
         case FNT_TITLE: return FNT_TITLE_WIDE;
         case FNT_SMALL: return FNT_SMALL_WIDE;
+        case FNT_LARGE: return FNT_LARGE_WIDE;
         default: return font;   // The stock font has no squeezed variant.
     }
 }
@@ -216,8 +217,32 @@ int launcher_name (int x, int y, int width, rdpq_align_t align, menu_font_style_
     return text_box(x, y, width, TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
+static bool large_text = false;
+
+void launcher_set_large_text (bool enabled) {
+    large_text = enabled;
+}
+
+int launcher_title_space (void) {
+    return large_text ? 27 : 22;
+}
+
+int launcher_game_name (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name) {
+    char escaped[256];
+    escape_text_codes(name, escaped, sizeof(escaped));
+    return text_box_font(font_for(escaped, large_text ? FNT_LARGE : FNT_LAUNCHER), x, y, width,
+        large_text ? TEXT_HEIGHT + 4 : TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
+}
+
+int launcher_game_details (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text) {
+    char escaped[256];
+    escape_text_codes(text, escaped, sizeof(escaped));
+    return text_box_font(font_for(escaped, large_text ? FNT_LAUNCHER : FNT_SMALL), x, y, width,
+        large_text ? TEXT_HEIGHT : HINT_TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
+}
+
 void launcher_title_box (const char *name, int cx, int min_w, int *x, int *w) {
-    int need = text_width(name) + 8;
+    int need = text_width_font(font_for(name, large_text ? FNT_LARGE : FNT_LAUNCHER), name) + 8;
     int width = (need > min_w) ? need : min_w;
     if (width > LAUNCHER_WIDTH) {
         width = LAUNCHER_WIDTH;
@@ -1184,6 +1209,24 @@ static int get_titles_selection (menu_t *menu) {
     return menu->settings.launcher_titles_highlight_only ? 0 : 1;
 }
 
+static void set_text_size (menu_t *menu, void *arg) {
+    menu->settings.launcher_large_text = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_text_size_selection (menu_t *menu) {
+    return menu->settings.launcher_large_text ? 1 : 0;
+}
+
+static component_context_menu_t text_size_menu = {
+    .get_default_selection = get_text_size_selection,
+    .list = {
+        { .text = "Normal", .action = set_text_size, .arg = (void *)(uintptr_t)(false) },
+        { .text = "Large", .action = set_text_size, .arg = (void *)(uintptr_t)(true) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t titles_menu = {
     .get_default_selection = get_titles_selection,
     .list = {
@@ -1205,6 +1248,7 @@ static char layout_label[40] = "Layout";
 static char tile_size_label[40] = "Tile size";
 static char cover_style_label[40] = "Cover style";
 static char titles_label[48] = "Game titles";
+static char text_size_label[48] = "Text size";
 static char pause_label[24] = "Pause";
 static char music_label[24] = "Music";
 static char order_label[32] = "Order";
@@ -1393,6 +1437,7 @@ static component_context_menu_t look_menu = {
         { .text = tile_size_label, .submenu = &tile_size_menu },
         { .text = cover_style_label, .submenu = &cover_style_menu },
         { .text = titles_label, .submenu = &titles_menu },
+        { .text = text_size_label, .submenu = &text_size_menu },
         COMPONENT_CONTEXT_MENU_LIST_END,
     }
 };
@@ -1587,6 +1632,7 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     snprintf(layout_label, sizeof(layout_label), "Layout: %s", current_choice(menu, &layout_menu));
     snprintf(tile_size_label, sizeof(tile_size_label), "Tile size: %s", current_choice(menu, &tile_size_menu));
     snprintf(cover_style_label, sizeof(cover_style_label), "Cover style: %s", current_choice(menu, &cover_style_menu));
+    snprintf(text_size_label, sizeof(text_size_label), "Text size: %s", current_choice(menu, &text_size_menu));
     snprintf(titles_label, sizeof(titles_label), "Game titles: %s",
         menu->settings.launcher_titles_highlight_only ? "Highlighted" : "Always");
     snprintf(pause_label, sizeof(pause_label), "%s", sound_bgm_is_paused() ? "Resume" : "Pause");

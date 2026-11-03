@@ -139,6 +139,8 @@ FILESYSTEM = \
 	$(FILESYSTEM_DIR)/menu/fonts/InterWide.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterTitleWide.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterSmallWide.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterLarge.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterLargeWide.font64 \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_WAV:%.wav=%.wav64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_XM:%.xm=%.xm64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sprites/, $(notdir $(IMAGES:%.png=%.sprite)))
@@ -185,6 +187,19 @@ $(FILESYSTEM_DIR)/menu/fonts/InterSmallWide.font64: $(ASSETS_DIR)/fonts/Inter.tt
 	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
 	@cp "$<" $(BUILD_DIR)/fonts/InterSmallWide.ttf
 	@$(N64_MKFONT) $(INTER_WIDE_FLAGS) --size 12 --var-axis wght=600 -o $(dir $@) $(BUILD_DIR)/fonts/InterSmallWide.ttf
+
+# Large text option: game titles and details at 18 px.
+$(FILESYSTEM_DIR)/menu/fonts/InterLarge.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterLarge.ttf
+	@$(N64_MKFONT) --compress 1 --size 18 --var-axis wght=600 --charset $(ASSETS_DIR)/fonts/charset.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterLarge.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterLargeWide.font64: $(ASSETS_DIR)/fonts/Inter.ttf
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterLargeWide.ttf
+	@$(N64_MKFONT) $(INTER_WIDE_FLAGS) --size 18 --var-axis wght=600 -o $(dir $@) $(BUILD_DIR)/fonts/InterLargeWide.ttf
 
 $(FILESYSTEM_DIR)/menu/fonts/%.font64: $(ASSETS_DIR)/fonts/%.ttf
 	@echo " [FONT] $@"

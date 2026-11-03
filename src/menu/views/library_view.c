@@ -152,7 +152,7 @@ static grid_geometry_t grid_geometry (int tile_size, bool portrait) {
         g.h = (g.w * LAUNCHER_COVER_H) / LAUNCHER_COVER_W;
         g.cols = (LAUNCHER_WIDTH + g.gap) / (g.w + g.gap);
     }
-    g.row_h = g.h + LAUNCHER_TITLE_SPACE + g.gap;
+    g.row_h = g.h + launcher_title_space() + g.gap;
     g.rows = (LAUNCHER_CONTENT_Y1 - LAUNCHER_CONTENT_Y + g.gap) / g.row_h;
     if (g.rows < 1) {
         g.rows = 1;
@@ -973,7 +973,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
                 blocked = (tx < sel_tx + sel_tw + 6) && (tx + tw > sel_tx - 6);
             }
             if (!blocked) {
-                launcher_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
+                launcher_game_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
             }
         }
     }
@@ -1094,7 +1094,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     char details[160];
     library_game_details(&c->games[sel], details, sizeof(details));
     if (details[0]) {
-        launcher_small(LAUNCHER_X0, CAROUSEL_TITLE_Y + 58, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
+        launcher_game_details(LAUNCHER_X0, CAROUSEL_TITLE_Y + 58, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
 }
 
@@ -1167,7 +1167,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     char details[160];
     library_game_details(&c->games[sel], details, sizeof(details));
     if (details[0]) {
-        launcher_small(LAUNCHER_X0, SHELF_DETAILS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
+        launcher_game_details(LAUNCHER_X0, SHELF_DETAILS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
 
     if (!front_pending && shelf_position == (float)sel) {
@@ -1228,7 +1228,7 @@ static void draw (menu_t *menu, surface_t *d) {
                 char details[160];
                 library_game_details(&c->games[*sel], details, sizeof(details));
                 if (details[0]) {
-                    launcher_small(LAUNCHER_X0, INFO_LINE_Y, LAUNCHER_WIDTH, ALIGN_LEFT, STL_GRAY, details);
+                    launcher_game_details(LAUNCHER_X0, INFO_LINE_Y, LAUNCHER_WIDTH, ALIGN_LEFT, STL_GRAY, details);
                 }
             }
         }
@@ -1312,6 +1312,7 @@ void view_library_init (menu_t *menu) {
 void view_library_display (menu_t *menu, surface_t *display) {
     current_sort = menu->settings.launcher_sort;
     launcher_set_widescreen(menu->settings.launcher_widescreen);
+    launcher_set_large_text(menu->settings.launcher_large_text);
     launcher_set_cartridge_art(menu->settings.launcher_cartridge_art);
     launcher_track_idle(menu);
 

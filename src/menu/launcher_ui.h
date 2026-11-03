@@ -171,6 +171,18 @@ int launcher_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t
  */
 void launcher_title_box(const char *name, int cx, int min_w, int *x, int *w);
 
+/** @brief Text size: Large for game titles and details (set by Home and the Library each frame). */
+void launcher_set_large_text(bool enabled);
+
+/** @brief Room under a tile for its title (taller with large text). */
+int launcher_title_space(void);
+
+/** @brief A game's title under its cover, in the game-title size. */
+int launcher_game_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name);
+
+/** @brief A game's details line ("Racing  ·  1997  ·  ..."), in the game-details size. */
+int launcher_game_details(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text);
+
 /**
  * @brief Draw a game title in the larger title font.
  *

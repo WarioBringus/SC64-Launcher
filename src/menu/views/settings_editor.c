@@ -452,6 +452,23 @@ static int get_launcher_titles_highlight_only_current_selection (menu_t *menu) {
     return menu->settings.launcher_titles_highlight_only ? 0 : 1;
 }
 
+static void set_launcher_large_text_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_large_text = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_launcher_large_text_current_selection (menu_t *menu) {
+    return menu->settings.launcher_large_text ? 1 : 0;
+}
+
+static component_context_menu_t set_launcher_large_text_context_menu = {
+    .get_default_selection = get_launcher_large_text_current_selection,
+    .list = {
+        {.text = "Normal", .action = set_launcher_large_text_type, .arg = (void *)(uintptr_t)(false) },
+        {.text = "Large", .action = set_launcher_large_text_type, .arg = (void *)(uintptr_t)(true) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static component_context_menu_t set_launcher_titles_highlight_only_context_menu = {
     .get_default_selection = get_launcher_titles_highlight_only_current_selection,
     .list = {
@@ -684,6 +701,8 @@ static const settings_row_t settings_rows[] = {
     { .label = "Library layout", .choices = &set_launcher_layout_context_menu },
     { .label = "Tile size", .choices = &set_launcher_tile_size_context_menu },
     { .label = "Game titles", .choices = &set_launcher_titles_highlight_only_context_menu },
+    { .label = "Text size", .choices = &set_launcher_large_text_context_menu,
+      .note = "Large makes game titles and details easier to read from the couch" },
     { .label = "Remove background image", .action = remove_background_image },
     { .section = "Launcher" },
     { .label = "Launcher", .choices = &set_launcher_enabled_context_menu,

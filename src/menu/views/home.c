@@ -291,7 +291,7 @@ static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int 
     char details[160];
     library_details_for_path(menu, item_path(h), details, sizeof(details));
     if (details[0]) {
-        launcher_small(RESUME_TEXT_X, y + 108, text_w, ALIGN_LEFT, STL_GRAY, details);
+        launcher_game_details(RESUME_TEXT_X, y + 108, text_w, ALIGN_LEFT, STL_GRAY, details);
     }
     return y + RESUME_CARD_H + ROW_GAP;
 }
@@ -358,7 +358,7 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
                 blocked = (tx < sel_tx + sel_tw + 6) && (tx + tw > sel_tx - 6);
             }
             if (!blocked && tw > 0) {
-                launcher_name(tx, tile_y + ROW_TILE_H + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, h->title);
+                launcher_game_name(tx, tile_y + ROW_TILE_H + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, h->title);
             }
         }
     }
@@ -437,6 +437,7 @@ void view_home_init (menu_t *menu) {
 
 void view_home_display (menu_t *menu, surface_t *display) {
     launcher_set_widescreen(menu->settings.launcher_widescreen);
+    launcher_set_large_text(menu->settings.launcher_large_text);
     launcher_set_cartridge_art(menu->settings.launcher_cartridge_art);
     launcher_track_idle(menu);
     if (launcher_take_favorites_changed()) {
