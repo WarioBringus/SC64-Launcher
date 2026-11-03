@@ -107,8 +107,18 @@ static bool is_skipped_folder (const char *name) {
     return false;
 }
 
+/** @brief A title as it sorts: "The Legend of Zelda" files under L. */
+static const char *sort_title (const char *title) {
+    return (strncasecmp(title, "The ", 4) == 0 && title[4] != '\0') ? title + 4 : title;
+}
+
+static int compare_titles (const char *a, const char *b) {
+    int r = strcasecmp(sort_title(a), sort_title(b));
+    return (r != 0) ? r : strcasecmp(a, b);
+}
+
 static int compare_games (const void *a, const void *b) {
-    return strcasecmp(((const library_game_t *)a)->title, ((const library_game_t *)b)->title);
+    return compare_titles(((const library_game_t *)a)->title, ((const library_game_t *)b)->title);
 }
 
 static int compare_categories (const void *a, const void *b) {
@@ -1194,7 +1204,7 @@ static int compare_sorted (const void *a, const void *b) {
             }
         }
     }
-    return strcasecmp(ga->title, gb->title);
+    return compare_titles(ga->title, gb->title);
 }
 
 bool library_arrange_category (library_category_t *category, int sort, int filter_field, const char *filter_value) {
@@ -1347,7 +1357,7 @@ void library_game_group (library_game_t *game, int sort, char *buffer, size_t si
             }
             return;
         default: {
-            char c = game->title[0];
+            char c = sort_title(game->title)[0];
             if (c >= 'a' && c <= 'z') {
                 c -= 'a' - 'A';
             }

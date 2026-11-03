@@ -278,13 +278,20 @@ def main():
         [(name, spine_blobs[name]) for _, name in SPINE_PACKS]
     packs_present = all(os.path.exists('%s/covers_%s.pak' % (out_dir, name)) for name, _ in all_packs)
     old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
+
+    def shown_title_key(stem):
+        # As the menu sorts: " - " shows as ": ", and a leading "The " is skipped.
+        title = stem.replace(' - ', ': ').lower()
+        short = title[4:] if title.startswith('the ') and len(title) > 4 else title
+        return (short, title)
+
     packs_current = packs_present and old_manifest == manifest and failed == 0
 
     # Store the pixels in the order the library shows games (folder, then title), box art first and
     # cartridge art after, so scrolling reads neighbouring data. Ids (the offset table) are unchanged.
     order, placed = [], set()
     shown = sorted(roms, key=lambda r: (r.rsplit('/', 1)[0].lower() if '/' in r else '',
-                                        os.path.splitext(os.path.basename(r))[0].lower()))
+                                        shown_title_key(os.path.splitext(os.path.basename(r))[0])))
     for cart in (False, True):
         for rom in shown:
             c = rom_cover[rom]
