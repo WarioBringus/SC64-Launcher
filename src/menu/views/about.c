@@ -252,6 +252,7 @@ static void play (menu_t *menu, bool quick) {
 static void process (menu_t *menu) {
     if (menu->actions.back) {
         sound_play_effect(SFX_EXIT);
+        launcher_transition(menu->mode, back_mode);
         menu->next_mode = back_mode;
         return;
     }
@@ -281,6 +282,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
     launcher_covers_begin_frame();
     launcher_draw_background();
+    launcher_transition_content_begin(0);
 
     if (!rom) {
         launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No game selected");

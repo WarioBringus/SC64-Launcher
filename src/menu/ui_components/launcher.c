@@ -79,9 +79,11 @@ int launcher_x1 (void) {
     return launcher_screen_width() - launcher_x0();
 }
 
+static int slide_dx = 0;     /* Framebuffer offset while a screen transition slides the content in */
+
 /** @brief Logical x to real framebuffer x. */
 static int px (int x) {
-    return widescreen ? (x * 3 + 2) / 4 : x;
+    return (widescreen ? (x * 3 + 2) / 4 : x) + slide_dx;
 }
 
 /** @brief Real pixel width to logical width. */
@@ -528,7 +530,78 @@ static bool draw_now_playing (void) {
     return true;
 }
 
-void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
+#define TRANSITION_MS       (180)
+#define TRANSITION_SLIDE    (40)    /* Logical pixels the content travels while sliding in */
+#define MENU_FADE_MS        (120)
+#define MENU_BACKDROP_ALPHA (150)   /* How far the screen behind the Start menu fades back */
+
+static int transition_dir = 0;              /* +1 slides in from the right, -1 from the left, 0 only fades */
+static bool transition_pending = false;
+static uint64_t transition_start_ms = 0;
+static int transition_y0 = 0;
+static float transition_fade = 0.0f;        /* Content fade still to clear this frame (1 = background only) */
+
+void launcher_transition (menu_mode_t from, menu_mode_t to) {
+    if (from == to || (to != MENU_MODE_HOME && to != MENU_MODE_LIBRARY && to != MENU_MODE_ABOUT)) {
+        return;
+    }
+    // The tabs read Home | Library: going right slides in from the right, going left from the left.
+    // About fades in and out without a slide.
+    if (from == MENU_MODE_ABOUT || to == MENU_MODE_ABOUT) {
+        transition_dir = 0;
+    } else {
+        transition_dir = (to == MENU_MODE_LIBRARY) ? 1 : -1;
+    }
+    transition_pending = true;
+    transition_start_ms = 0;    // The clock starts with the new screen's first frame.
+}
+
+void launcher_transition_content_begin (int y0) {
+    transition_fade = 0.0f;
+    slide_dx = 0;
+    if (!transition_pending) {
+        return;
+    }
+    uint64_t now = get_ticks_ms();
+    if (transition_start_ms == 0) {
+        transition_start_ms = now;
+    }
+    float t = fminf(1.0f, (float)(now - transition_start_ms) / TRANSITION_MS);
+    if (t >= 1.0f) {
+        transition_pending = false;
+        return;
+    }
+    float e = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+    slide_dx = (int)lroundf(transition_dir * TRANSITION_SLIDE * (1.0f - e) * (widescreen ? WIDE_SQUEEZE : 1.0f));
+    transition_fade = 1.0f - e;
+    transition_y0 = y0;
+}
+
+/** @brief Cover a band of the screen with a colour at some opacity (fading things in or back). */
+static void fade_band (int y0, int y1, color_t color, int alpha) {
+    if (alpha <= 0) {
+        return;
+    }
+    color.a = (alpha > 255) ? 255 : alpha;
+    rdpq_mode_push();
+        rdpq_set_mode_standard();
+        rdpq_mode_combiner(RDPQ_COMBINER_FLAT);
+        rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
+        rdpq_set_prim_color(color);
+        rdpq_fill_rectangle(0, y0, display_get_width(), y1);
+    rdpq_mode_pop();
+}
+
+/** @brief End a screen's content: undo the slide and fade the content in from the background. */
+static void transition_content_end (void) {
+    slide_dx = 0;
+    if (transition_fade > 0.0f) {
+        fade_band(transition_y0, LAUNCHER_FOOTER_Y, theme_current()->bg, (int)(transition_fade * 255.0f));
+        transition_fade = 0.0f;
+    }
+}
+
+static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     launcher_draw_background();
 
     static const char *tabs[] = { "Home", "Library" };
@@ -587,7 +660,13 @@ static bool is_c_button (launcher_button_t kind) {
     return kind == LAUNCHER_BUTTON_C_UP_DOWN || kind == LAUNCHER_BUTTON_C_LEFT_RIGHT;
 }
 
+void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
+    draw_header_parts(menu, active);
+    launcher_transition_content_begin(HEADER_UNDERLINE_Y + 6);
+}
+
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
+    transition_content_end();
     ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
 
     // Lay the hints out right-aligned: [button] label   [button] label ...
@@ -772,7 +851,7 @@ static void blit_cover (surface_t *image, int x, int y) {
         rdpq_tex_blit(image, px(x), y, &(rdpq_blitparms_t) { .scale_x = WIDE_SQUEEZE, .scale_y = 1.0f });
     } else {
         rdpq_set_mode_copy(true);
-        rdpq_tex_blit(image, x, y, NULL);
+        rdpq_tex_blit(image, px(x), y, NULL);
     }
     rdpq_mode_pop();
 }
@@ -858,6 +937,7 @@ void launcher_leave (menu_t *menu, menu_mode_t next_mode) {
         settings_save(&menu->settings);
         launcher_launch_cover_free();
     }
+    launcher_transition(menu->mode, next_mode);
     menu->launcher_return_mode = menu->mode;
     menu->next_mode = next_mode;
 }
@@ -1448,6 +1528,17 @@ bool launcher_menu_process (menu_t *menu) {
 }
 
 void launcher_menu_draw (void) {
+    static bool was_open = false;
+    static uint64_t opened_ms = 0;
+    bool open = (start_menu.row_selected >= 0) || (game_menu.row_selected >= 0);
+    if (open && !was_open) {
+        opened_ms = get_ticks_ms();
+    }
+    was_open = open;
+    if (open) {
+        float t = fminf(1.0f, (float)(get_ticks_ms() - opened_ms) / MENU_FADE_MS);
+        fade_band(0, display_get_height(), theme_current()->bg, (int)(MENU_BACKDROP_ALPHA * t));
+    }
     ui_components_context_menu_draw(&start_menu);
     ui_components_context_menu_draw(&game_menu);
 }

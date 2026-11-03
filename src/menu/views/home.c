@@ -230,6 +230,7 @@ static void process (menu_t *menu) {
     }
     if (menu->actions.shoulder_r) {
         sound_play_effect(SFX_CURSOR);
+        launcher_transition(menu->mode, MENU_MODE_LIBRARY);
         menu->next_mode = MENU_MODE_LIBRARY;
         return;
     }

@@ -642,6 +642,7 @@ static void process (menu_t *menu) {
     if (menu->actions.back || menu->actions.shoulder_l) {
         sound_play_effect(menu->actions.back ? SFX_EXIT : SFX_CURSOR);
         settings_save(&menu->settings);
+        launcher_transition(menu->mode, MENU_MODE_HOME);
         menu->next_mode = MENU_MODE_HOME;
         return;
     }

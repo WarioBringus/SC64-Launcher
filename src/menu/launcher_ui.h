@@ -267,6 +267,15 @@ void launcher_draw_cover_scaled(surface_t *image, int x, int y, int w, int h, co
  */
 void launcher_leave(menu_t *menu, menu_mode_t next_mode);
 
+/** @brief Animate the switch from one launcher screen to another (Home/Library slide, About fades). */
+void launcher_transition(menu_mode_t from, menu_mode_t to);
+
+/**
+ * @brief Start drawing a screen's content (launcher_draw_header calls it): content is offset while a
+ * transition slides it in. launcher_draw_footer ends it and fades the content in.
+ */
+void launcher_transition_content_begin(int y0);
+
 /** @brief Write settings a quick launch put off until the menu music has faded. */
 void launcher_save_pending_settings(menu_t *menu);
 
