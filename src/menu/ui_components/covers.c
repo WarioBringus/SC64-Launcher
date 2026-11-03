@@ -250,8 +250,15 @@ static void slot_free (cover_slot_t *slot) {
     memset(slot, 0, sizeof(*slot));
 }
 
+static bool hold_new = false;
+
+void launcher_covers_hold (bool hold) {
+    hold_new = hold;
+}
+
 void launcher_covers_begin_frame (void) {
     frame++;
+    hold_new = false;
     launcher_clear_focused_cover();
     pack_time_used_us = 0;
     pack_read_this_frame = false;
@@ -312,6 +319,10 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
 
     if (pending) {
         *pending = true;
+    }
+
+    if (hold_new) {
+        return NULL;    // Scrolling fast: read it once the selection settles.
     }
 
     // Covers in a pack wait for read budget; only covers missing from the packs use the PNG decoder.

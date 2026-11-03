@@ -120,6 +120,15 @@ void launcher_covers_begin_frame(void);
 /** @brief Abort any decode and free every cached cover. */
 void launcher_covers_reset(void);
 
+/**
+ * @brief While held, covers not yet in memory aren't read (they show as placeholders): used during fast
+ * scrolling, when a pack read every frame would make the scrolling skip. Released each frame.
+ */
+void launcher_covers_hold(bool hold);
+
+/** @brief Whether the selection (key) is changing quickly, e.g. a direction held down. */
+bool launcher_scrolling_fast(int key);
+
 /* ------------------------------------------------------------------ drawing */
 
 /**

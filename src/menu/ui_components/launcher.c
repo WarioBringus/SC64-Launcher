@@ -852,6 +852,22 @@ void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {
     launcher_draw_focus_ring(x, y, x + w, y + h, TILE_RADIUS);
 }
 
+#define FAST_SCROLL_GAP_MS  (250)   /* Two moves this close together count as fast scrolling... */
+#define FAST_SCROLL_HOLD_MS (140)   /* ...until the selection has rested this long */
+
+bool launcher_scrolling_fast (int key) {
+    static int last_key = -1;
+    static uint64_t last_change = 0;
+    static uint64_t previous_change = 0;
+    uint64_t now = get_ticks_ms();
+    if (key != last_key) {
+        last_key = key;
+        previous_change = last_change;
+        last_change = now;
+    }
+    return (now - last_change < FAST_SCROLL_HOLD_MS) && (last_change - previous_change < FAST_SCROLL_GAP_MS);
+}
+
 int launcher_focus_lift (int key) {
     static int last_key = -1;
     static uint64_t since = 0;

@@ -843,9 +843,11 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         top_row = row - g.rows + 1;
     }
 
-    // Ask for the highlighted cover first so it loads before its neighbours.
+    // Ask for the highlighted cover first so it loads before its neighbours; while scrolling fast
+    // it is the only one read, so frames stay on time.
     bool pending;
     game_cover(menu, &c->games[sel], g.w, g.h, &lookups_left, &pending);
+    launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
     int first = top_row * g.cols;
     int last = first + g.rows * g.cols;
@@ -966,8 +968,9 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
         carousel_position = (float)sel;
     }
 
-    // Highlighted cover first so it loads before its neighbours.
+    // Highlighted cover first so it loads before its neighbours (the only one read while scrolling fast).
     game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
+    launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
     // Far covers first so nearer ones draw on top.
     for (int reach = CAROUSEL_REACH + 1; reach >= 0; reach--) {
