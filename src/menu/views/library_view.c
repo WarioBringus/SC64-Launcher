@@ -46,6 +46,7 @@ static const launcher_hint_t hints_grid[] = {
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Jump" },
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Size" },
+    { LAUNCHER_BUTTON_OTHER, "R", "View" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
@@ -54,6 +55,7 @@ static const launcher_hint_t hints_carousel[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
+    { LAUNCHER_BUTTON_OTHER, "R", "View" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
@@ -638,6 +640,17 @@ static void process (menu_t *menu) {
         }
         return;
     }
+    // R steps through the library's views: Grid, Carousel, Shelf.
+    if (menu->actions.shoulder_r) {
+        static const char *view_names[] = { "Grid", "Carousel", "Shelf" };
+        menu->settings.launcher_layout = (menu->settings.launcher_layout + 1) % 3;
+        snprintf(group_badge, sizeof(group_badge), "%s", view_names[menu->settings.launcher_layout]);
+        group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+        launcher_transition_fade();
+        sound_play_effect(SFX_SWISH);
+        return;     // Saved with the other view settings when the library is left.
+    }
+
     // L (the Home tab is to the left) or B goes back to Home; R on Home comes here.
     if (menu->actions.back || menu->actions.shoulder_l) {
         sound_play_effect(menu->actions.back ? SFX_EXIT : SFX_SWISH);

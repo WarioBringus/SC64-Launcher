@@ -574,6 +574,12 @@ bool launcher_transition_running (void) {
     return transition_pending;
 }
 
+void launcher_transition_fade (void) {
+    transition_dir = 0;
+    transition_pending = true;
+    transition_start_ms = 0;
+}
+
 void launcher_transition_content_begin (int y0) {
     motion_frame();
     transition_fade = 0.0f;

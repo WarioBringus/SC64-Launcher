@@ -308,6 +308,9 @@ void launcher_transition_content_begin(int y0);
 /** @brief Whether a screen is still sliding or fading in (read-ahead waits for it). */
 bool launcher_transition_running(void);
 
+/** @brief Fade the content in again on the same screen (e.g. after switching the library's view). */
+void launcher_transition_fade(void);
+
 /** @brief Write settings a quick launch put off until the menu music has faded. */
 void launcher_save_pending_settings(menu_t *menu);
 
