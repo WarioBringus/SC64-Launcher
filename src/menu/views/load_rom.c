@@ -17,6 +17,7 @@ static bool show_expansion_pak_warning = false;
 static bool quick_loading = false;  /* Launcher quick launch: show the loading bar, never the details */
 static bool launcher_loader = false; /* Loading screens in the launcher's style */
 static char loading_title[96];
+static char loading_details[160];  /* "Racing  ·  1997  ·  Nintendo EAD  ·  4 players", from the cover index */
 static component_boxart_t *boxart;
 static bool boxart_sd_fallback_attempted = false;
 static char *rom_filename = NULL;
@@ -735,7 +736,7 @@ static void draw (menu_t *menu, surface_t *d) {
     if (quick_loading) {
         // Straight to the loading bar rather than flashing the details screen.
         if (launcher_loader) {
-            launcher_draw_loading(loading_title, 0.0f, NULL);
+            launcher_draw_loading(loading_title, loading_details, 0.0f, NULL);
         } else {
             ui_components_loader_draw(0.0f, "Loading ROM...");
         }
@@ -901,7 +902,7 @@ static void draw_progress (float progress) {
         rdpq_attach(d, NULL);
 
         if (launcher_loader) {
-            launcher_draw_loading(loading_title, progress, NULL);
+            launcher_draw_loading(loading_title, loading_details, progress, NULL);
         } else {
             ui_components_background_draw();
             ui_components_loader_draw(progress, "Loading ROM...");
@@ -919,7 +920,7 @@ static void draw_creating_save (float progress) {
         rdpq_attach(d, NULL);
 
         if (launcher_loader) {
-            launcher_draw_loading(loading_title, progress, "Creating save file");
+            launcher_draw_loading(loading_title, loading_details, progress, "Creating save file");
         } else {
             ui_components_background_draw();
             ui_components_loader_draw(progress, "Creating initial save file...");
@@ -1150,10 +1151,12 @@ void view_load_rom_init (menu_t *menu) {
 
     // The game's name for the loading screen (the ROM is known by now).
     loading_title[0] = '\0';
+    loading_details[0] = '\0';
     if (menu->load.rom_path) {
         char *title = library_title_from_path(menu->load.rom_path);
         snprintf(loading_title, sizeof(loading_title), "%s", title ? title : "");
         free(title);
+        library_details_for_path(menu, menu->load.rom_path, loading_details, sizeof(loading_details));
     }
 
     if (quick_start) {

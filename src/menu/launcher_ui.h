@@ -183,10 +183,10 @@ path_t *launcher_about_rom(void);
 void launcher_draw_new_games_notice(void);
 
 /**
- * @brief Full-screen loading card in the launcher's style: the game's name, a rounded progress bar
- * and a status line ("Loading 45%" when status is NULL).
+ * @brief Full-screen loading card in the launcher's style: the game's name, an optional details line,
+ * a rounded progress bar and a status line ("Loading 45%" when status is NULL).
  */
-void launcher_draw_loading(const char *title, float progress, const char *status);
+void launcher_draw_loading(const char *title, const char *details, float progress, const char *status);
 
 /** @brief Note the cover in the focused tile this frame (the one a quick launch grows from). */
 void launcher_note_focused_cover(surface_t *image, int x, int y, int w, int h);

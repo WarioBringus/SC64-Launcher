@@ -262,7 +262,7 @@ static void draw_progress (float progress) {
         rdpq_attach(d, NULL);
 
         if (launcher_loader) {
-            launcher_draw_loading(NULL, progress, "Loading 64DD disk");
+            launcher_draw_loading(NULL, NULL, progress, "Loading 64DD disk");
         } else {
             ui_components_background_draw();
             ui_components_loader_draw(progress, "Loading 64DD disk...");

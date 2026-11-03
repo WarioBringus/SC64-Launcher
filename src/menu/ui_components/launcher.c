@@ -364,6 +364,8 @@ void launcher_draw_new_games_notice (void) {
 #define LOADING_BAR_W       (320)
 #define LOADING_BAR_H       (8)
 #define LOADING_STATUS_Y    (246)
+#define LOADING_DETAILS_DY  (34)    /* Details line below the title */
+#define LOADING_DETAILS_GAP (22)    /* Room the details line adds above the bar */
 
 #define LAUNCH_COVER_MAX_W  (240)
 #define LAUNCH_COVER_MAX_H  (180)
@@ -444,24 +446,26 @@ static void launch_cover_take (void) {
     launch_cover_large = false;
 }
 
-void launcher_draw_loading (const char *title, float progress, const char *status) {
+void launcher_draw_loading (const char *title, const char *details, float progress, const char *status) {
     launcher_draw_background();
 
-    int title_y = LOADING_TITLE_Y;
-    int bar_y = LOADING_BAR_Y;
-    int status_y = LOADING_STATUS_Y;
+    bool has_details = details && details[0];
+    int details_gap = has_details ? LOADING_DETAILS_GAP : 0;
+    int title_y = LOADING_TITLE_Y - details_gap / 2;
+    int bar_y = title_y + (LOADING_BAR_Y - LOADING_TITLE_Y) + details_gap;
+    int status_y = title_y + (LOADING_STATUS_Y - LOADING_TITLE_Y) + details_gap;
     if (launch_cover_valid) {
         // The cover sits above the name, and the whole block stays centered on screen.
         float scale = fminf(launch_cover_large ? 1.0f : LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
                                                      (float)LAUNCH_COVER_MAX_H / launch_cover.height));
         int dw = (int)(launch_cover.width * scale);
         int dh = (int)(launch_cover.height * scale);
-        int block_h = dh + (LOADING_STATUS_Y - LOADING_TITLE_Y) + 44;
+        int block_h = dh + (LOADING_STATUS_Y - LOADING_TITLE_Y) + 44 + details_gap;
         int dy = (DISPLAY_HEIGHT - block_h) / 2;
         int dx = LAUNCHER_CENTER_X - dw / 2;
         title_y = dy + dh + 26;
-        bar_y = title_y + (LOADING_BAR_Y - LOADING_TITLE_Y);
-        status_y = title_y + (LOADING_STATUS_Y - LOADING_TITLE_Y);
+        bar_y = title_y + (LOADING_BAR_Y - LOADING_TITLE_Y) + details_gap;
+        status_y = title_y + (LOADING_STATUS_Y - LOADING_TITLE_Y) + details_gap;
 
         // Grow from the tile it was launched from, easing out.
         uint64_t now = get_ticks_ms();
@@ -479,6 +483,9 @@ void launcher_draw_loading (const char *title, float progress, const char *statu
 
     if (title && title[0]) {
         launcher_title(LAUNCHER_X0, title_y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, title);
+    }
+    if (has_details) {
+        launcher_small(LAUNCHER_X0, title_y + LOADING_DETAILS_DY, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
 
     if (progress < 0.0f) {
