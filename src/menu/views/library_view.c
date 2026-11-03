@@ -743,10 +743,16 @@ static int grid_first_visible (grid_geometry_t *g, int sel) {
 /**
  * @brief Load the covers a neighbouring category will show first, so switching to it is instant.
  */
+static void preload_category_covers (menu_t *menu, int index, int *lookups_left);
+
 static void preload_category (menu_t *menu, int index, int *lookups_left) {
     if (index == category_index || !library_category_is_quick(index)) {
         return;
     }
+    preload_category_covers(menu, index, lookups_left);
+}
+
+static void preload_category_covers (menu_t *menu, int index, int *lookups_left) {
     library_category_t *c = library_category(index);
     if (!c || c->shown == 0) {
         return;
@@ -1109,12 +1115,7 @@ static void draw (menu_t *menu, surface_t *d) {
 }
 
 
-void view_library_init (menu_t *menu) {
-    motion_snap = true;
-    launcher_focus_reset();
-    library_init(menu);
-    launcher_favorites_touched();
-    launcher_menu_init();
+static void restore_category (menu_t *menu) {
     if (!category_restored) {
         int found = library_category_find(menu->settings.launcher_category);
         if (found >= 0) {
@@ -1122,6 +1123,30 @@ void view_library_init (menu_t *menu) {
         }
         category_restored = true;
     }
+}
+
+void view_library_warm (menu_t *menu) {
+    library_init(menu);
+    restore_category(menu);
+    library_category_t *c = library_category(category_index);   // Lists the folder (a scan of the SD card).
+    if (c) {
+        apply_sort(c, category_index);
+    }
+}
+
+void view_library_preload (menu_t *menu, int *lookups_left) {
+    if (category_restored && category_index < library_category_count() && library_category_is_quick(category_index)) {
+        preload_category_covers(menu, category_index, lookups_left);
+    }
+}
+
+void view_library_init (menu_t *menu) {
+    motion_snap = true;
+    launcher_focus_reset();
+    library_init(menu);
+    launcher_favorites_touched();
+    launcher_menu_init();
+    restore_category(menu);
     if (category_index >= library_category_count()) {
         category_index = 0;
         top_row = 0;

@@ -362,6 +362,17 @@ void view_extract_file_display(menu_t *menu, surface_t *display);
 void view_library_init(menu_t *menu);
 
 /**
+ * @brief List the library's current folder ahead of the first visit (at startup), so that visit
+ * doesn't stall in the middle of its slide in.
+ */
+void view_library_warm(menu_t *menu);
+
+/**
+ * @brief Load covers the library will show first, within this frame's lookup budget (Home calls it while idle).
+ */
+void view_library_preload(menu_t *menu, int *lookups_left);
+
+/**
  * @brief Display the launcher library view.
  *
  * @param menu Pointer to the menu structure.

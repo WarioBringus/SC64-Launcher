@@ -397,6 +397,9 @@ static void draw (menu_t *menu, surface_t *d) {
         }
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
+        if (lookups_left > 0) {
+            view_library_preload(menu, &lookups_left);  // Home's own covers come first.
+        }
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
 
@@ -407,6 +410,12 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_home_init (menu_t *menu) {
+    static bool library_warmed = false;
+    if (!library_warmed) {
+        // Part of starting up: the library's first visit then slides in without a stall.
+        view_library_warm(menu);
+        library_warmed = true;
+    }
     launcher_menu_init();
     build_rows(menu);
     motion_snap = true;

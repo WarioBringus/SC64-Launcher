@@ -542,6 +542,8 @@ static bool draw_now_playing (void) {
 #define MENU_FADE_MS        (120)
 #define MENU_BACKDROP_ALPHA (150)   /* How far the screen behind the Start menu fades back */
 
+static void motion_frame(void);
+
 static int transition_dir = 0;              /* +1 slides in from the right, -1 from the left, 0 only fades */
 static bool transition_pending = false;
 static uint64_t transition_start_ms = 0;
@@ -564,15 +566,20 @@ void launcher_transition (menu_mode_t from, menu_mode_t to) {
 }
 
 void launcher_transition_content_begin (int y0) {
+    motion_frame();
     transition_fade = 0.0f;
     slide_dx = 0;
     if (!transition_pending) {
         return;
     }
+    static uint64_t last_frame_ms = 0;
     uint64_t now = get_ticks_ms();
     if (transition_start_ms == 0) {
         transition_start_ms = now;
+    } else if (now - last_frame_ms > 50) {
+        transition_start_ms += (now - last_frame_ms) - 16;     // A slow frame pauses the slide rather than skipping it.
     }
+    last_frame_ms = now;
     float t = fminf(1.0f, (float)(now - transition_start_ms) / TRANSITION_MS);
     if (t >= 1.0f) {
         transition_pending = false;
@@ -780,7 +787,7 @@ static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, in
     flat_end();
 }
 
-#define FOCUS_EASE          (0.35f) /* Fraction of the remaining distance moved per frame (as the carousel) */
+#define MOTION_TAU_MS       (28.0f) /* Glides close ~63% of the remaining distance every this many ms */
 #define FOCUS_LIFT          (3)     /* Pixels the selected tile rises */
 #define FOCUS_LIFT_MS       (120)
 #define FOCUS_SNAP_DISTANCE (220)   /* Farther jumps than this appear in place */
@@ -792,8 +799,25 @@ int launcher_px (int x) {
     return px(x);
 }
 
+static float ease_factor = 0.4f;    /* This frame's share of the remaining distance (from its length) */
+
+/** @brief Once per launcher frame: size this frame's glide step from how long the last frame took. */
+static void motion_frame (void) {
+    static uint64_t last_ms = 0;
+    uint64_t now = get_ticks_ms();
+    float dt = last_ms ? (float)(now - last_ms) : 16.0f;
+    last_ms = now;
+    if (dt < 1.0f) {
+        dt = 1.0f;
+    }
+    if (dt > 100.0f) {
+        dt = 100.0f;
+    }
+    ease_factor = 1.0f - expf(-dt / MOTION_TAU_MS);
+}
+
 float launcher_ease (float current, float target) {
-    float next = current + (target - current) * FOCUS_EASE;
+    float next = current + (target - current) * ease_factor;
     if (fabsf(target - next) < 0.5f) {
         next = target;
     }
