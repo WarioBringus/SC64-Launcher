@@ -228,11 +228,26 @@ def main():
     print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
-    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS]).encode('utf-8')).hexdigest()
+    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown']).encode('utf-8')).hexdigest()
     manifest_path = out_dir + '/covers.manifest'
     packs_present = all(os.path.exists('%s/covers_%s.pak' % (out_dir, name)) for _, name in PACKS)
     old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
     packs_current = packs_present and old_manifest == manifest and failed == 0
+
+    # Store the pixels in the order the library shows games (folder, then title), box art first and
+    # cartridge art after, so scrolling reads neighbouring data. Ids (the offset table) are unchanged.
+    order, placed = [], set()
+    shown = sorted(roms, key=lambda r: (r.rsplit('/', 1)[0].lower() if '/' in r else '',
+                                        os.path.splitext(os.path.basename(r))[0].lower()))
+    for cart in (False, True):
+        for rom in shown:
+            c = rom_cover[rom]
+            if c and cart:
+                c = c[:-len('boxart_front.png')] + 'gamepak_front.png' if c.endswith('/boxart_front.png') else None
+            if c in cover_id and cover_id[c] not in placed:
+                placed.add(cover_id[c])
+                order.append(cover_id[c])
+    order += [i for i in range(len(covers)) if i not in placed]
 
     total = 0
     for pack in PACKS:
@@ -241,14 +256,13 @@ def main():
             continue
         items = blobs[pack]
         table_end = 8 + 4 * len(items)
-        offsets, data, pos = [], bytearray(), table_end
-        for b in items:
+        offsets, data, pos = [0] * len(items), bytearray(), table_end
+        for i in order:
+            b = items[i]
             if b:
-                offsets.append(pos)
+                offsets[i] = pos
                 data += b
                 pos += len(b)
-            else:
-                offsets.append(0)
         path = '%s/covers_%s.pak' % (out_dir, pack[1])
         with open(path + '.tmp', 'wb') as f:
             f.write(b'CVP1' + struct.pack('>I', len(items)))
