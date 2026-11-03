@@ -108,10 +108,9 @@ const char *library_game_cover(menu_t *menu, library_game_t *game);
  *
  * @param menu Menu state.
  * @param rom_path Full path of the ROM file.
- * @param title Display title, used for the by-name fallback.
  * @return Newly allocated path of the cover PNG (caller frees), or NULL.
  */
-char *library_find_cover(menu_t *menu, path_t *rom_path, const char *title);
+char *library_find_cover(menu_t *menu, path_t *rom_path);
 
 /**
  * @brief Display title for a ROM path (file name without extension). Caller frees.

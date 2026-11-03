@@ -188,7 +188,7 @@ static const char *item_cover (menu_t *menu, home_item_t *h, int *lookups_left, 
     free(slot->rom_path);
     free(slot->cover_path);
     slot->rom_path = strdup(rom);
-    slot->cover_path = library_find_cover(menu, item_path(h), h->title);
+    slot->cover_path = library_find_cover(menu, item_path(h));
     *pending = false;
     return slot->cover_path;
 }

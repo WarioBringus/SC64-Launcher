@@ -343,7 +343,7 @@ void view_about_init (menu_t *menu) {
     release();
     rom = path_clone(requested);
     title = library_title_from_path(rom);
-    cover = library_find_cover(menu, rom, title);
+    cover = library_find_cover(menu, rom);
     library_details_for_path(menu, rom, details, sizeof(details));
     load_accessories(menu, rom);
     load_save_info(menu, rom);

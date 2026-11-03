@@ -115,11 +115,22 @@ static int compare_categories (const void *a, const void *b) {
     return strcasecmp(((const library_category_t *)a)->name, ((const library_category_t *)b)->name);
 }
 
-static char *title_from_file_name (const char *file_name) {
-    char *title = strdup(file_name);
-    char *dot = strrchr(title, '.');
-    if (dot && dot != title) {
+static char *file_stem (const char *file_name) {
+    char *stem = strdup(file_name);
+    char *dot = strrchr(stem, '.');
+    if (dot && dot != stem) {
         *dot = '\0';
+    }
+    return stem;
+}
+
+static char *title_from_file_name (const char *file_name) {
+    char *title = file_stem(file_name);
+    // File names can't hold a colon, so "Castlevania - Legacy of Darkness" stands for one.
+    char *dash;
+    while ((dash = strstr(title, " - ")) != NULL) {
+        dash[0] = ':';
+        memmove(dash + 1, dash + 2, strlen(dash + 2) + 1);
     }
     return title;
 }
@@ -239,16 +250,18 @@ static char *find_cover_by_code (const char code[4], const char *raw_title) {
 }
 
 /**
- * @brief Cover named after the game: menu/metadata/names/<title>.png.
+ * @brief Cover named after the game's file: menu/metadata/names/<file name without extension>.png.
  * Takes priority over the game code, and covers ROMs whose header has no game code.
  */
-static char *find_cover_by_name (const char *title) {
+static char *find_cover_by_name (path_t *rom_path) {
     path_t *path = path_init(storage_prefix, METADATA_DIRECTORY);
     path_push(path, BY_NAME_SUBDIRECTORY);
-    size_t len = strlen(title);
+    char *stem = file_stem(path_last_get(rom_path));
+    size_t len = strlen(stem);
     char *file = malloc(len + 5);
-    memcpy(file, title, len);
+    memcpy(file, stem, len);
     memcpy(file + len, ".png", 5);
+    free(stem);
     path_push(path, file);
     free(file);
     char *found = file_if_exists(path);
@@ -256,7 +269,7 @@ static char *find_cover_by_name (const char *title) {
     return found;
 }
 
-static char *find_cover (path_t *rom_path, const char *title) {
+static char *find_cover (path_t *rom_path) {
     char code[4];
     char raw_title[21];
     char *found = NULL;
@@ -273,7 +286,7 @@ static char *find_cover (path_t *rom_path, const char *title) {
     }
 
     // A cover named after the game wins: it fixes prototypes and hacks that reuse another game's code.
-    found = find_cover_by_name(title);
+    found = find_cover_by_name(rom_path);
     if (!found && read_rom_header(path_get(rom_path), code, raw_title) && code_is_valid(code)) {
         found = find_cover_by_code(code, raw_title);
     }
@@ -1422,18 +1435,18 @@ path_t *library_game_path (library_game_t *game) {
 const char *library_game_cover (menu_t *menu, library_game_t *game) {
     if (game->cover_state == LIBRARY_COVER_UNKNOWN) {
         path_t *path = library_game_path(game);
-        game->cover_path = find_cover(path, game->title);
+        game->cover_path = find_cover(path);
         game->cover_state = game->cover_path ? LIBRARY_COVER_FOUND : LIBRARY_COVER_NONE;
         path_free(path);
     }
     return game->cover_path;
 }
 
-char *library_find_cover (menu_t *menu, path_t *rom_path, const char *title) {
+char *library_find_cover (menu_t *menu, path_t *rom_path) {
     if (!storage_prefix) {
         storage_prefix = menu->storage_prefix;
     }
-    return find_cover(rom_path, title);
+    return find_cover(rom_path);
 }
 
 char *library_title_from_path (path_t *rom_path) {
