@@ -934,6 +934,11 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
     rdpq_set_scissor(0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2, display_get_width(), LAUNCHER_CONTENT_Y1 + 2);
     int lift = launcher_focus_lift(category_index * 100000 + sel);
+
+    // The selected game's title shows in full; titles in its row that it would run into wait.
+    int sel_tx, sel_tw;
+    int base_extra = highlight_only ? TITLE_EXTRA_HIGHLIGHT_ONLY : (g.gap / 2) - 1;
+    launcher_title_box(c->games[sel].title, g.x0 + (sel % g.cols) * (g.w + g.gap) + g.w / 2, g.w + base_extra * 2, &sel_tx, &sel_tw);
     for (int i = draw_first; i < draw_last; i++) {
         int col = i % g.cols;
         int x = g.x0 + col * (g.w + g.gap);
@@ -951,9 +956,8 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         }
 
         if (selected || !highlight_only) {
-            int extra = highlight_only ? TITLE_EXTRA_HIGHLIGHT_ONLY : (g.gap / 2) - 1;
-            int tx = x - extra;
-            int tw = g.w + extra * 2;
+            int tx = x - base_extra;
+            int tw = g.w + base_extra * 2;
             if (tx < LAUNCHER_X0) {
                 tw -= LAUNCHER_X0 - tx;
                 tx = LAUNCHER_X0;
@@ -961,7 +965,16 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
             if (tx + tw > LAUNCHER_X1) {
                 tw = LAUNCHER_X1 - tx;
             }
-            launcher_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
+            bool blocked = false;
+            if (selected) {
+                tx = sel_tx;
+                tw = sel_tw;
+            } else if (i / g.cols == sel / g.cols) {
+                blocked = (tx < sel_tx + sel_tw + 6) && (tx + tw > sel_tx - 6);
+            }
+            if (!blocked) {
+                launcher_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
+            }
         }
     }
 

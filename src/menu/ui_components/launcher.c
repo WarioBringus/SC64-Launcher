@@ -216,6 +216,23 @@ int launcher_name (int x, int y, int width, rdpq_align_t align, menu_font_style_
     return text_box(x, y, width, TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
+void launcher_title_box (const char *name, int cx, int min_w, int *x, int *w) {
+    int need = text_width(name) + 8;
+    int width = (need > min_w) ? need : min_w;
+    if (width > LAUNCHER_WIDTH) {
+        width = LAUNCHER_WIDTH;
+    }
+    int left = cx - width / 2;
+    if (left < LAUNCHER_X0) {
+        left = LAUNCHER_X0;
+    }
+    if (left + width > LAUNCHER_X1) {
+        left = LAUNCHER_X1 - width;
+    }
+    *x = left;
+    *w = width;
+}
+
 int launcher_small (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text) {
     char escaped[256];
     escape_text_codes(text, escaped, sizeof(escaped));

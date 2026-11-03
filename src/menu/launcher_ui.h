@@ -166,6 +166,12 @@ int launcher_text(int x, int y, int width, rdpq_align_t align, menu_font_style_t
 int launcher_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name);
 
 /**
+ * @brief The box a selected game's title needs under its tile (centred on cx, at least min_w wide,
+ * kept on screen) so it shows in full. name must stay in memory (its width is remembered).
+ */
+void launcher_title_box(const char *name, int cx, int min_w, int *x, int *w);
+
+/**
  * @brief Draw a game title in the larger title font.
  *
  * @return Width of the drawn text in pixels.

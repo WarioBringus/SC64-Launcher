@@ -316,6 +316,14 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
     row->scroll_pos = motion_snap ? target : launcher_ease(row->scroll_pos, target);
     int scroll_px = (int)lroundf(row->scroll_pos);
     int lift = focused ? launcher_focus_lift((int)(row - rows) * 1000 + row->selected) : 0;
+
+    // The selected game's title shows in full; titles beside it that it would run into wait.
+    int sel_tx = 0, sel_tw = 0;
+    if (focused && row->count > 0) {
+        int sel_x = LAUNCHER_X0 + row->selected * ROW_TILE_STEP - scroll_px;
+        launcher_title_box(row->items[row->selected].title, sel_x + ROW_TILE_W / 2,
+            ROW_TILE_W + 2 * (highlight_only ? 60 : 3), &sel_tx, &sel_tw);
+    }
     for (int i = scroll_px / ROW_TILE_STEP; i < row->count && i <= scroll_px / ROW_TILE_STEP + ROW_VISIBLE_TILES; i++) {
         home_item_t *h = &row->items[i];
         int x = LAUNCHER_X0 + i * ROW_TILE_STEP - scroll_px;
@@ -333,9 +341,8 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
             launcher_draw_favorite_star(x, item_y, ROW_TILE_W);
         }
         if (selected || !highlight_only) {
-            int extra = selected && highlight_only ? 60 : 3;
-            int tx = x - extra;
-            int tw = ROW_TILE_W + extra * 2;
+            int tx = x - 3;
+            int tw = ROW_TILE_W + 6;
             if (tx < LAUNCHER_X0) {
                 tw -= LAUNCHER_X0 - tx;
                 tx = LAUNCHER_X0;
@@ -343,7 +350,16 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
             if (tx + tw > LAUNCHER_X1) {
                 tw = LAUNCHER_X1 - tx;
             }
-            launcher_name(tx, tile_y + ROW_TILE_H + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, h->title);
+            bool blocked = false;
+            if (selected) {
+                tx = sel_tx;
+                tw = sel_tw;
+            } else if (focused) {
+                blocked = (tx < sel_tx + sel_tw + 6) && (tx + tw > sel_tx - 6);
+            }
+            if (!blocked && tw > 0) {
+                launcher_name(tx, tile_y + ROW_TILE_H + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, h->title);
+            }
         }
     }
     return y + ROW_H;
