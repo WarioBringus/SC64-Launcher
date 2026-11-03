@@ -316,9 +316,21 @@ void menu_run (boot_params_t *boot_params) {
             view_t *view = menu_get_view(menu->mode);
             if (view && view->show) {
                 view->show(menu, display);
-                if (!boot_log_written && (menu->mode == MENU_MODE_HOME || menu->mode == MENU_MODE_LIBRARY)) {
-                    menu_boot_mark("first launcher frame shown");
+                static int startup_stage = 0;
+                if (startup_stage == 1) {
+                    // Startup work that can wait until the launcher is on screen.
+                    sound_bgm_keep_alive();
+                    fonts_load_default();
+                    menu_boot_mark("main font loaded (after first frame)");
+                    sound_bgm_keep_alive();
+                    view_library_warm(menu);
+                    menu_boot_mark("library folder listed (after first frame)");
                     boot_log_write(menu);
+                    startup_stage = 2;
+                }
+                if (startup_stage == 0 && (menu->mode == MENU_MODE_HOME || menu->mode == MENU_MODE_LIBRARY)) {
+                    menu_boot_mark("first launcher frame shown");
+                    startup_stage = 1;
                 }
             } else {
                 rdpq_attach_clear(display, NULL);
@@ -338,6 +350,10 @@ void menu_run (boot_params_t *boot_params) {
                 // Free cover images when leaving the launcher (other screens need the memory and the PNG decoder).
                 if (menu_mode_is_launcher(menu->mode) && !menu_mode_is_launcher(menu->next_mode)) {
                     launcher_covers_reset();
+                }
+                // Screens of the original menu use the main font, loaded after startup.
+                if (!menu_mode_is_launcher(menu->next_mode) && menu->next_mode != MENU_MODE_STARTUP) {
+                    fonts_load_default();
                 }
 
                 menu->mode = menu->next_mode;

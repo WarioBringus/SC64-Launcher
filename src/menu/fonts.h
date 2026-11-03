@@ -54,6 +54,13 @@ typedef enum {
 void fonts_init(char *custom_font_path);
 
 /**
+ * @brief Load the menu's main font (Firple, 476 KB with its CJK glyphs) if it isn't yet. Startup
+ * loads only the launcher's small fonts and calls this once Home is on screen; any screen of the
+ * original menu calls it first.
+ */
+void fonts_load_default(void);
+
+/**
  * @brief Re-color the font styles from the active theme.
  */
 void fonts_apply_theme(void);

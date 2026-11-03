@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <string.h>
 #include <libdragon.h>
 
 #include "fonts.h"
@@ -10,6 +12,8 @@ static rdpq_font_t *launcher_font = NULL;
 static rdpq_font_t *title_font = NULL;
 static rdpq_font_t *small_font = NULL;
 static rdpq_font_t *wide_fonts[3] = { NULL, NULL, NULL };
+static char default_font_path[256] = "";
+static bool default_font_loaded = false;
 
 
 static void apply_styles (rdpq_font_t *font) {
@@ -27,7 +31,9 @@ static void apply_styles (rdpq_font_t *font) {
 }
 
 static void apply_font_styles (void) {
-    apply_styles(default_font);
+    if (default_font) {
+        apply_styles(default_font);
+    }
     if (launcher_font) {
         apply_styles(launcher_font);
     }
@@ -44,17 +50,32 @@ static void apply_font_styles (void) {
     }
 }
 
-static void load_default_font (char *custom_font_path) {
+void fonts_load_default (void) {
+    if (default_font_loaded) {
+        return;
+    }
+    default_font_loaded = true;
     char *font_path = "rom:/menu/fonts/Firple-Bold.font64";
 
-    if (custom_font_path != NULL && strlen(custom_font_path) > 0) {
+    if (strlen(default_font_path) > 0) {
         // Only check file_exists if custom_font_path is a valid filesystem path (not rom:/)
-        if (strncmp(custom_font_path, "rom:/", 5) != 0 && file_exists(custom_font_path)) {
-            font_path = custom_font_path;
+        if (strncmp(default_font_path, "rom:/", 5) != 0 && file_exists(default_font_path)) {
+            font_path = default_font_path;
         }
     }
 
-    default_font = rdpq_font_load(font_path);
+    rdpq_font_t *font = rdpq_font_load(font_path);
+    apply_styles(font);
+    rdpq_text_unregister_font(FNT_DEFAULT);     // The launcher font stood in until now.
+    rdpq_text_register_font(FNT_DEFAULT, font);
+    default_font = font;
+}
+
+static void load_default_font (char *custom_font_path) {
+    if (custom_font_path != NULL) {
+        snprintf(default_font_path, sizeof(default_font_path), "%s", custom_font_path);
+    }
+
     launcher_font = rdpq_font_load("rom:/menu/fonts/Inter.font64");
     title_font = rdpq_font_load("rom:/menu/fonts/InterTitle.font64");
     small_font = rdpq_font_load("rom:/menu/fonts/InterSmall.font64");
@@ -64,7 +85,7 @@ static void load_default_font (char *custom_font_path) {
 
     apply_font_styles();
 
-    rdpq_text_register_font(FNT_DEFAULT, default_font);
+    rdpq_text_register_font(FNT_DEFAULT, launcher_font);   // Until fonts_load_default() swaps Firple in.
     rdpq_text_register_font(FNT_LAUNCHER, launcher_font);
     rdpq_text_register_font(FNT_TITLE, title_font);
     rdpq_text_register_font(FNT_SMALL, small_font);

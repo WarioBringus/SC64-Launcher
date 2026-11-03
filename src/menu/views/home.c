@@ -413,14 +413,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_home_init (menu_t *menu) {
-    static bool library_warmed = false;
     menu_boot_mark("home opening");
-    if (!library_warmed) {
-        // Part of starting up: the library's first visit then slides in without a stall.
-        view_library_warm(menu);
-        library_warmed = true;
-        menu_boot_mark("library folder listed");
-    }
     launcher_menu_init();
     build_rows(menu);
     menu_boot_mark("home rows built");

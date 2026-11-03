@@ -13,6 +13,7 @@
 #include <libdragon.h>
 
 #include "library.h"
+#include "sound.h"
 #include "utils/fs.h"
 
 #define METADATA_DIRECTORY      "menu/metadata"
@@ -556,6 +557,9 @@ static void load_folder_games (library_category_t *c) {
             g->file_name = strdup(info.d_name);
             g->title = title_from_file_name(info.d_name);
             g->directory = c->directory;
+            if ((c->count & 15) == 0) {
+                sound_bgm_keep_alive();     // A big folder takes a while: keep the music going.
+            }
         }
         result = dir_findnext(path_get(c->directory), &info);
     }
