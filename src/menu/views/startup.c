@@ -12,6 +12,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_startup_init (menu_t *menu) {
+    menu_boot_mark("startup checks");
     if (flashcart_has_voltage_temperature()) {
         uint16_t voltage_mv;
         int16_t temperature_deci_c;

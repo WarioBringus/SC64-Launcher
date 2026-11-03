@@ -43,6 +43,37 @@
 
 static menu_t *menu;
 
+/* Temporary startup diagnostics: when each step finished, written once Home has drawn. */
+#define BOOT_LOG_MAX    (32)
+static struct { const char *label; uint32_t ms; } boot_log[BOOT_LOG_MAX];
+static int boot_log_count = 0;
+static bool boot_log_written = false;
+
+void menu_boot_mark (const char *label) {
+    if (!boot_log_written && boot_log_count < BOOT_LOG_MAX) {
+        boot_log[boot_log_count].label = label;
+        boot_log[boot_log_count].ms = (uint32_t)get_ticks_ms();
+        boot_log_count++;
+    }
+}
+
+static void boot_log_write (menu_t *menu) {
+    boot_log_written = true;
+    char path[96];
+    snprintf(path, sizeof(path), "%smenu/cache/launcher/boot-log.txt", menu->storage_prefix);
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        return;
+    }
+    uint32_t previous = 0;
+    for (int i = 0; i < boot_log_count; i++) {
+        fprintf(f, "%6lu ms  (+%5lu)  %s\n", (unsigned long)boot_log[i].ms,
+            (unsigned long)(boot_log[i].ms - previous), boot_log[i].label);
+        previous = boot_log[i].ms;
+    }
+    fclose(f);
+}
+
 static bool interlaced = true;
 
 /**
@@ -59,7 +90,9 @@ static void menu_init (boot_params_t *boot_params) {
     menu->mode = MENU_MODE_NONE;
     menu->next_mode = MENU_MODE_STARTUP;
 
+    menu_boot_mark("menu started");
     menu->flashcart_err = flashcart_init(&menu->storage_prefix);
+    menu_boot_mark("flashcart and SD card ready");
     if (menu->flashcart_err != FLASHCART_OK) {
         menu->next_mode = MENU_MODE_FAULT;
     }
@@ -75,6 +108,7 @@ static void menu_init (boot_params_t *boot_params) {
     sound_init_default();
     sound_init_sfx();
     sound_init_bgm();
+    menu_boot_mark("sound ready");
 
     hdmi_clear_game_id();
 
@@ -87,6 +121,7 @@ static void menu_init (boot_params_t *boot_params) {
     settings_load(&menu->settings);
     theme_set(theme_find(menu->settings.theme));
     path_pop(path);
+    menu_boot_mark("settings read");
 
     path_push(path, MENU_ROM_LOAD_HISTORY_FILE);
     bookkeeping_init(path_get(path));
@@ -95,6 +130,7 @@ static void menu_init (boot_params_t *boot_params) {
     menu->load.load_favorite_id = -1;
     menu->launcher_return_mode = MENU_MODE_NONE;
     path_pop(path);
+    menu_boot_mark("history read");
 
     // Background music: tracks are the .wav64 files in /menu/music (created if missing).
     path_push(path, MENU_MUSIC_DIRECTORY);
@@ -103,6 +139,7 @@ static void menu_init (boot_params_t *boot_params) {
     sound_bgm_set_volume(menu->settings.bgm_volume);
     sound_bgm_load_folder(path_get(path));
     path_pop(path);
+    menu_boot_mark("music folder listed");
 
     // Force interlacing off in VI settings for TVs and other devices that struggle with interlaced video input.
     interlaced = !menu->settings.force_progressive_scan;
@@ -128,10 +165,12 @@ static void menu_init (boot_params_t *boot_params) {
     }
     
     display_set_fps_limit(FPS_LIMIT);
+    menu_boot_mark("display ready");
 
     path_push(path, MENU_CUSTOM_FONT_FILE);
     fonts_init(path_get(path));
     path_pop(path);
+    menu_boot_mark("fonts loaded");
 
     // path_push(path, MENU_CUSTOM_BGM_FILE);
     // bgm_init(path_get(path));
@@ -142,6 +181,7 @@ static void menu_init (boot_params_t *boot_params) {
 
     path_push(path, BACKGROUND_CACHE_FILE);
     ui_components_background_init(path_get(path));
+    menu_boot_mark("background loaded");
 
     path_free(path);
 
@@ -154,6 +194,7 @@ static void menu_init (boot_params_t *boot_params) {
         menu->browser.directory = path_init(menu->storage_prefix, "/");
     }
 
+    menu_boot_mark("menu set up");
     debugf("N64FlashcartMenu debugging...\n");
 }
 
@@ -275,6 +316,10 @@ void menu_run (boot_params_t *boot_params) {
             view_t *view = menu_get_view(menu->mode);
             if (view && view->show) {
                 view->show(menu, display);
+                if (!boot_log_written && (menu->mode == MENU_MODE_HOME || menu->mode == MENU_MODE_LIBRARY)) {
+                    menu_boot_mark("first launcher frame shown");
+                    boot_log_write(menu);
+                }
             } else {
                 rdpq_attach_clear(display, NULL);
                 rdpq_detach_wait();
