@@ -130,11 +130,14 @@ int library_cover_id(const char *cover_rel);
  * the filter first and `shown` set to how many match.
  *
  * @param sort Sort order (launcher_sort_t).
- * @param filter_field Field to filter on (LAUNCHER_SORT_GENRE...PLAYERS), or -1 for no filter.
- * @param filter_value Group label to keep (as library_game_group writes it).
+ * @param filter_field Field to filter on (LAUNCHER_SORT_GENRE...PLAYERS, or LAUNCHER_FILTER_SEARCH), or -1 for no filter.
+ * @param filter_value Group label to keep (as library_game_group writes it), or the text searched for.
  * @return true if the arrangement changed.
  */
 bool library_arrange_category(library_category_t *category, int sort, int filter_field, const char *filter_value);
+
+/** @brief Filter field that keeps games whose title holds the filter value (case, spaces and punctuation ignored). */
+#define LAUNCHER_FILTER_SEARCH  (100)
 
 /** @brief One group in a category, for the filter picker. */
 typedef struct {

@@ -1424,6 +1424,11 @@ static void open_filter (menu_t *menu, void *arg) {
     request(menu, LAUNCHER_REQUEST_FILTER);
 }
 
+static void open_search (menu_t *menu, void *arg) {
+    (void)arg;
+    request(menu, LAUNCHER_REQUEST_SEARCH);
+}
+
 int launcher_requested_category (void) {
     return requested_category;
 }
@@ -1620,6 +1625,7 @@ static component_context_menu_t system_menu = {
 /* Start: the whole launcher, grouped. */
 static component_context_menu_t start_menu = {
     .list = {
+        { .text = "Search", .action = open_search },
         { .text = "Surprise me", .action = surprise_me },
         { .text = folder_label, .submenu = &folder_menu },
         { .text = "Browse", .submenu = &browse_menu },

@@ -118,6 +118,30 @@ static const launcher_hint_t hints_folders[] = {
     { LAUNCHER_BUTTON_B, "B", "Done" },
 };
 
+/* Search (Start > Search): letters typed on an on-screen keyboard narrow the folder as you go. */
+#define SEARCH_MAX                  (24)
+#define SEARCH_TOP                  (240)
+#define SEARCH_FIRST_KEY_Y          (282)
+#define SEARCH_KEY_W                (40)
+#define SEARCH_KEY_H                (26)
+#define SEARCH_KEY_GAP              (6)
+#define SEARCH_ROW_H                (32)
+#define SEARCH_COLS                 (10)
+#define SEARCH_ROWS                 (4)
+#define SEARCH_SPACE_COL            (6)     /* Last row: Space and Delete take two columns each */
+#define SEARCH_DELETE_COL           (8)
+static const char *search_rows[SEARCH_ROWS] = { "1234567890", "ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ" };
+static bool search_open = false;
+static int search_row = 1;
+static int search_col = 0;
+static char search_text[SEARCH_MAX + 1] = "";
+
+static const launcher_hint_t hints_search[] = {
+    { LAUNCHER_BUTTON_A, "A", "Type" },
+    { LAUNCHER_BUTTON_B, "B", "Delete" },
+    { LAUNCHER_BUTTON_START, "S", "Done" },
+};
+
 static const launcher_hint_t hints_picker[] = {
     { LAUNCHER_BUTTON_A, "A", "Choose" },
     { LAUNCHER_BUTTON_B, "B", "Back" },
@@ -361,6 +385,141 @@ static void picker_draw (void) {
     }
 }
 
+static void search_apply (void) {
+    bool any = false;
+    for (const char *p = search_text; *p; p++) {
+        any |= (*p != ' ');
+    }
+    if (any) {
+        filter_field = LAUNCHER_FILTER_SEARCH;
+        snprintf(filter_value, sizeof(filter_value), "%s", search_text);
+    } else if (filter_field == LAUNCHER_FILTER_SEARCH) {
+        filter_field = -1;
+        filter_value[0] = '\0';
+    }
+}
+
+static void search_show (void) {
+    search_open = true;
+    if (filter_field != LAUNCHER_FILTER_SEARCH) {
+        search_text[0] = '\0';
+    }
+}
+
+/** @brief Keep the cursor on the first column of the last row's wide keys. */
+static void search_snap (void) {
+    if (search_row == SEARCH_ROWS - 1) {
+        if (search_col == SEARCH_SPACE_COL + 1) {
+            search_col = SEARCH_SPACE_COL;
+        } else if (search_col == SEARCH_DELETE_COL + 1) {
+            search_col = SEARCH_DELETE_COL;
+        }
+    }
+}
+
+static void search_delete (void) {
+    size_t len = strlen(search_text);
+    if (len > 0) {
+        search_text[len - 1] = '\0';
+        search_apply();
+    }
+}
+
+static void search_process (menu_t *menu) {
+    bool last_row = (search_row == SEARCH_ROWS - 1);
+    int col = search_col;
+    int row = search_row;
+    if (menu->actions.go_left) {
+        col -= (last_row && search_col >= SEARCH_DELETE_COL) ? 2 : 1;
+    } else if (menu->actions.go_right) {
+        col += (last_row && search_col >= SEARCH_SPACE_COL) ? 2 : 1;
+    } else if (menu->actions.go_up) {
+        row -= 1;
+    } else if (menu->actions.go_down) {
+        row += 1;
+    }
+    if ((col != search_col || row != search_row) && col >= 0 && col < SEARCH_COLS && row >= 0 && row < SEARCH_ROWS) {
+        search_col = col;
+        search_row = row;
+        search_snap();
+        sound_play_effect(SFX_CURSOR);
+        return;
+    }
+
+    if (menu->actions.settings) {
+        sound_play_effect(SFX_ENTER);
+        search_open = false;
+    } else if (menu->actions.back) {
+        sound_play_effect(SFX_EXIT);
+        if (search_text[0]) {
+            search_delete();
+        } else {
+            search_open = false;
+        }
+    } else if (menu->actions.enter) {
+        size_t len = strlen(search_text);
+        if (last_row && search_col >= SEARCH_DELETE_COL) {
+            search_delete();
+            sound_play_effect(SFX_EXIT);
+        } else if (last_row && search_col >= SEARCH_SPACE_COL) {
+            if (len > 0 && len < SEARCH_MAX && search_text[len - 1] != ' ') {
+                search_text[len] = ' ';
+                search_text[len + 1] = '\0';
+            }
+            sound_play_effect(SFX_TICK);
+        } else if (len < SEARCH_MAX) {
+            search_text[len] = search_rows[search_row][search_col];
+            search_text[len + 1] = '\0';
+            search_apply();
+            sound_play_effect(SFX_TICK);
+        }
+    }
+}
+
+static void search_draw (library_category_t *c) {
+    int top = SEARCH_TOP;
+    int bottom = SEARCH_FIRST_KEY_Y + (SEARCH_ROWS - 1) * SEARCH_ROW_H + SEARCH_KEY_H + 12;
+    launcher_fill_rounded(LAUNCHER_X0 - 2, top - 2, LAUNCHER_X1 + 2, bottom + 2, 14, theme_current()->line);
+    launcher_fill_rounded(LAUNCHER_X0, top, LAUNCHER_X1, bottom, 12, theme_current()->panel);
+
+    if (search_text[0]) {
+        char typed[SEARCH_MAX + 2];
+        snprintf(typed, sizeof(typed), "%s_", search_text);
+        launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_DEFAULT, typed);
+    } else {
+        launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_GRAY, "Type part of a name");
+    }
+    int shown = c ? c->shown : 0;
+    launcher_text(LAUNCHER_X1 - 180, top + 14, 160, ALIGN_RIGHT, STL_GRAY, shown == 1 ? "1 game" : "%d games", shown);
+
+    int keys_w = SEARCH_COLS * SEARCH_KEY_W + (SEARCH_COLS - 1) * SEARCH_KEY_GAP;
+    int x0 = LAUNCHER_X0 + (LAUNCHER_WIDTH - keys_w) / 2;
+    for (int row = 0; row < SEARCH_ROWS; row++) {
+        int y = SEARCH_FIRST_KEY_Y + row * SEARCH_ROW_H;
+        for (int col = 0; col < SEARCH_COLS; col++) {
+            char letter[2] = { 0, 0 };
+            const char *label = letter;
+            int span = 1;
+            if (col < (int)strlen(search_rows[row])) {
+                letter[0] = search_rows[row][col];
+            } else if (col == SEARCH_SPACE_COL) {
+                label = "Space";
+                span = 2;
+            } else if (col == SEARCH_DELETE_COL) {
+                label = "Delete";
+                span = 2;
+            } else {
+                continue;
+            }
+            int x = x0 + col * (SEARCH_KEY_W + SEARCH_KEY_GAP);
+            int w = span * SEARCH_KEY_W + (span - 1) * SEARCH_KEY_GAP;
+            bool on = (row == search_row && col == search_col);
+            launcher_fill_rounded(x, y, x + w, y + SEARCH_KEY_H, 6, on ? theme_current()->accent : theme_current()->highlight);
+            launcher_text(x, y + 4, w, ALIGN_CENTER, on ? STL_ON_ACCENT : STL_DEFAULT, "%s", label);
+        }
+    }
+}
+
 /** @brief Whether a game is a favorite, worked out again only when favorites change. */
 static bool game_is_favorite (menu_t *menu, library_game_t *game) {
     uint32_t generation = launcher_favorites_generation();
@@ -585,6 +744,10 @@ static void process (menu_t *menu) {
         picker_process(menu, current);
         return;
     }
+    if (search_open) {
+        search_process(menu);
+        return;
+    }
     if (hidden_open) {
         hidden_process(menu);
         return;
@@ -615,6 +778,10 @@ static void process (menu_t *menu) {
     }
     if (request == LAUNCHER_REQUEST_FILTER) {
         picker_show_fields();
+        return;
+    }
+    if (request == LAUNCHER_REQUEST_SEARCH) {
+        search_show();
         return;
     }
     if (request == LAUNCHER_REQUEST_SURPRISE && current && current->shown > 0) {
@@ -649,6 +816,14 @@ static void process (menu_t *menu) {
         launcher_transition_fade();
         sound_play_effect(SFX_SWISH);
         return;     // Saved with the other view settings when the library is left.
+    }
+
+    // With a search showing, B clears it first.
+    if (menu->actions.back && filter_field == LAUNCHER_FILTER_SEARCH) {
+        sound_play_effect(SFX_EXIT);
+        search_text[0] = '\0';
+        search_apply();
+        return;
     }
 
     // L (the Home tab is to the left) or B goes back to Home; R on Home comes here.
@@ -1194,7 +1369,11 @@ static void draw (menu_t *menu, surface_t *d) {
         apply_sort(c, category_index);
         int *sel = current_selection();
         if (c->shown == 0) {
-            if (filter_field >= 0) {
+            if (filter_field == LAUNCHER_FILTER_SEARCH) {
+                char message[96];
+                snprintf(message, sizeof(message), "No games here match \"%s\"", filter_value);
+                launcher_name(LAUNCHER_X0, 140, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, message);
+            } else if (filter_field >= 0) {
                 launcher_name(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No games here match the filter");
                 launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Start > Filter to change it");
             } else {
@@ -1217,7 +1396,9 @@ static void draw (menu_t *menu, surface_t *d) {
                 char group[48];
                 char counter[128];
                 library_game_group(&c->games[*sel], current_sort, group, sizeof(group));
-                if (filter_field >= 0) {
+                if (filter_field == LAUNCHER_FILTER_SEARCH) {
+                    snprintf(counter, sizeof(counter), "Search: %s   %d / %d", filter_value, *sel + 1, c->shown);
+                } else if (filter_field >= 0) {
                     snprintf(counter, sizeof(counter), "Filter: %s   %d / %d", filter_value, *sel + 1, c->shown);
                 } else {
                     snprintf(counter, sizeof(counter), "%s   %d / %d", group, *sel + 1, c->shown);
@@ -1232,7 +1413,10 @@ static void draw (menu_t *menu, surface_t *d) {
                 }
             }
         }
-        if (hidden_open) {
+        if (search_open) {
+            search_draw(c);
+            launcher_draw_footer(hints_search, HINT_COUNT(hints_search));
+        } else if (hidden_open) {
             hidden_draw(menu);
             launcher_draw_footer(hints_hidden, HINT_COUNT(hints_hidden));
         } else if (folders_open) {

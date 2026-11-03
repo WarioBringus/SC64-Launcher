@@ -1151,12 +1151,30 @@ static int sort_order = 0;
 static int filter_field_now = -1;
 static const char *filter_value_now = NULL;
 
+/** @brief Letters and digits only, lower case: "Castlevania: Legacy" -> "castlevanialegacy". */
+static void squash_text (const char *text, char *out, size_t size) {
+    size_t o = 0;
+    for (const unsigned char *p = (const unsigned char *)text; *p && o + 1 < size; p++) {
+        if (isalnum(*p)) {
+            out[o++] = (char)tolower(*p);
+        }
+    }
+    out[o] = '\0';
+}
+
+static char search_now[64];     /* The searched text, squashed, while a category is arranged */
+
 static bool game_matches_filter (const library_game_t *g) {
     if (library_game_hidden((library_game_t *)g)) {
         return false;
     }
     if (filter_field_now < 0) {
         return true;
+    }
+    if (filter_field_now == LAUNCHER_FILTER_SEARCH) {
+        char title[128];
+        squash_text(g->title, title, sizeof(title));
+        return strstr(title, search_now) != NULL;
     }
     char label[64];
     library_game_group((library_game_t *)g, filter_field_now, label, sizeof(label));
@@ -1224,6 +1242,7 @@ bool library_arrange_category (library_category_t *category, int sort, int filte
     sort_order = sort;
     filter_field_now = filter_field;
     filter_value_now = filter_value;
+    squash_text(filter_value, search_now, sizeof(search_now));
     qsort(category->games, category->count, sizeof(library_game_t), compare_sorted);
 
     category->shown = 0;
