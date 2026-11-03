@@ -787,7 +787,8 @@ static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, in
     flat_end();
 }
 
-#define MOTION_TAU_MS       (28.0f) /* Glides close ~63% of the remaining distance every this many ms */
+#define MOTION_TAU_MS       (20.0f) /* Glides close ~63% of the remaining distance every this many ms */
+#define MOTION_SNAP_PX      (1.5f)  /* Closer than this, a glide lands (no slow creep over the last pixels) */
 #define FOCUS_LIFT          (3)     /* Pixels the selected tile rises */
 #define FOCUS_LIFT_MS       (120)
 #define FOCUS_SNAP_DISTANCE (220)   /* Farther jumps than this appear in place */
@@ -818,7 +819,7 @@ static void motion_frame (void) {
 
 float launcher_ease (float current, float target) {
     float next = current + (target - current) * ease_factor;
-    if (fabsf(target - next) < 0.5f) {
+    if (fabsf(target - next) < MOTION_SNAP_PX) {
         next = target;
     }
     return next;

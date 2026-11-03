@@ -379,8 +379,11 @@ static void draw (menu_t *menu, surface_t *d) {
         int drawn_scroll = (int)lroundf(scroll_y_pos);
         scroll_y_ahead = drawn_scroll - scroll_y;
 
-        rdpq_set_scissor(launcher_px(LAUNCHER_X0 - LAUNCHER_RING - 2), CONTENT_TOP - LAUNCHER_RING - 2,
-            launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2), CONTENT_BOTTOM + 2);
+        // Clamped to the screen: while Home slides in from the left the clip edge starts off screen.
+        int clip_x0 = launcher_px(LAUNCHER_X0 - LAUNCHER_RING - 2);
+        int clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
+        rdpq_set_scissor(clip_x0 < 0 ? 0 : clip_x0, CONTENT_TOP - LAUNCHER_RING - 2,
+            clip_x1 > display_get_width() ? display_get_width() : clip_x1, CONTENT_BOTTOM + 2);
         int y = CONTENT_TOP - drawn_scroll;
         for (int r = 0; r < row_count; r++) {
             bool focused = (r == row_selected);
