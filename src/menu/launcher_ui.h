@@ -305,6 +305,9 @@ void launcher_transition(menu_mode_t from, menu_mode_t to);
  */
 void launcher_transition_content_begin(int y0);
 
+/** @brief Whether a screen is still sliding or fading in (read-ahead waits for it). */
+bool launcher_transition_running(void);
+
 /** @brief Write settings a quick launch put off until the menu music has faded. */
 void launcher_save_pending_settings(menu_t *menu);
 

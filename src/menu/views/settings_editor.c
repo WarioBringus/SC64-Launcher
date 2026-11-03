@@ -845,10 +845,8 @@ static void launcher_settings_draw (menu_t *menu, surface_t *d) {
     settings_scroll_pos = launcher_ease(settings_scroll_pos, (float)settings_scroll);
     int scroll = (int)(settings_scroll_pos + 0.5f);
 
-    int clip_x0 = launcher_px(LAUNCHER_X0);
-    int clip_x1 = launcher_px(LAUNCHER_X1);
-    rdpq_set_scissor(clip_x0 < 0 ? 0 : clip_x0, SETTINGS_TOP - 4,
-        clip_x1 > display_get_width() ? display_get_width() : clip_x1, SETTINGS_BOTTOM + 4);
+    // Left edge at 0, as everywhere in the launcher: COPY mode hangs the RDP with any other.
+    rdpq_set_scissor(0, SETTINGS_TOP - 4, display_get_width(), SETTINGS_BOTTOM + 4);
 
     // The highlight glides from row to row.
     float target = (float)(SETTINGS_TOP + sel_y - scroll);

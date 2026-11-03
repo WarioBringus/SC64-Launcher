@@ -570,6 +570,10 @@ void launcher_transition (menu_mode_t from, menu_mode_t to) {
     transition_start_ms = 0;    // The clock starts with the new screen's first frame.
 }
 
+bool launcher_transition_running (void) {
+    return transition_pending;
+}
+
 void launcher_transition_content_begin (int y0) {
     motion_frame();
     transition_fade = 0.0f;

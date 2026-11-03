@@ -957,9 +957,11 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     launcher_draw_focus_ring_tile(g.x0 + (sel % g.cols) * (g.w + g.gap), sel_y, g.w, g.h);
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
-    // Preload the row below so scrolling down shows covers straight away.
-    bool any_pending = false;
-    for (int i = first; i < last + g.cols && i < c->shown; i++) {
+    // Preload the row below so scrolling down shows covers straight away. While the screen is
+    // still sliding in, read-ahead waits: a cover read per frame would make the slide stutter.
+    bool sliding = launcher_transition_running();
+    bool any_pending = sliding;
+    for (int i = first; !sliding && i < last + g.cols && i < c->shown; i++) {
         game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
         any_pending |= pending;
     }
@@ -1106,18 +1108,17 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     bool front_pending = pending;
     launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
-    int clip_x0 = launcher_px(LAUNCHER_X0 - 8);
-    int clip_x1 = launcher_px(LAUNCHER_X1 + 8);
-    rdpq_set_scissor(clip_x0 < 0 ? 0 : clip_x0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2,
-        clip_x1 > display_get_width() ? display_get_width() : clip_x1, SHELF_BASE_Y);
+    // The shelf runs edge to edge. (Spines are copied in COPY mode, where a scissor not starting at
+    // x = 0 hangs the RDP: a hardware bug.)
+    rdpq_set_scissor(0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2, display_get_width(), SHELF_BASE_Y);
 
     int spine_y = SHELF_BASE_Y - LAUNCHER_SPINE_H;
     // Spines to the left, then to the right, until they leave the screen.
-    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - LAUNCHER_SPINE_W; i >= 0 && x + LAUNCHER_SPINE_W > LAUNCHER_X0 - 8; i--, x -= step) {
+    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - LAUNCHER_SPINE_W; i >= 0 && x + LAUNCHER_SPINE_W > 0; i--, x -= step) {
         const char *path = library_game_cover(menu, &c->games[i]);
         launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
     }
-    for (int i = sel + 1, x = open_x + cw + SHELF_OPEN_GAP; i < c->shown && x < LAUNCHER_X1 + 8; i++, x += step) {
+    for (int i = sel + 1, x = open_x + cw + SHELF_OPEN_GAP; i < c->shown && x < launcher_screen_width(); i++, x += step) {
         const char *path = library_game_cover(menu, &c->games[i]);
         launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
     }
@@ -1133,8 +1134,8 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
     // The shelf itself.
-    launcher_fill_rounded(LAUNCHER_X0 - 8, SHELF_BASE_Y, LAUNCHER_X1 + 8, SHELF_BASE_Y + 8, 2, theme_current()->line);
-    launcher_fill_rounded(LAUNCHER_X0 - 8, SHELF_BASE_Y + 8, LAUNCHER_X1 + 8, SHELF_BASE_Y + 12, 2, theme_current()->panel);
+    launcher_fill_rounded(0, SHELF_BASE_Y, launcher_screen_width(), SHELF_BASE_Y + 8, 0, theme_current()->line);
+    launcher_fill_rounded(0, SHELF_BASE_Y + 8, launcher_screen_width(), SHELF_BASE_Y + 12, 0, theme_current()->panel);
 
     launcher_title(LAUNCHER_X0, SHELF_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
     char details[160];
