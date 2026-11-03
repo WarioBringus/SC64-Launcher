@@ -361,11 +361,8 @@ void view_extract_file_display(menu_t *menu, surface_t *display);
  */
 void view_library_init(menu_t *menu);
 
-/** @brief Temporary startup diagnostics: note when a step finished. */
-void menu_boot_mark(const char *label);
-
 /**
- * @brief List the library's current folder ahead of the first visit (at startup), so that visit
+ * @brief List the library's current folder ahead of the first visit (just after Home first shows), so that visit
  * doesn't stall in the middle of its slide in.
  */
 void view_library_warm(menu_t *menu);

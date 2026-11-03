@@ -413,10 +413,8 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_home_init (menu_t *menu) {
-    menu_boot_mark("home opening");
     launcher_menu_init();
     build_rows(menu);
-    menu_boot_mark("home rows built");
     motion_snap = true;
     launcher_focus_reset();
 }
