@@ -251,6 +251,7 @@ static void slot_free (cover_slot_t *slot) {
 }
 
 static bool hold_new = false;
+static uint32_t last_read_frame = 0;    /* Frame of the last pack read or PNG decode started */
 
 void launcher_covers_hold (bool hold) {
     hold_new = hold;
@@ -321,8 +322,8 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
         *pending = true;
     }
 
-    if (hold_new) {
-        return NULL;    // Scrolling fast: read it once the selection settles.
+    if (hold_new && (frame - last_read_frame) < 2) {
+        return NULL;    // Scrolling fast: one read every other frame, so no two frames in a row run long.
     }
 
     // Covers in a pack wait for read budget; only covers missing from the packs use the PNG decoder.
@@ -354,6 +355,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     victim->max_h = max_h;
     victim->last_used = frame;
 
+    last_read_frame = frame;
     if (pack) {
         uint64_t started = get_ticks_us();
         victim->image = pack_read(pack, id, max_w, max_h);

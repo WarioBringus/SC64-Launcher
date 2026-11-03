@@ -830,6 +830,36 @@ static void preload_neighbours (menu_t *menu, int *lookups_left) {
     preload_category(menu, (category_index + count - 1) % count, lookups_left);
 }
 
+#define LOOKAHEAD_COVERS    (72)    /* Covers kept ready around the page (the cache holds 96 with an Expansion Pak) */
+
+/**
+ * @brief While the page is complete, load rows above and below it, nearest first, so scrolling
+ * (even fast) lands on covers already in memory. Returns whether any are still loading.
+ */
+static bool preload_rows_around (menu_t *menu, library_category_t *c, grid_geometry_t *g, int first, int last, int *lookups_left) {
+    if (!is_memory_expanded()) {
+        return false;   // 24 cover slots without an Expansion Pak: keep them for the page.
+    }
+    int rows = (LOOKAHEAD_COVERS / g->cols - g->rows) / 2;
+    bool any_pending = false;
+    bool pending;
+    for (int r = 1; r <= rows; r++) {
+        int below = last + (r - 1) * g->cols + g->cols;   // The row right below the page is preloaded already.
+        for (int i = below; i < below + g->cols && i < c->shown; i++) {
+            game_cover(menu, &c->games[i], g->w, g->h, lookups_left, &pending);
+            any_pending |= pending;
+        }
+        int above = first - r * g->cols;
+        for (int i = above; i < above + g->cols; i++) {
+            if (i >= 0 && i < c->shown) {
+                game_cover(menu, &c->games[i], g->w, g->h, lookups_left, &pending);
+                any_pending |= pending;
+            }
+        }
+    }
+    return any_pending;
+}
+
 static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     grid_geometry_t g = grid_geometry(menu->settings.launcher_tile_size, c->portrait);
     bool highlight_only = menu->settings.launcher_titles_highlight_only;
@@ -930,6 +960,9 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
     // Once this screen is complete, get group jumps and then the categories either side ready,
     // and look for ROMs added since the cover index was built.
+    if (!any_pending) {
+        any_pending = preload_rows_around(menu, c, &g, first, last, &lookups_left);
+    }
     if (!any_pending) {
         library_check_new_games(NEW_GAMES_CHECK_US);
         preload_group_jumps(menu, c, sel, &lookups_left);

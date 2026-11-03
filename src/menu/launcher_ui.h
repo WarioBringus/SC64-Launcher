@@ -121,8 +121,9 @@ void launcher_covers_begin_frame(void);
 void launcher_covers_reset(void);
 
 /**
- * @brief While held, covers not yet in memory aren't read (they show as placeholders): used during fast
- * scrolling, when a pack read every frame would make the scrolling skip. Released each frame.
+ * @brief While held, covers not yet in memory are read at most one every other frame (the rest show as
+ * placeholders until their turn): used during fast scrolling, when a pack read every frame would make
+ * the scrolling skip. Released each frame.
  */
 void launcher_covers_hold(bool hold);
 
