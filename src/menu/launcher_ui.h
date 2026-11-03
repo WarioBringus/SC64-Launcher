@@ -121,6 +121,9 @@ surface_t *launcher_spine_get(const char *front_path, bool *pending);
 /** @brief Draw a spine (or, without one, a plain panel) with slightly rounded corners. */
 void launcher_draw_spine(int x, int y, surface_t *image);
 
+/** @brief Draw a cover or spine stretched to w x h (filtered; for in-between animation frames). */
+void launcher_draw_stretched(surface_t *image, int x, int y, int w, int h);
+
 /**
  * @brief Read a cover on screen again at a larger pack size (max_w x max_h), straight from its pack.
  * Returns a surface the caller frees, or NULL when the pack has no such cover.

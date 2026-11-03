@@ -1092,29 +1092,79 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 #define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
 #define SHELF_DETAILS_Y     (SHELF_BASE_Y + 60)
 
-static float shelf_position = 0.0f;     /* Drawn selection, gliding toward it (fractional while moving) */
+static float shelf_position = 0.0f;     /* The selection the shelf last showed (a big jump appears in place) */
+static float shelf_camera = 0.0f;       /* Shelf x drawn at the middle of the screen, gliding to the selection */
+static int shelf_open = -1;             /* The game opening (or open) to its front */
+static int shelf_closing = -1;          /* The game folding back into a spine */
+static uint64_t shelf_open_ms = 0;
+static uint64_t shelf_close_ms = 0;
+
+#define SHELF_FLIP_MS       (240)
+#define SHELF_LIFT          (8)     /* How far a box rises as it comes off the shelf */
+
+/** @brief How far a game is opened, 0 (a spine) to 1 (its front). */
+static float shelf_amount (int i, uint64_t now) {
+    if (i == shelf_open) {
+        float t = fminf(1.0f, (float)(now - shelf_open_ms) / SHELF_FLIP_MS);
+        return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+    }
+    if (i == shelf_closing) {
+        float t = fminf(1.0f, (float)(now - shelf_close_ms) / SHELF_FLIP_MS);
+        return (1.0f - t) * (1.0f - t) * (1.0f - t);
+    }
+    return 0.0f;
+}
+
+/** @brief Extra width a game takes on the shelf while (partly) open, gaps included. */
+static int shelf_extra (int i, int cw, uint64_t now) {
+    float a = shelf_amount(i, now);
+    return (int)lroundf((cw - LAUNCHER_SPINE_W) * a + 2 * (SHELF_OPEN_GAP - SHELF_GAP) * a);
+}
+
+/** @brief Left edge of a game on the shelf (in shelf coordinates). */
+static int shelf_left (int i, int cw, uint64_t now) {
+    int x = i * (LAUNCHER_SPINE_W + SHELF_GAP);
+    int opened[2] = { shelf_open, shelf_closing };
+    for (int k = 0; k < 2; k++) {
+        if (opened[k] >= 0 && opened[k] < i) {
+            x += shelf_extra(opened[k], cw, now);
+        }
+    }
+    return x + (int)lroundf((SHELF_OPEN_GAP - SHELF_GAP) * shelf_amount(i, now));
+}
 
 static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
     int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
     int lookups_left = 1;
     bool pending;
+    uint64_t now = get_ticks_ms();
 
-    // A different folder, or a jump of more than a shelf's width, appears in place.
+    // A different folder, a jump of more than a shelf's width, or coming back to the shelf from
+    // another view appears in place.
     static library_category_t *shelf_category = NULL;
-    if (c != shelf_category || fabsf(sel - shelf_position) > 30.0f) {
+    static uint64_t shelf_drawn_ms = 0;
+    bool snap = (c != shelf_category || fabsf(sel - shelf_position) > 30.0f || now - shelf_drawn_ms > 200);
+    shelf_drawn_ms = now;
+    if (snap) {
         shelf_category = c;
-        shelf_position = (float)sel;
+        shelf_open = sel;
+        shelf_open_ms = now - SHELF_FLIP_MS;
+        shelf_closing = -1;
         launcher_focus_reset();
-    } else {
-        shelf_position = launcher_ease(shelf_position, (float)sel);
+    } else if (sel != shelf_open) {
+        // The new game comes off the shelf as the last one goes back.
+        shelf_closing = shelf_open;
+        shelf_close_ms = now;
+        shelf_open = sel;
+        shelf_open_ms = now;
     }
+    shelf_position = (float)sel;
     motion_snap = true;     // Back in the grid, it appears in place.
 
-    // The open box sits in the middle; the shelf glides to it.
-    int lift = launcher_focus_lift(category_index * 100000 + sel);
-    int step = LAUNCHER_SPINE_W + SHELF_GAP;
-    int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step);
+    float target = (float)(shelf_left(sel, cw, now) + (LAUNCHER_SPINE_W + (cw - LAUNCHER_SPINE_W) * shelf_amount(sel, now)) / 2.0f);
+    shelf_camera = snap ? target : launcher_ease(shelf_camera, target);
+    int origin = LAUNCHER_CENTER_X - (int)lroundf(shelf_camera);
 
     // The open box's cover first; while scrolling fast it is the only cover read.
     surface_t *front = game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
@@ -1126,24 +1176,47 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     rdpq_set_scissor(0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2, display_get_width(), SHELF_BASE_Y);
 
     int spine_y = SHELF_BASE_Y - LAUNCHER_SPINE_H;
-    // Spines to the left, then to the right, until they leave the screen.
-    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - LAUNCHER_SPINE_W; i >= 0 && x + LAUNCHER_SPINE_W > 0; i--, x -= step) {
-        const char *path = library_game_cover(menu, &c->games[i]);
-        launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+    int first = sel, last = sel;
+    while (first > 0 && origin + shelf_left(first - 1, cw, now) + LAUNCHER_SPINE_W > 0) {
+        first--;
     }
-    for (int i = sel + 1, x = open_x + cw + SHELF_OPEN_GAP; i < c->shown && x < launcher_screen_width(); i++, x += step) {
+    while (last < c->shown - 1 && origin + shelf_left(last + 1, cw, now) < launcher_screen_width()) {
+        last++;
+    }
+    for (int i = first; i <= last; i++) {
+        int x = origin + shelf_left(i, cw, now);
+        float a = shelf_amount(i, now);
         const char *path = library_game_cover(menu, &c->games[i]);
-        launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+        if (a <= 0.0f) {
+            launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+        } else if (i == sel && a >= 1.0f) {
+            continue;   // Drawn below, sharp and ringed.
+        } else {
+            // Rising off the shelf and turning: the spine narrows away, then the front widens in.
+            int slot_w = LAUNCHER_SPINE_W + (int)lroundf((cw - LAUNCHER_SPINE_W) * a);
+            int rise = (int)lroundf(SHELF_LIFT * a);
+            if (a < 0.5f) {
+                int w = (int)lroundf(LAUNCHER_SPINE_W * (1.0f - 2.0f * a));
+                launcher_draw_stretched(launcher_spine_get(path, &pending), x + (slot_w - w) / 2, spine_y - rise, w, LAUNCHER_SPINE_H);
+            } else {
+                int w = (int)lroundf(cw * (2.0f * a - 1.0f));
+                surface_t *image = (i == sel) ? front : game_cover(menu, &c->games[i], cw, ch, &lookups_left, &pending);
+                launcher_draw_stretched(image, x + (slot_w - w) / 2, SHELF_BASE_Y - ch - rise, w, ch);
+            }
+        }
     }
 
-    // The open box, lifted a little, with the selection ring.
-    int open_y = SHELF_BASE_Y - ch - lift;
-    launcher_draw_tile(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg);
-    launcher_note_focused_cover(front, open_x, open_y, cw, ch);
-    if (game_is_favorite(menu, &c->games[sel])) {
-        launcher_draw_favorite_star(open_x, open_y, cw);
+    // The open box, sharp, with the selection ring, once it has turned to face you.
+    int open_x = origin + shelf_left(sel, cw, now);
+    int open_y = SHELF_BASE_Y - ch - SHELF_LIFT;
+    if (shelf_amount(sel, now) >= 1.0f) {
+        launcher_draw_tile(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg);
+        if (game_is_favorite(menu, &c->games[sel])) {
+            launcher_draw_favorite_star(open_x, open_y, cw);
+        }
     }
-    launcher_draw_focus_ring_tile(LAUNCHER_CENTER_X - cw / 2, SHELF_BASE_Y - ch - lift, cw, ch);
+    launcher_note_focused_cover(front, open_x, open_y, cw, ch);
+    launcher_draw_focus_ring_tile(LAUNCHER_CENTER_X - cw / 2, open_y, cw, ch);
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
     // The shelf itself.
@@ -1157,7 +1230,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
         launcher_small(LAUNCHER_X0, SHELF_DETAILS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
 
-    if (!front_pending && shelf_position == (float)sel) {
+    if (!front_pending && shelf_amount(sel, now) >= 1.0f && shelf_camera == target) {
         library_check_new_games(NEW_GAMES_CHECK_US);
     }
 }

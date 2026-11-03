@@ -977,6 +977,28 @@ void launcher_draw_spine (int x, int y, surface_t *image) {
     mask_corners(ix, iy, ix + image->width, iy + image->height, SPINE_RADIUS, theme_current()->bg);
 }
 
+void launcher_draw_stretched (surface_t *image, int x, int y, int w, int h) {
+    if (w < 1 || h < 1) {
+        return;
+    }
+    if (!image) {
+        launcher_fill_rounded(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->panel);
+        return;
+    }
+    surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
+    surface_t *source = squeezed ? squeezed : image;
+    float real_w = (float)(px(x + w) - px(x));
+    rdpq_mode_push();
+        rdpq_set_mode_standard();
+        rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
+        rdpq_tex_blit(source, px(x), y, &(rdpq_blitparms_t) {
+            .scale_x = real_w / source->width,
+            .scale_y = (float)h / source->height,
+        });
+    rdpq_mode_pop();
+}
+
 void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, color_t behind) {
     float scale = fminf((float)w / image->width, (float)h / image->height);
     int dw = (int)(image->width * scale);
