@@ -78,7 +78,7 @@ SOUNDS = {
     # Launcher: a shorter, softer tick as the selection glides from game to game.
     'tick': tone([(2093, 0.020, 0.006, 0.1)], 2600),
     # Launcher: a soft swish as Home and the Library slide in.
-    'swish': whoosh(0.170, 400, 2600, 3200),
+    'swish': whoosh(0.170, 400, 2600, 1700),
     # Launcher: a quick rising pop as the Start or game menu opens.
     'pop': sweep(520, 980, 0.070, 0.025, 4200),
 }
