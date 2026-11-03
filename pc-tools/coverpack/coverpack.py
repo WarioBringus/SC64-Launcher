@@ -6,6 +6,7 @@ Build the launcher's cover index and thumbnail packs on the SD card.
 Writes to <card>/menu/cache/launcher/:
   covers.idx              which cover each ROM uses (so the menu needn't read ROM headers)
   covers_<W>x<H>.pak      every cover pre-scaled to each tile size (so the menu needn't decode PNGs)
+  covers_<W>x<H>_w.pak    the same squeezed to 3/4 width for the launcher's 16:9 screen
 
 Cover matching mirrors the menu (src/menu/library.c): metadata/names/<file name>.png first (an
 override), then metadata/C/I/D/R, metadata/C/I/D, the old boxart folder, and another region of the
@@ -19,7 +20,8 @@ Index format (UTF-8 text, sorted byte-wise so the menu can binary search):
   M<TAB><ROM path><TAB><genre><TAB><developer><TAB><year><TAB><players><TAB><publisher>   (when known, see gamemeta.py)
 
 Pack format (big-endian): "CVP1", u32 count, u32 offset[count] (0 = none), then for each cover
-"CVR1", u16 width, u16 height, RGBA5551 pixels.
+"CVR1", u16 width, u16 height, RGBA5551 pixels. In the 16:9 packs each cover is "CVW1", u16 stored
+width, u16 height, u16 the 4:3 width it stands for, u16 0, RGBA5551 pixels.
 """
 import argparse, hashlib, json, os, shutil, struct, subprocess, sys, tempfile
 
@@ -31,6 +33,8 @@ SKIPPED_FOLDERS = {'system volume information', 'menu'}
 FALLBACK_REGIONS = 'EPJUADFIS'
 # Must match the tile sizes in src/menu/views/library_view.c and home.c.
 BOXES = [(87, 61), (133, 94), (158, 112), (59, 84), (70, 100), (81, 115), (112, 158), (74, 52)]
+# Each box twice: as is, and squeezed for 16:9 (the tool's WxHw boxes, packs covers_WxH_w.pak).
+PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' % b) for b in BOXES]
 
 
 def is_rom(name):
@@ -123,7 +127,7 @@ class ThumbCache:
         except OSError:
             return None
         blobs, pos = [], 0
-        for _ in BOXES:
+        for _ in PACKS:
             if pos + 4 > len(data):
                 return None
             n = struct.unpack('>I', data[pos:pos + 4])[0]
@@ -184,7 +188,7 @@ def main():
     # Thumbnails: scaled covers are kept in a cache on the PC, keyed by the cover's path, size and
     # modification time, so only new or changed covers are scaled again.
     thumb_cache = ThumbCache(args.thumb_cache)
-    blobs = {box: [None] * len(covers) for box in BOXES}
+    blobs = {pack: [None] * len(covers) for pack in PACKS}
     signatures = []
     work = tempfile.mkdtemp(prefix='coverpack-')
     failed = scaled = 0
@@ -200,15 +204,15 @@ def main():
                 src = os.path.join(work, 'in.png')
                 shutil.copyfile(full, src)
                 prefix = os.path.join(work, 'c')
-                r = subprocess.run([args.tool, 'raw', src, prefix] + ['%dx%d' % b for b in BOXES],
+                r = subprocess.run([args.tool, 'raw', src, prefix] + [arg for arg, _ in PACKS],
                                    capture_output=True, text=True)
                 if r.returncode != 0:
                     failed += 1
                     print('  skipped %s: %s' % (cover, r.stderr.strip()))
                     continue
                 cached = []
-                for box in BOXES:
-                    p = '%s_%dx%d.raw' % (prefix, box[0], box[1])
+                for arg, _ in PACKS:
+                    p = '%s_%s.raw' % (prefix, arg)
                     with open(p, 'rb') as f:
                         cached.append(f.read())
                     os.remove(p)
@@ -216,26 +220,26 @@ def main():
                 scaled += 1
                 if scaled % 100 == 0:
                     print('  scaled %d covers' % scaled)
-            for box, blob in zip(BOXES, cached):
-                blobs[box][i] = blob
+            for pack, blob in zip(PACKS, cached):
+                blobs[pack][i] = blob
     finally:
         shutil.rmtree(work, ignore_errors=True)
     thumb_cache.save()
     print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
-    manifest = hashlib.sha1('\n'.join(signatures + ['%dx%d' % b for b in BOXES]).encode('utf-8')).hexdigest()
+    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS]).encode('utf-8')).hexdigest()
     manifest_path = out_dir + '/covers.manifest'
-    packs_present = all(os.path.exists('%s/covers_%dx%d.pak' % (out_dir, b[0], b[1])) for b in BOXES)
+    packs_present = all(os.path.exists('%s/covers_%s.pak' % (out_dir, name)) for _, name in PACKS)
     old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
     packs_current = packs_present and old_manifest == manifest and failed == 0
 
     total = 0
-    for box in BOXES:
+    for pack in PACKS:
         if packs_current:
-            total += os.path.getsize('%s/covers_%dx%d.pak' % (out_dir, box[0], box[1]))
+            total += os.path.getsize('%s/covers_%s.pak' % (out_dir, pack[1]))
             continue
-        items = blobs[box]
+        items = blobs[pack]
         table_end = 8 + 4 * len(items)
         offsets, data, pos = [], bytearray(), table_end
         for b in items:
@@ -245,7 +249,7 @@ def main():
                 pos += len(b)
             else:
                 offsets.append(0)
-        path = '%s/covers_%dx%d.pak' % (out_dir, box[0], box[1])
+        path = '%s/covers_%s.pak' % (out_dir, pack[1])
         with open(path + '.tmp', 'wb') as f:
             f.write(b'CVP1' + struct.pack('>I', len(items)))
             f.write(struct.pack('>%dI' % len(items), *offsets))

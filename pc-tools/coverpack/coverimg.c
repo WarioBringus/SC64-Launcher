@@ -6,6 +6,11 @@
  *       <out-prefix>_<W>x<H>.raw in the launcher thumbnail format:
  *       "CVR1", width (u16 BE), height (u16 BE), then RGBA5551 pixels (BE), row by row.
  *
+ *   A box written WxHw is for the launcher's 16:9 screen: the cover is fitted as for WxH, trimmed
+ *   to even sizes as the menu does, then squeezed to 3/4 width so the menu can copy it 1:1.
+ *   <out-prefix>_<W>x<H>w.raw holds "CVW1", stored width, height, the 4:3 width it stands
+ *   for (u16 BE each), two zero bytes, then the RGBA5551 pixels.
+ *
  *   coverimg png <in.png> <out.png> WxH
  *       Fit the image inside the box and save it as an RGBA PNG (for adding box art).
  *
@@ -118,15 +123,28 @@ static int parse_box (const char *s, int *w, int *h) {
     return (sscanf(s, "%dx%d", w, h) == 2 && *w > 0 && *h > 0) ? 0 : 1;
 }
 
-static int write_raw (const char *path, const image_t *img) {
+/* A box ending in 'w' is a 16:9 (squeezed) one. */
+static int box_is_wide (const char *s) {
+    size_t n = strlen(s);
+    return n > 0 && s[n - 1] == 'w';
+}
+
+static int write_raw (const char *path, const image_t *img, int logical_w) {
     FILE *f = fopen(path, "wb");
     if (!f) {
         fprintf(stderr, "cannot write %s\n", path);
         return 1;
     }
-    uint8_t head[8] = { 'C', 'V', 'R', '1',
-        (uint8_t)(img->w >> 8), (uint8_t)img->w, (uint8_t)(img->h >> 8), (uint8_t)img->h };
-    fwrite(head, 1, sizeof(head), f);
+    if (logical_w > 0) {
+        uint8_t head[12] = { 'C', 'V', 'W', '1',
+            (uint8_t)(img->w >> 8), (uint8_t)img->w, (uint8_t)(img->h >> 8), (uint8_t)img->h,
+            (uint8_t)(logical_w >> 8), (uint8_t)logical_w, 0, 0 };
+        fwrite(head, 1, sizeof(head), f);
+    } else {
+        uint8_t head[8] = { 'C', 'V', 'R', '1',
+            (uint8_t)(img->w >> 8), (uint8_t)img->w, (uint8_t)(img->h >> 8), (uint8_t)img->h };
+        fwrite(head, 1, sizeof(head), f);
+    }
     for (int i = 0; i < img->w * img->h; i++) {
         const uint8_t *p = &img->rgba[(size_t)i * 4];
         uint16_t v = (uint16_t)(((p[0] >> 3) << 11) | ((p[1] >> 3) << 6) | ((p[2] >> 3) << 1) | (p[3] >= 128 ? 1 : 0));
@@ -180,11 +198,25 @@ int main (int argc, char **argv) {
                 return 2;
             }
             fit(src.w, src.h, bw, bh, &dw, &dh);
-            image_t out = resample(&src, dw, dh);
             char path[1024];
-            snprintf(path, sizeof(path), "%s_%dx%d.raw", argv[3], bw, bh);
-            failed |= write_raw(path, &out);
-            free(out.rgba);
+            if (box_is_wide(argv[i])) {
+                // The menu trims odd sizes by a pixel; the squeezed width is kept even for the same reason.
+                int lw = (dw > 1) ? (dw & ~1) : dw;
+                int lh = (dh > 1) ? (dh & ~1) : dh;
+                int pw = 2 * (int)(lw * 0.375 + 0.5);
+                if (pw < 2) {
+                    pw = 2;
+                }
+                image_t out = resample(&src, pw, lh);
+                snprintf(path, sizeof(path), "%s_%dx%dw.raw", argv[3], bw, bh);
+                failed |= write_raw(path, &out, lw);
+                free(out.rgba);
+            } else {
+                image_t out = resample(&src, dw, dh);
+                snprintf(path, sizeof(path), "%s_%dx%d.raw", argv[3], bw, bh);
+                failed |= write_raw(path, &out, 0);
+                free(out.rgba);
+            }
         }
         free(src.rgba);
         return failed;
@@ -204,7 +236,7 @@ int main (int argc, char **argv) {
     }
     fprintf(stderr,
         "usage:\n"
-        "  coverimg raw <in.png> <out-prefix> WxH [WxH ...]\n"
+        "  coverimg raw <in.png> <out-prefix> WxH[w] [WxH[w] ...]\n"
         "  coverimg png <in.png> <out.png> WxH\n");
     return 2;
 }

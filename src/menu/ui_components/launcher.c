@@ -428,6 +428,9 @@ static void launch_cover_take (void) {
         surface_free(large);
         free(large);
     }
+    if (launcher_cover_physical(focused_image)) {
+        return;     // A 16:9 cover's pixels are squeezed: no copy, the loading card shows without it.
+    }
 
     tex_format_t format = surface_get_format(focused_image);
     if (format != FMT_RGBA16 && format != FMT_RGBA32) {
@@ -891,8 +894,12 @@ void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
  */
 static void blit_cover (surface_t *image, int x, int y) {
     // Covers keep a 1-bit alpha (e.g. the arch above a cartridge label); transparent pixels are skipped.
+    surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
     rdpq_mode_push();
-    if (widescreen) {
+    if (squeezed) {
+        rdpq_set_mode_copy(true);
+        rdpq_tex_blit(squeezed, px(x), y, NULL);
+    } else if (widescreen) {
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
         rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
@@ -955,8 +962,10 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
         rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
-        rdpq_tex_blit(image, px(dx), dy, &(rdpq_blitparms_t) {
-            .scale_x = scale * (widescreen ? WIDE_SQUEEZE : 1.0f),
+        // A cover from a 16:9 pack is squeezed already: resize it as is.
+        surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
+        rdpq_tex_blit(squeezed ? squeezed : image, px(dx), dy, &(rdpq_blitparms_t) {
+            .scale_x = scale * ((widescreen && !squeezed) ? WIDE_SQUEEZE : 1.0f),
             .scale_y = scale,
         });
     rdpq_mode_pop();

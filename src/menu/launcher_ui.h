@@ -114,6 +114,12 @@ void launcher_set_cartridge_art(bool enabled);
  */
 surface_t *launcher_cover_larger(surface_t *shown, int max_w, int max_h);
 
+/**
+ * @brief For a cover from a 16:9 pack: the squeezed image to copy 1:1 (the surface handed out has the
+ * 4:3 size for layout, and must only be drawn through the launcher's helpers). NULL for other covers.
+ */
+surface_t *launcher_cover_physical(surface_t *image);
+
 /** @brief Mark the start of a frame (for least-recently-used eviction). */
 void launcher_covers_begin_frame(void);
 

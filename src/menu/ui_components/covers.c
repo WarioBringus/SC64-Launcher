@@ -18,13 +18,14 @@
    so a screen full of new covers fills in over a few smooth frames instead of stalling one. */
 #define PACK_READ_BUDGET_US     (3500)
 #define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps */
-#define MAX_PACKS               (12)
-#define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d.pak"
+#define MAX_PACKS               (20)    /* 8 tile sizes, each as is and squeezed for 16:9 */
+#define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d%s.pak"
 
 /* Pre-scaled covers built on the PC by pc-tools/coverpack (one file per tile size). */
 typedef struct {
     int w;
     int h;
+    bool wide;                  /**< Squeezed for 16:9 (covers_WxH_w.pak) */
     bool tried;
     FILE *f;
     uint32_t count;
@@ -35,7 +36,9 @@ typedef struct {
     char *path;
     int max_w;
     int max_h;
-    surface_t *image;
+    surface_t *image;           /**< Handed out; for a 16:9 cover, a header with the 4:3 size over wide's pixels */
+    surface_t *wide;            /**< 16:9 cover: the squeezed image, copied 1:1 */
+    bool for_wide;              /**< Loaded for the 16:9 screen */
     bool loading;
     bool failed;
     uint32_t failed_frame;      /**< When it failed; it is retried after FAILED_RETRY_FRAMES */
@@ -65,10 +68,10 @@ static uint32_t read_u32_be (const uint8_t *p) {
 /**
  * @brief The pack for a tile size, opened on first use. path is any cover path, for its "sd:" prefix.
  */
-static cover_pack_t *pack_for (const char *path, int w, int h) {
+static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     cover_pack_t *free_entry = NULL;
     for (int i = 0; i < MAX_PACKS; i++) {
-        if (packs[i].tried && packs[i].w == w && packs[i].h == h) {
+        if (packs[i].tried && packs[i].w == w && packs[i].h == h && packs[i].wide == wide) {
             return packs[i].f ? &packs[i] : NULL;
         }
         if (!packs[i].tried && !free_entry) {
@@ -84,13 +87,14 @@ static cover_pack_t *pack_for (const char *path, int w, int h) {
     p->tried = true;
     p->w = w;
     p->h = h;
+    p->wide = wide;
 
     const char *colon = strchr(path, ':');
     if (!colon) {
         return NULL;
     }
     char file[96];
-    snprintf(file, sizeof(file), PACK_FILE_FORMAT, (int)(colon - path + 1), path, w, h);
+    snprintf(file, sizeof(file), PACK_FILE_FORMAT, (int)(colon - path + 1), path, w, h, wide ? "_w" : "");
     p->f = fopen(file, "rb");
     if (!p->f) {
         return NULL;
@@ -122,7 +126,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h) {
 /**
  * @brief Find a cover's pack and id; NULL when this cover isn't in the pack for this size.
  */
-static cover_pack_t *pack_lookup (const char *path, int w, int h, int *id) {
+static cover_pack_t *pack_lookup_kind (const char *path, int w, int h, bool wide, int *id) {
     const char *rel = strstr(path, ":/menu/");
     if (!rel) {
         return NULL;
@@ -131,11 +135,55 @@ static cover_pack_t *pack_lookup (const char *path, int w, int h, int *id) {
     if (*id < 0) {
         return NULL;
     }
-    cover_pack_t *p = pack_for(path, w, h);
+    cover_pack_t *p = pack_for(path, w, h, wide);
     if (!p || (uint32_t)*id >= p->count || p->offsets[*id] == 0) {
         return NULL;
     }
     return p;
+}
+
+static cover_pack_t *pack_lookup (const char *path, int w, int h, int *id) {
+    return pack_lookup_kind(path, w, h, false, id);
+}
+
+/**
+ * @brief Read a cover from a 16:9 pack: the squeezed image, and the 4:3 width it stands for.
+ */
+static surface_t *pack_read_wide (cover_pack_t *p, int id, int w, int h, int *logical_w) {
+    uint8_t head[12];
+    if (fseek(p->f, p->offsets[id], SEEK_SET) != 0 || fread(head, 1, sizeof(head), p->f) != sizeof(head) ||
+        memcmp(head, "CVW1", 4) != 0) {
+        return NULL;
+    }
+    int iw = (head[4] << 8) | head[5];
+    int ih = (head[6] << 8) | head[7];
+    *logical_w = (head[8] << 8) | head[9];
+    if (iw <= 0 || ih <= 0 || *logical_w > w || ih > h) {
+        return NULL;
+    }
+    surface_t *image = calloc(1, sizeof(surface_t));
+    if (!image) {
+        return NULL;
+    }
+    *image = surface_alloc(FMT_RGBA16, iw, ih);
+    if (!image->buffer) {
+        free(image);
+        return NULL;
+    }
+    size_t row = (size_t)iw * 2;
+    bool ok = (fread(image->buffer, row, ih, p->f) == (size_t)ih);
+    if (ok && (size_t)image->stride != row) {
+        uint8_t *buffer = image->buffer;
+        for (int y = ih - 1; y > 0; y--) {
+            memmove(buffer + y * image->stride, buffer + y * row, row);
+        }
+    }
+    if (!ok) {
+        surface_free(image);
+        free(image);
+        return NULL;
+    }
+    return image;
 }
 
 /**
@@ -242,7 +290,11 @@ static void slot_free (cover_slot_t *slot) {
         png_decoder_abort();
         decoding = false;
     }
-    if (slot->image) {
+    if (slot->wide) {
+        surface_free(slot->wide);
+        free(slot->wide);
+        free(slot->image);      // Only a header over wide's pixels.
+    } else if (slot->image) {
         surface_free(slot->image);
         free(slot->image);
     }
@@ -252,6 +304,18 @@ static void slot_free (cover_slot_t *slot) {
 
 static bool hold_new = false;
 static uint32_t last_read_frame = 0;    /* Frame of the last pack read or PNG decode started */
+
+surface_t *launcher_cover_physical (surface_t *image) {
+    if (!image) {
+        return NULL;
+    }
+    for (int i = 0; i < slot_count; i++) {
+        if (slots[i].image == image) {
+            return slots[i].wide;
+        }
+    }
+    return NULL;
+}
 
 void launcher_covers_hold (bool hold) {
     hold_new = hold;
@@ -297,6 +361,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     if (cartridge_art && cartridge_path(path, cartridge, sizeof(cartridge))) {
         path = cartridge;
     }
+    bool want_wide = launcher_is_widescreen();
 
     if (slot_count == 0) {
         slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
@@ -304,7 +369,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
 
     for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];
-        if (s->path && s->max_w == max_w && s->max_h == max_h && strcmp(s->path, path) == 0) {
+        if (s->path && s->max_w == max_w && s->max_h == max_h && s->for_wide == want_wide && strcmp(s->path, path) == 0) {
             if (s->failed && (frame - s->failed_frame) > FAILED_RETRY_FRAMES) {
                 // Give a failed cover another try rather than leaving it blank.
                 slot_free(s);
@@ -327,8 +392,13 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     }
 
     // Covers in a pack wait for read budget; only covers missing from the packs use the PNG decoder.
+    // On the 16:9 screen the squeezed pack comes first (copied 1:1); the 4:3 one is resized as it is drawn.
     int id = -1;
-    cover_pack_t *pack = pack_lookup(path, max_w, max_h, &id);
+    cover_pack_t *pack = want_wide ? pack_lookup_kind(path, max_w, max_h, true, &id) : NULL;
+    bool wide_pack = (pack != NULL);
+    if (!pack) {
+        pack = pack_lookup(path, max_w, max_h, &id);
+    }
     if (pack ? !pack_budget_left() : decoding) {
         return NULL;
     }
@@ -353,13 +423,30 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     victim->path = strdup(path);
     victim->max_w = max_w;
     victim->max_h = max_h;
+    victim->for_wide = want_wide;
     victim->last_used = frame;
 
     last_read_frame = frame;
     if (pack) {
         uint64_t started = get_ticks_us();
-        victim->image = pack_read(pack, id, max_w, max_h);
-        even_size(victim->image);
+        if (wide_pack) {
+            int logical_w = 0;
+            surface_t *squeezed = pack_read_wide(pack, id, max_w, max_h, &logical_w);
+            surface_t *header = squeezed ? calloc(1, sizeof(surface_t)) : NULL;
+            if (header) {
+                *header = *squeezed;
+                header->width = logical_w;
+                header->flags &= ~SURFACE_FLAGS_OWNEDBUFFER;
+                victim->wide = squeezed;
+                victim->image = header;
+            } else if (squeezed) {
+                surface_free(squeezed);
+                free(squeezed);
+            }
+        } else {
+            victim->image = pack_read(pack, id, max_w, max_h);
+            even_size(victim->image);
+        }
         pack_time_used_us += get_ticks_us() - started;
         pack_read_this_frame = true;
         if (victim->image) {
