@@ -243,6 +243,9 @@ void launcher_draw_cover_scaled(surface_t *image, int x, int y, int w, int h, co
  */
 void launcher_leave(menu_t *menu, menu_mode_t next_mode);
 
+/** @brief Write settings a quick launch put off until the menu music has faded. */
+void launcher_save_pending_settings(menu_t *menu);
+
 /**
  * @brief Switch to a theme now and save it: re-colors fonts and re-tints any background image.
  */

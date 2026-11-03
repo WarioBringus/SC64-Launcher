@@ -946,6 +946,7 @@ static void load (menu_t *menu) {
 #endif
 
     if (err != CART_LOAD_OK) {
+        launcher_save_pending_settings(menu);
         sound_use_sfx(menu->settings.soundfx_enabled);
         if (sound_bgm_is_faded()) {
             sound_use_bgm(menu->settings.bgm_enabled);
@@ -955,6 +956,7 @@ static void load (menu_t *menu) {
     }
 
     sound_bgm_fade_out(BGM_FADE_MS);
+    launcher_save_pending_settings(menu);
 
     bookkeeping_history_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
 
@@ -1035,6 +1037,7 @@ void view_load_rom_init (menu_t *menu) {
     bool quick_start = menu->load.quick_start;
     menu->load.quick_start = false;
     quick_loading = false;
+    sound_bgm_keep_alive();
     if (!quick_start) {
         launcher_launch_cover_free();
     }
@@ -1090,6 +1093,8 @@ void view_load_rom_init (menu_t *menu) {
         return;
     }
 
+    sound_bgm_keep_alive();
+
     if (!is_memory_expanded()) {
         menu->load.rom_info.settings.cheats_enabled = false;
     }
@@ -1101,37 +1106,40 @@ void view_load_rom_init (menu_t *menu) {
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.rom_autoload_enabled) {
 #endif
-        current_metadata_image_index = 0;
-        scan_metadata_images(menu);
-        if (metadata_image_count > 0 && metadata_image_available[0] && metadata_image_embedded[0]) {
-            uint8_t *data = NULL;
-            size_t size = 0;
-            if (!is_memory_expanded()) {
-                ui_components_background_image_free_only();
-            }
-            if (rom_info_extract_metadata_image(&menu->load.rom_info, metadata_image_names[0], &data, &size)) {
-                boxart = ui_components_boxart_init_mem(
-                    metadata_image_names[0], data, size,
-                    BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX
-                );
-            }
-            if (boxart == NULL) {
-                // The embedded entry passed the scan-time ZIP existence/size check but could
-                // not actually be extracted or decoded; fall back to SD-card artwork instead
-                // of leaving the ROM info screen without any boxart.
-                ui_components_background_reload();
+        // A quick launch goes straight to the loading card: the artwork lookups would only hold up the music.
+        if (!quick_start || rom_requires_missing_expansion_pak(menu)) {
+            current_metadata_image_index = 0;
+            scan_metadata_images(menu);
+            if (metadata_image_count > 0 && metadata_image_available[0] && metadata_image_embedded[0]) {
+                uint8_t *data = NULL;
+                size_t size = 0;
+                if (!is_memory_expanded()) {
+                    ui_components_background_image_free_only();
+                }
+                if (rom_info_extract_metadata_image(&menu->load.rom_info, metadata_image_names[0], &data, &size)) {
+                    boxart = ui_components_boxart_init_mem(
+                        metadata_image_names[0], data, size,
+                        BOXART_WIDTH_MAX, BOXART_HEIGHT_MAX
+                    );
+                }
+                if (boxart == NULL) {
+                    // The embedded entry passed the scan-time ZIP existence/size check but could
+                    // not actually be extracted or decoded; fall back to SD-card artwork instead
+                    // of leaving the ROM info screen without any boxart.
+                    ui_components_background_reload();
+                    boxart_sd_fallback_attempted = true;
+                    boxart = ui_components_boxart_init(
+                        menu->storage_prefix, menu->load.rom_info.game_code,
+                        menu->load.rom_info.title, IMAGE_BOXART_FRONT
+                    );
+                }
+            } else {
                 boxart_sd_fallback_attempted = true;
                 boxart = ui_components_boxart_init(
                     menu->storage_prefix, menu->load.rom_info.game_code,
                     menu->load.rom_info.title, IMAGE_BOXART_FRONT
                 );
             }
-        } else {
-            boxart_sd_fallback_attempted = true;
-            boxart = ui_components_boxart_init(
-                menu->storage_prefix, menu->load.rom_info.game_code,
-                menu->load.rom_info.title, IMAGE_BOXART_FRONT
-            );
         }
         ui_components_context_menu_init(&options_context_menu);
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED

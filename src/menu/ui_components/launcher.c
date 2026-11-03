@@ -753,13 +753,25 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
     mask_corners(dx, dy, dx + dw, dy + dh, (int)(TILE_RADIUS * scale + 0.5f), behind);
 }
 
+static bool settings_save_pending = false;
+
+void launcher_save_pending_settings (menu_t *menu) {
+    if (settings_save_pending) {
+        settings_save_pending = false;
+        settings_save(&menu->settings);
+    }
+}
+
 void launcher_leave (menu_t *menu, menu_mode_t next_mode) {
     // Category, tile size and layout changes made with the controller are saved here, in one write,
     // rather than on every button press (an SD card write is a visible stall).
-    settings_save(&menu->settings);
     if (next_mode == MENU_MODE_LOAD_ROM && menu->load.quick_start) {
+        // The write would also break up the music: it waits until the game has loaded.
+        settings_save_pending = true;
         launch_cover_take();
     } else {
+        settings_save_pending = false;
+        settings_save(&menu->settings);
         launcher_launch_cover_free();
     }
     menu->launcher_return_mode = menu->mode;
