@@ -9,7 +9,8 @@ BUILD_DIR = build
 OUTPUT_DIR = output
 
 # uncomment the following line to support preview API's in libDragon.
-# LIBDRAGON_PREVIEW = 2
+# Launcher: on for audio_get_queued_buffers (a deeper audio queue while a game loads).
+LIBDRAGON_PREVIEW = 2
 
 MENU_VERSION ?= "Preview release"
 BUILD_TIMESTAMP = "$(shell TZ='UTC' date "+%Y-%m-%d %H:%M:%S %:z")"

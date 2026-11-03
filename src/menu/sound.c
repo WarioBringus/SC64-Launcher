@@ -16,7 +16,8 @@
 #include "sound.h"
 
 #define DEFAULT_FREQUENCY   (44100)
-#define NUM_BUFFERS         (4)
+#define AUDIO_LATENCY       AUDIO_INIT_LATENCY_MS(460)  /* Room for the queue a game launch fills */
+#define MENU_AHEAD_MS       (140)                       /* Queue in the menu: effects play this soon after a press */
 #define NUM_CHANNELS        (16)
 
 #define BGM_BUILTIN_PATH    "rom:/menu/sounds/bgm.wav64"
@@ -38,6 +39,24 @@ static bool bgm_opened = false;
 static bool bgm_paused = false;
 static bool bgm_faded = false;             /* Faded out for a game launch; stays quiet until turned on again */
 static uint32_t bgm_track_generation = 0;  /* Counts playlist tracks started, for "now playing" */
+static int menu_ahead_buffers = 6;         /* Audio buffers kept queued in the menu */
+static bool load_ahead = false;            /* A game is loading: keep every buffer queued */
+
+/**
+ * @brief Mix audio into free buffers, up to the menu's short queue or, while a game loads, all of them
+ * (the load blocks for longer than the short queue lasts).
+ */
+static void fill_audio (void) {
+    if (!sound_initialized) {
+        return;
+    }
+    int target = load_ahead ? audio_get_num_buffers() - 1 : menu_ahead_buffers;
+    while (audio_get_queued_buffers() < target && audio_can_write()) {
+        short *buffer = audio_write_begin();
+        mixer_poll(buffer, audio_get_buffer_length());
+        audio_write_end();
+    }
+}
 
 /**
  * @brief Reconfigure the sound system with the specified frequency.
@@ -49,8 +68,12 @@ static void sound_reconfigure (int frequency) {
         
         sound_deinit();
 
-        audio_init(frequency, NUM_BUFFERS);
+        audio_init(frequency, AUDIO_LATENCY);
         mixer_init(NUM_CHANNELS);
+        menu_ahead_buffers = MENU_AHEAD_MS * frequency / 1000 / audio_get_buffer_length();
+        if (menu_ahead_buffers < 2) {
+            menu_ahead_buffers = 2;
+        }
 
         // Attempt to initialize wav64 compression level 1
         wav64_init_compression(1);
@@ -301,16 +324,61 @@ bool sound_bgm_is_faded (void) {
     return bgm_faded;
 }
 
+static void bgm_fade (int duration_ms, bool drain) {
+    if (!sound_initialized || !bgm_opened || !bgm_enabled || bgm_faded) {
+        return;
+    }
+    bgm_faded = true;
+    if (!bgm_paused) {
+        // Step the volume down buffer by buffer as the audio is mixed.
+        int frequency = audio_get_frequency();
+        int buffer_samples = audio_get_buffer_length();
+        int total = duration_ms * frequency / 1000;
+        int target = load_ahead ? audio_get_num_buffers() - 1 : menu_ahead_buffers;
+        uint64_t give_up = get_ticks_ms() + duration_ms + 1500;
+        for (int mixed = 0; mixed < total && get_ticks_ms() < give_up; ) {
+            if (audio_get_queued_buffers() >= target || !audio_can_write()) {
+                continue;
+            }
+            float level = bgm_volume * (1.0f - (float)mixed / total);
+            mixer_ch_set_vol(SOUND_BGM_CHANNEL, level, level);
+            short *buffer = audio_write_begin();
+            mixer_poll(buffer, buffer_samples);
+            audio_write_end();
+            mixed += buffer_samples;
+        }
+    }
+    mixer_ch_stop(SOUND_BGM_CHANNEL);
+    bgm_paused = false;
+    if (drain) {
+        // Let the queued fade play out before the game takes over the console.
+        uint64_t start = get_ticks_ms();
+        while (audio_get_queued_buffers() > 1 && get_ticks_ms() - start < 1000) {
+        }
+        load_ahead = false;
+    }
+}
+
+void sound_bgm_begin_load (void) {
+    load_ahead = true;
+    fill_audio();
+}
+
+void sound_bgm_end_load (void) {
+    load_ahead = false;
+}
+
 void sound_bgm_prepare_for_load (void) {
+    sound_bgm_begin_load();
     // The built-in track lives in the menu's ROM filesystem, which the game is about to overwrite:
-    // fade it now. Tracks from the SD card can keep playing while the game loads.
+    // fade it now (what's already mixed is safe). Tracks from the SD card keep playing while the game loads.
     if (bgm_track_count == 0) {
-        sound_bgm_fade_out(BGM_FADE_MS);
+        bgm_fade(BGM_FADE_MS, false);
     }
     // The sound effects live there too: let the one just played finish before the ROM area changes.
     uint64_t start = get_ticks_ms();
     while (sound_initialized && mixer_ch_playing(SOUND_SFX_CHANNEL) && get_ticks_ms() - start < 400) {
-        mixer_try_play();
+        fill_audio();
     }
     if (sound_initialized) {
         mixer_ch_stop(SOUND_SFX_CHANNEL);
@@ -319,29 +387,12 @@ void sound_bgm_prepare_for_load (void) {
 }
 
 void sound_bgm_keep_alive (void) {
-    // Called between chunks of a ROM load: fill every audio buffer that has room.
-    for (int i = 0; i < NUM_BUFFERS && sound_initialized && audio_can_write(); i++) {
-        sound_poll();
-    }
+    // Called between chunks of a ROM load.
+    sound_poll();
 }
 
 void sound_bgm_fade_out (int duration_ms) {
-    if (!sound_initialized || !bgm_opened || !bgm_enabled || bgm_faded) {
-        return;
-    }
-    bgm_faded = true;
-    if (!bgm_paused) {
-        // Step the volume down while keeping the mixer fed.
-        uint64_t start = get_ticks_ms();
-        uint64_t now;
-        while ((now = get_ticks_ms()) - start < (uint64_t)duration_ms) {
-            float level = bgm_volume * (1.0f - (float)(now - start) / duration_ms);
-            mixer_ch_set_vol(SOUND_BGM_CHANNEL, level, level);
-            mixer_try_play();
-        }
-    }
-    mixer_ch_stop(SOUND_BGM_CHANNEL);
-    bgm_paused = false;
+    bgm_fade(duration_ms, load_ahead);
 }
 
 /**
@@ -436,8 +487,6 @@ void sound_poll (void) {
             wav64_play(&bgm, SOUND_BGM_CHANNEL);
         }
 
-        // Check whether one audio buffer is ready, otherwise wait for next
-        // frame to perform mixing.
-        mixer_try_play();
+        fill_audio();
     }
 }

@@ -155,6 +155,12 @@ void sound_bgm_prepare_for_load(void);
 /** @brief Keep the music fed during a long blocking load (call it between chunks). */
 void sound_bgm_keep_alive(void);
 
+/** @brief A game launch has started: queue as much audio as there is room for, to cover the pauses. */
+void sound_bgm_begin_load(void);
+
+/** @brief The launch failed: back to the menu's short audio queue. */
+void sound_bgm_end_load(void);
+
 /**
  * @brief Play a specified sound effect.
  * 

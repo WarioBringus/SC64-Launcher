@@ -947,6 +947,7 @@ static void load (menu_t *menu) {
 
     if (err != CART_LOAD_OK) {
         launcher_save_pending_settings(menu);
+        sound_bgm_end_load();
         sound_use_sfx(menu->settings.soundfx_enabled);
         if (sound_bgm_is_faded()) {
             sound_use_bgm(menu->settings.bgm_enabled);
@@ -1088,6 +1089,7 @@ void view_load_rom_init (menu_t *menu) {
         //disable the attempt at loading the favorite / history
         menu->load.load_history_id = -1;
         menu->load.load_favorite_id = -1;
+        sound_bgm_end_load();
         // FIXME: use bookkeeping_favorite_remove() here instead of just showing an error and leaving the broken favorite / history item in place
         menu_show_error(menu, convert_error_message(err));
         return;
@@ -1161,6 +1163,9 @@ void view_load_rom_init (menu_t *menu) {
             menu->load_pending.rom_file = true;
             quick_loading = true;
         }
+    }
+    if (!quick_loading) {
+        sound_bgm_end_load();   // This screen stays up: back to the short queue so effects keep up.
     }
 }
 

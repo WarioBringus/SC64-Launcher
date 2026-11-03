@@ -281,6 +281,7 @@ static void load (menu_t *menu) {
     if (menu->load.rom_path && menu->load.combined_disk_rom) {
         err = cart_load_n64_rom_and_save(menu, draw_progress, NULL);
         if (err != CART_LOAD_OK) {
+            sound_bgm_end_load();
             sound_use_sfx(menu->settings.soundfx_enabled);
             if (sound_bgm_is_faded()) {
                 sound_use_bgm(menu->settings.bgm_enabled);
@@ -292,6 +293,7 @@ static void load (menu_t *menu) {
 
     err = cart_load_64dd_ipl_and_disks(menu, draw_progress);
     if (err != CART_LOAD_OK) {
+        sound_bgm_end_load();
         sound_use_sfx(menu->settings.soundfx_enabled);
         if (sound_bgm_is_faded()) {
             sound_use_bgm(menu->settings.bgm_enabled);

@@ -768,6 +768,7 @@ void launcher_leave (menu_t *menu, menu_mode_t next_mode) {
     if (next_mode == MENU_MODE_LOAD_ROM && menu->load.quick_start) {
         // The write would also break up the music: it waits until the game has loaded.
         settings_save_pending = true;
+        sound_bgm_begin_load();
         launch_cover_take();
     } else {
         settings_save_pending = false;
