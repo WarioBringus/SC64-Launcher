@@ -108,6 +108,12 @@ surface_t *launcher_cover_get(const char *path, int max_w, int max_h, bool *pend
  */
 void launcher_set_cartridge_art(bool enabled);
 
+/**
+ * @brief Read a cover on screen again at a larger pack size (max_w x max_h), straight from its pack.
+ * Returns a surface the caller frees, or NULL when the pack has no such cover.
+ */
+surface_t *launcher_cover_larger(surface_t *shown, int max_w, int max_h);
+
 /** @brief Mark the start of a frame (for least-recently-used eviction). */
 void launcher_covers_begin_frame(void);
 

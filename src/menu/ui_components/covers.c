@@ -204,6 +204,22 @@ static void even_size (surface_t *image) {
     }
 }
 
+surface_t *launcher_cover_larger (surface_t *shown, int max_w, int max_h) {
+    for (int i = 0; i < slot_count; i++) {
+        cover_slot_t *s = &slots[i];
+        if (s->image != shown || !s->path) {
+            continue;
+        }
+        // One seek and one read from the pack (no PNG decoding), so it is quick enough for a launch.
+        int id = -1;
+        cover_pack_t *pack = pack_lookup(s->path, max_w, max_h, &id);
+        surface_t *image = pack ? pack_read(pack, id, max_w, max_h) : NULL;
+        even_size(image);
+        return image;
+    }
+    return NULL;
+}
+
 static void decode_done (png_err_t err, surface_t *decoded_image, void *callback_data) {
     cover_slot_t *slot = (cover_slot_t *)(callback_data);
     slot->loading = false;

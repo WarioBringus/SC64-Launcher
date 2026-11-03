@@ -365,14 +365,17 @@ void launcher_draw_new_games_notice (void) {
 
 #define LAUNCH_COVER_MAX_W  (240)
 #define LAUNCH_COVER_MAX_H  (180)
-#define LAUNCH_COVER_ZOOM   (1.5f)  /* Covers are tile-sized thumbnails: grow them no more than this */
+#define LAUNCH_COVER_ZOOM   (1.5f)  /* A tile-sized thumbnail (no Large cover in the pack) grows no more than this */
+#define LAUNCH_LARGE_W      (158)   /* The largest cover-pack size (pc-tools/coverpack BOXES) */
+#define LAUNCH_LARGE_H      (112)
 #define LAUNCH_GROW_MS      (300)
 
 static surface_t *focused_image = NULL;     /* Cover in the focused tile this frame (owned by the cover cache) */
 static int focused_x, focused_y;
 static surface_t launch_cover;              /* Our own copy: the cover cache is freed when the launcher is left */
 static bool launch_cover_valid = false;
-static int launch_from_x, launch_from_y;
+static bool launch_cover_large = false;     /* The copy is the Large pack cover: shown at its own size */
+static int launch_from_x, launch_from_y, launch_from_w, launch_from_h;
 static uint64_t launch_grow_start_ms = 0;
 
 void launcher_note_focused_cover (surface_t *image, int x, int y, int w, int h) {
@@ -400,6 +403,28 @@ static void launch_cover_take (void) {
     if (!focused_image || !focused_image->buffer) {
         return;
     }
+    launch_from_x = focused_x;
+    launch_from_y = focused_y;
+    launch_from_w = focused_image->width;
+    launch_from_h = focused_image->height;
+    launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
+
+    // The Large cover from the pack ends the animation sharp; a thumbnail would have to be enlarged.
+    bool landscape = focused_image->width >= focused_image->height;
+    surface_t *large = launcher_cover_larger(focused_image, landscape ? LAUNCH_LARGE_W : LAUNCH_LARGE_H,
+                                             landscape ? LAUNCH_LARGE_H : LAUNCH_LARGE_W);
+    if (large && large->width > focused_image->width) {
+        launch_cover = *large;
+        free(large);
+        launch_cover_valid = true;
+        launch_cover_large = true;
+        return;
+    }
+    if (large) {
+        surface_free(large);
+        free(large);
+    }
+
     tex_format_t format = surface_get_format(focused_image);
     if (format != FMT_RGBA16 && format != FMT_RGBA32) {
         return;     // Palette formats would need their palette too; just skip the animation.
@@ -414,9 +439,7 @@ static void launch_cover_take (void) {
                (uint8_t *)focused_image->buffer + row * focused_image->stride, row_bytes);
     }
     launch_cover_valid = true;
-    launch_from_x = focused_x;
-    launch_from_y = focused_y;
-    launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
+    launch_cover_large = false;
 }
 
 void launcher_draw_loading (const char *title, float progress, const char *status) {
@@ -427,7 +450,7 @@ void launcher_draw_loading (const char *title, float progress, const char *statu
     int status_y = LOADING_STATUS_Y;
     if (launch_cover_valid) {
         // The cover sits above the name, and the whole block stays centered on screen.
-        float scale = fminf(LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
+        float scale = fminf(launch_cover_large ? 1.0f : LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
                                                      (float)LAUNCH_COVER_MAX_H / launch_cover.height));
         int dw = (int)(launch_cover.width * scale);
         int dh = (int)(launch_cover.height * scale);
@@ -447,8 +470,8 @@ void launcher_draw_loading (const char *title, float progress, const char *statu
         float e = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
         int x = launch_from_x + (int)((dx - launch_from_x) * e);
         int y = launch_from_y + (int)((dy - launch_from_y) * e);
-        int w = launch_cover.width + (int)((dw - launch_cover.width) * e);
-        int h = launch_cover.height + (int)((dh - launch_cover.height) * e);
+        int w = launch_from_w + (int)((dw - launch_from_w) * e);
+        int h = launch_from_h + (int)((dh - launch_from_h) * e);
         launcher_draw_cover_scaled(&launch_cover, x, y, w, h, theme_current()->bg);
     }
 
