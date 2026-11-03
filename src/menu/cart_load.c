@@ -114,6 +114,8 @@ cart_load_err_t cart_load_n64_rom_and_save (menu_t *menu, flashcart_progress_cal
         return CART_LOAD_ERR_ROM_LOAD_FAIL;
     }
 
+    // Each lookup below scans the game folder's listing: keep the menu music fed in between.
+    sound_bgm_keep_alive();
     path_ext_replace(path, "sav");
     if (menu->settings.use_saves_folder) {
         if ((save_type != FLASHCART_SAVE_TYPE_NONE) && create_saves_subdirectory(path)) {
@@ -123,12 +125,15 @@ cart_load_err_t cart_load_n64_rom_and_save (menu_t *menu, flashcart_progress_cal
         path_push_subdir(path, SAVE_DIRECTORY_NAME);
     }
 
+    sound_bgm_keep_alive();
     if (save_progress && save_type != FLASHCART_SAVE_TYPE_NONE && !file_exists(path_get(path))) {
         save_progress(1.0f);
     }
 
     sound_launch_log("save path ready");
+    flashcart_set_wait_callback(sound_bgm_keep_alive);
     menu->flashcart_err = flashcart_load_save(path_get(path), save_type);
+    flashcart_set_wait_callback(NULL);
     sound_launch_log("save loaded");
     if (menu->flashcart_err != FLASHCART_OK) {
         path_free(path);

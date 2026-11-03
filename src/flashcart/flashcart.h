@@ -176,6 +176,12 @@ flashcart_err_t flashcart_load_file (char *file_path, uint32_t rom_offset, uint3
 flashcart_err_t flashcart_load_save (char *save_path, flashcart_save_type_t save_type);
 
 /**
+ * @brief Set a function called between the file operations of a save load
+ * (each one can take a while in a folder with many files). NULL for none.
+ */
+void flashcart_set_wait_callback (void (*callback)(void));
+
+/**
  * @brief Load the 64DD IPL (BIOS) onto the flashcart.
  * 
  * @param ipl_path The path to the IPL file.

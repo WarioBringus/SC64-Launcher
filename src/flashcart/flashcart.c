@@ -277,6 +277,18 @@ flashcart_err_t flashcart_load_file (char *file_path, uint32_t rom_offset, uint3
  * @param save_type The save type.
  * @return flashcart_err_t Error code.
  */
+static void (*wait_callback)(void) = NULL;
+
+void flashcart_set_wait_callback (void (*callback)(void)) {
+    wait_callback = callback;
+}
+
+static void wait_step (void) {
+    if (wait_callback) {
+        wait_callback();
+    }
+}
+
 flashcart_err_t flashcart_load_save (char *save_path, flashcart_save_type_t save_type) {
     flashcart_err_t err;
 
@@ -292,19 +304,23 @@ flashcart_err_t flashcart_load_save (char *save_path, flashcart_save_type_t save
         return FLASHCART_OK;
     }
 
+    wait_step();
     if (!file_exists(save_path)) {
         if (file_allocate(save_path, SAVE_SIZE[save_type])) {
             return FLASHCART_ERR_LOAD;
         }
+        wait_step();
         if (file_fill(save_path, 0xFF)) {
             return FLASHCART_ERR_LOAD;
         }
     }
 
+    wait_step();
     if (file_get_size(save_path) != SAVE_SIZE[save_type]) {
         return FLASHCART_ERR_LOAD;
     }
 
+    wait_step();
     if ((err = flashcart->load_save(save_path)) != FLASHCART_OK) {
         return err;
     }
@@ -313,6 +329,7 @@ flashcart_err_t flashcart_load_save (char *save_path, flashcart_save_type_t save
         return FLASHCART_OK;
     }
 
+    wait_step();
     return flashcart->set_save_writeback(save_path);
 }
 

@@ -16,6 +16,7 @@
 
 #include "boot/cic.h"
 #include "rom_info.h"
+#include "sound.h"
 #include "utils/fs.h"
 
 
@@ -1535,6 +1536,8 @@ rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
 
     fix_rom_header_endianness(&rom_header, rom_info);
 
+    // Each file lookup here scans the game folder's listing: keep the menu music fed in between.
+    sound_bgm_keep_alive();
     match_t match = find_rom_in_database(&rom_header);
 
     extract_rom_info(&match, &rom_header, rom_info);
@@ -1543,9 +1546,11 @@ rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
            rom_info->cic_type);
 
     load_rom_config_from_file(path, rom_info);
+    sound_bgm_keep_alive();
 
     // Try to load metadata from external .meta file first, then from embedded ZIP
     load_rom_meta_from_file(path, rom_info);
+    sound_bgm_keep_alive();
     debugf("[META] rom_config_load: after load_rom_meta_from_file, name='%s'\\n", rom_info->meta.name);
     
     // If external .meta load found nothing (name is still empty), try embedded metadata
