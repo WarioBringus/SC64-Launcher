@@ -7,6 +7,8 @@ Writes to <card>/menu/cache/launcher/:
   covers.idx              which cover each ROM uses (so the menu needn't read ROM headers)
   covers_<W>x<H>.pak      every cover pre-scaled to each tile size (so the menu needn't decode PNGs)
   covers_<W>x<H>_w.pak    the same squeezed to 3/4 width for the launcher's 16:9 screen
+  covers_22x158[_w].pak   box spines for the shelf layout, under each front cover's id: the box's
+                          top-edge art (boxart_top.png) turned upright, or a slice of the front
 
 Cover matching mirrors the menu (src/menu/library.c): metadata/names/<file name>.png first (an
 override), then metadata/C/I/D/R, metadata/C/I/D, the old boxart folder, and another region of the
@@ -35,6 +37,9 @@ FALLBACK_REGIONS = 'EPJUADFIS'
 BOXES = [(87, 61), (133, 94), (158, 112), (59, 84), (70, 100), (81, 115), (112, 158), (74, 52)]
 # Each box twice: as is, and squeezed for 16:9 (the tool's WxHw boxes, packs covers_WxH_w.pak).
 PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' % b) for b in BOXES]
+# Spines for the shelf layout: from the top-edge art turned upright, or else a slice of the front.
+SPINE_PACKS = [('22x158r', '22x158'), ('22x158rw', '22x158_w')]
+SPINE_FALLBACK = ['22x158s', '22x158sw']
 
 
 def is_rom(name):
@@ -118,7 +123,7 @@ class ThumbCache:
         except (OSError, ValueError):
             self.index = {}
 
-    def get(self, signature):
+    def get(self, signature, count=None):
         name = self.index.get(signature)
         if not name:
             return None
@@ -127,7 +132,7 @@ class ThumbCache:
         except OSError:
             return None
         blobs, pos = [], 0
-        for _ in PACKS:
+        for _ in range(count if count is not None else len(PACKS)):
             if pos + 4 > len(data):
                 return None
             n = struct.unpack('>I', data[pos:pos + 4])[0]
@@ -224,13 +229,54 @@ def main():
                 blobs[pack][i] = blob
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+    # Spines, under each front cover's id (other ids, e.g. cartridge art, have none).
+    spine_blobs = {name: [None] * len(covers) for _, name in SPINE_PACKS}
+    spine_signatures = []
+    work = tempfile.mkdtemp(prefix='coverpack-')
+    real_spines = 0
+    try:
+        for i, cover in enumerate(covers):
+            if not cover.endswith('/boxart_front.png'):
+                continue
+            top = cover[:-len('boxart_front.png')] + 'boxart_top.png'
+            has_top = os.path.isfile(os.path.join(menu_dir, top))
+            source = top if has_top else cover
+            st = os.stat(os.path.join(menu_dir, source))
+            signature = 'spine|%s|%d|%d' % (source, st.st_size, int(st.st_mtime))
+            spine_signatures.append(signature)
+            cached = thumb_cache.get(signature, len(SPINE_PACKS))
+            if cached is None:
+                src = os.path.join(work, 'in.png')
+                shutil.copyfile(os.path.join(menu_dir, source), src)
+                prefix = os.path.join(work, 's')
+                boxes = [arg for arg, _ in SPINE_PACKS] if has_top else SPINE_FALLBACK
+                r = subprocess.run([args.tool, 'raw', src, prefix] + boxes, capture_output=True, text=True)
+                if r.returncode != 0:
+                    print('  no spine for %s: %s' % (cover, r.stderr.strip()))
+                    continue
+                cached = []
+                for arg in boxes:
+                    p = '%s_%s.raw' % (prefix, arg)
+                    with open(p, 'rb') as f:
+                        cached.append(f.read())
+                    os.remove(p)
+                thumb_cache.put(signature, cached)
+            real_spines += has_top
+            for (_, name), blob in zip(SPINE_PACKS, cached):
+                spine_blobs[name][i] = blob
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     thumb_cache.save()
     print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
+    print('%d spines from box art, %d made from a slice of the front' % (real_spines, len(spine_signatures) - real_spines))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
-    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown']).encode('utf-8')).hexdigest()
+    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown'] + spine_signatures).encode('utf-8')).hexdigest()
     manifest_path = out_dir + '/covers.manifest'
-    packs_present = all(os.path.exists('%s/covers_%s.pak' % (out_dir, name)) for _, name in PACKS)
+    all_packs = [(name, blobs[pack]) for pack in PACKS for name in [pack[1]]] + \
+        [(name, spine_blobs[name]) for _, name in SPINE_PACKS]
+    packs_present = all(os.path.exists('%s/covers_%s.pak' % (out_dir, name)) for name, _ in all_packs)
     old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
     packs_current = packs_present and old_manifest == manifest and failed == 0
 
@@ -250,11 +296,10 @@ def main():
     order += [i for i in range(len(covers)) if i not in placed]
 
     total = 0
-    for pack in PACKS:
+    for name, items in all_packs:
         if packs_current:
-            total += os.path.getsize('%s/covers_%s.pak' % (out_dir, pack[1]))
+            total += os.path.getsize('%s/covers_%s.pak' % (out_dir, name))
             continue
-        items = blobs[pack]
         table_end = 8 + 4 * len(items)
         offsets, data, pos = [0] * len(items), bytearray(), table_end
         for i in order:
@@ -263,7 +308,7 @@ def main():
                 offsets[i] = pos
                 data += b
                 pos += len(b)
-        path = '%s/covers_%s.pak' % (out_dir, pack[1])
+        path = '%s/covers_%s.pak' % (out_dir, name)
         with open(path + '.tmp', 'wb') as f:
             f.write(b'CVP1' + struct.pack('>I', len(items)))
             f.write(struct.pack('>%dI' % len(items), *offsets))

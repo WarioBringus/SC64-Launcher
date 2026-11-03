@@ -6,6 +6,10 @@
  *       <out-prefix>_<W>x<H>.raw in the launcher thumbnail format:
  *       "CVR1", width (u16 BE), height (u16 BE), then RGBA5551 pixels (BE), row by row.
  *
+ *   A box written WxHr turns the image a quarter turn clockwise first (a box's top-edge art becomes
+ *   an upright spine); WxHs takes a slice from the middle of the image with the box's shape first
+ *   (a stand-in spine from the front). Either can be combined with w.
+ *
  *   A box written WxHw is for the launcher's 16:9 screen: the cover is fitted as for WxH, trimmed
  *   to even sizes as the menu does, then squeezed to 3/4 width so the menu can copy it 1:1.
  *   <out-prefix>_<W>x<H>w.raw holds "CVW1", stored width, height, the 4:3 width it stands
@@ -123,10 +127,46 @@ static int parse_box (const char *s, int *w, int *h) {
     return (sscanf(s, "%dx%d", w, h) == 2 && *w > 0 && *h > 0) ? 0 : 1;
 }
 
-/* A box ending in 'w' is a 16:9 (squeezed) one. */
+/* Flags after WxH: 'w' 16:9 (squeezed), 'r' turned upright, 's' a middle slice. */
+static int box_has (const char *s, char flag) {
+    const char *x = strchr(s, 'x');
+    while (x && *x && (*x == 'x' || (*x >= '0' && *x <= '9'))) {
+        x++;
+    }
+    return x && strchr(x, flag) != NULL;
+}
+
 static int box_is_wide (const char *s) {
-    size_t n = strlen(s);
-    return n > 0 && s[n - 1] == 'w';
+    return box_has(s, 'w');
+}
+
+/* A quarter turn clockwise. */
+static image_t rotate_cw (const image_t *src) {
+    image_t out = { src->h, src->w, malloc((size_t)src->w * src->h * 4) };
+    for (int y = 0; y < src->h; y++) {
+        for (int x = 0; x < src->w; x++) {
+            memcpy(&out.rgba[((size_t)x * out.w + (src->h - 1 - y)) * 4], &src->rgba[((size_t)y * src->w + x) * 4], 4);
+        }
+    }
+    return out;
+}
+
+/* The middle of the image, cut to the shape of a bw x bh box. */
+static image_t middle_slice (const image_t *src, int bw, int bh) {
+    int w = src->w, h = src->h;
+    if (w * bh > h * bw) {
+        w = (h * bw) / bh;
+    } else {
+        h = (w * bh) / bw;
+    }
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    int x0 = (src->w - w) / 2, y0 = (src->h - h) / 2;
+    image_t out = { w, h, malloc((size_t)w * h * 4) };
+    for (int y = 0; y < h; y++) {
+        memcpy(&out.rgba[(size_t)y * w * 4], &src->rgba[((size_t)(y0 + y) * src->w + x0) * 4], (size_t)w * 4);
+    }
+    return out;
 }
 
 static int write_raw (const char *path, const image_t *img, int logical_w) {
@@ -197,7 +237,18 @@ int main (int argc, char **argv) {
                 fprintf(stderr, "bad box %s\n", argv[i]);
                 return 2;
             }
-            fit(src.w, src.h, bw, bh, &dw, &dh);
+            image_t shaped = { 0, 0, NULL };
+            if (box_has(argv[i], 'r')) {
+                shaped = rotate_cw(&src);
+            } else if (box_has(argv[i], 's')) {
+                shaped = middle_slice(&src, bw, bh);
+            }
+            const image_t *from = shaped.rgba ? &shaped : &src;
+            fit(from->w, from->h, bw, bh, &dw, &dh);
+            if (shaped.rgba && box_has(argv[i], 's')) {
+                dw = bw;    // A stand-in spine fills the spine's size even from a small front.
+                dh = bh;
+            }
             char path[1024];
             if (box_is_wide(argv[i])) {
                 // The menu trims odd sizes by a pixel; the squeezed width is kept even for the same reason.
@@ -207,16 +258,17 @@ int main (int argc, char **argv) {
                 if (pw < 2) {
                     pw = 2;
                 }
-                image_t out = resample(&src, pw, lh);
-                snprintf(path, sizeof(path), "%s_%dx%dw.raw", argv[3], bw, bh);
+                image_t out = resample(from, pw, lh);
+                snprintf(path, sizeof(path), "%s_%s.raw", argv[3], argv[i]);
                 failed |= write_raw(path, &out, lw);
                 free(out.rgba);
             } else {
-                image_t out = resample(&src, dw, dh);
-                snprintf(path, sizeof(path), "%s_%dx%d.raw", argv[3], bw, bh);
+                image_t out = resample(from, dw, dh);
+                snprintf(path, sizeof(path), "%s_%s.raw", argv[3], argv[i]);
                 failed |= write_raw(path, &out, 0);
                 free(out.rgba);
             }
+            free(shaped.rgba);
         }
         free(src.rgba);
         return failed;
