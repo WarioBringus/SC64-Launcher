@@ -191,11 +191,25 @@ static void packs_close (void) {
 }
 
 
+/**
+ * @brief Trim a cover to even dimensions: the RDP draws an odd last row or column as a repeated
+ * line of the image along the bottom or right edge. One pixel is never missed.
+ */
+static void even_size (surface_t *image) {
+    if (image && image->width > 1 && (image->width & 1)) {
+        image->width--;
+    }
+    if (image && image->height > 1 && (image->height & 1)) {
+        image->height--;
+    }
+}
+
 static void decode_done (png_err_t err, surface_t *decoded_image, void *callback_data) {
     cover_slot_t *slot = (cover_slot_t *)(callback_data);
     slot->loading = false;
     decoding = false;
     if (err == PNG_OK && decoded_image) {
+        even_size(decoded_image);
         slot->image = decoded_image;
     } else {
         slot->failed = true;
@@ -316,6 +330,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
     if (pack) {
         uint64_t started = get_ticks_us();
         victim->image = pack_read(pack, id, max_w, max_h);
+        even_size(victim->image);
         pack_time_used_us += get_ticks_us() - started;
         pack_read_this_frame = true;
         if (victim->image) {
