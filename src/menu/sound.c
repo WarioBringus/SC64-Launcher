@@ -362,7 +362,6 @@ static void bgm_fade (int duration_ms, bool drain) {
 void sound_bgm_begin_load (void) {
     load_ahead = true;
     fill_audio();
-    sound_launch_log("deep queue filled");
 }
 
 void sound_bgm_end_load (void) {
@@ -387,76 +386,13 @@ void sound_bgm_prepare_for_load (void) {
     sfx_enabled = false;    // Nothing else plays from there until the game boots or the load fails.
 }
 
-/* Temporary launch diagnostics: when each step happened and how much audio was queued then. */
-#define LAUNCH_LOG_MAX  (32)
-static struct { const char *label; uint32_t ms; int queued; } launch_log[LAUNCH_LOG_MAX];
-static int launch_log_count = 0;
-static uint64_t launch_log_start = 0;
-static uint64_t keep_alive_last = 0;
-static uint32_t keep_alive_max_gap = 0;
-static uint32_t keep_alive_max_gap_at = 0;
-static int keep_alive_min_queued = 99;
-static uint32_t keep_alive_min_queued_at = 0;
-static int keep_alive_calls = 0;
-
-void sound_launch_log (const char *label) {
-    uint64_t now = get_ticks_ms();
-    if (strcmp(label, "A pressed") == 0) {
-        launch_log_count = 0;
-        launch_log_start = now;
-        keep_alive_last = 0;
-        keep_alive_max_gap = 0;
-        keep_alive_min_queued = 99;
-        keep_alive_calls = 0;
-    }
-    if (launch_log_count < LAUNCH_LOG_MAX) {
-        launch_log[launch_log_count].label = label;
-        launch_log[launch_log_count].ms = (uint32_t)(now - launch_log_start);
-        launch_log[launch_log_count].queued = sound_initialized ? audio_get_queued_buffers() : -1;
-        launch_log_count++;
-    }
-}
-
-void sound_launch_log_write (const char *path) {
-    FILE *f = fopen(path, "w");
-    if (!f) {
-        return;
-    }
-    int buffer_ms = sound_initialized ? audio_get_buffer_length() * 1000 / audio_get_frequency() : 0;
-    fprintf(f, "buffers %d of %d ms, menu keeps %d, load keeps %d\n",
-        sound_initialized ? audio_get_num_buffers() : 0, buffer_ms, menu_ahead_buffers,
-        sound_initialized ? audio_get_num_buffers() - 1 : 0);
-    for (int i = 0; i < launch_log_count; i++) {
-        fprintf(f, "%6lu ms  queued %2d  %s\n", (unsigned long)launch_log[i].ms, launch_log[i].queued, launch_log[i].label);
-    }
-    fprintf(f, "load callbacks %d, longest gap %lu ms (at %lu ms), lowest queue %d (at %lu ms)\n",
-        keep_alive_calls, (unsigned long)keep_alive_max_gap, (unsigned long)keep_alive_max_gap_at,
-        keep_alive_min_queued, (unsigned long)keep_alive_min_queued_at);
-    fclose(f);
-}
-
 void sound_bgm_keep_alive (void) {
     // Called between chunks of a ROM load.
-    uint64_t now = get_ticks_ms();
-    if (keep_alive_last && now - keep_alive_last > keep_alive_max_gap) {
-        keep_alive_max_gap = (uint32_t)(now - keep_alive_last);
-        keep_alive_max_gap_at = (uint32_t)(now - launch_log_start);
-    }
-    keep_alive_last = now;
-    if (keep_alive_calls++ == 0) {
-        sound_launch_log("first load callback");
-    }
-    if (sound_initialized && audio_get_queued_buffers() < keep_alive_min_queued) {
-        keep_alive_min_queued = audio_get_queued_buffers();
-        keep_alive_min_queued_at = (uint32_t)(now - launch_log_start);
-    }
     sound_poll();
 }
 
 void sound_bgm_fade_out (int duration_ms) {
-    sound_launch_log("fade start");
     bgm_fade(duration_ms, load_ahead);
-    sound_launch_log("fade played out");
 }
 
 /**

@@ -886,9 +886,6 @@ static void draw (menu_t *menu, surface_t *d) {
 
 static void draw_progress (float progress) {
     sound_bgm_keep_alive();
-    if (progress >= 1.0f) {
-        sound_launch_log("bar full");
-    }
 
     // The load calls this often to keep the music fed; the bar only needs ~30 redraws a second.
     static uint64_t last_draw_ms = 0;
@@ -937,9 +934,7 @@ static void load (menu_t *menu) {
     cart_load_err_t err;
 
     // SD card music keeps playing while the game loads and fades out once it's in.
-    sound_launch_log("load start");
     sound_bgm_prepare_for_load();
-    sound_launch_log("sounds ready for load");
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.loading_progress_bar_enabled) {
         err = cart_load_n64_rom_and_save(menu, NULL, NULL);
@@ -961,13 +956,7 @@ static void load (menu_t *menu) {
         return;
     }
 
-    sound_launch_log("cart load done");
     sound_bgm_fade_out(BGM_FADE_MS);
-    {
-        char log_path[128];
-        snprintf(log_path, sizeof(log_path), "%smenu/cache/launcher/launch-log.txt", menu->storage_prefix);
-        sound_launch_log_write(log_path);
-    }
     launcher_save_pending_settings(menu);
 
     bookkeeping_history_add(&menu->bookkeeping, menu->load.rom_path, NULL, BOOKKEEPING_TYPE_ROM);
@@ -1049,7 +1038,6 @@ void view_load_rom_init (menu_t *menu) {
     bool quick_start = menu->load.quick_start;
     menu->load.quick_start = false;
     quick_loading = false;
-    sound_launch_log("rom screen init");
     sound_bgm_keep_alive();
     if (!quick_start) {
         launcher_launch_cover_free();
@@ -1107,7 +1095,6 @@ void view_load_rom_init (menu_t *menu) {
         return;
     }
 
-    sound_launch_log("rom details read");
     sound_bgm_keep_alive();
 
     if (!is_memory_expanded()) {
@@ -1180,7 +1167,6 @@ void view_load_rom_init (menu_t *menu) {
     if (!quick_loading) {
         sound_bgm_end_load();   // This screen stays up: back to the short queue so effects keep up.
     }
-    sound_launch_log("rom screen ready");
 }
 
 void view_load_rom_display (menu_t *menu, surface_t *display) {

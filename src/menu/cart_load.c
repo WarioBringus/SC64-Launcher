@@ -108,7 +108,6 @@ cart_load_err_t cart_load_n64_rom_and_save (menu_t *menu, flashcart_progress_cal
     flashcart_save_type_t save_type = convert_save_type(rom_info_get_save_type(&menu->load.rom_info));
 
     menu->flashcart_err = flashcart_load_rom(path_get(path), byte_swap, progress);
-    sound_launch_log("rom copied to cart");
     if (menu->flashcart_err != FLASHCART_OK) {
         path_free(path);
         return CART_LOAD_ERR_ROM_LOAD_FAIL;
@@ -130,11 +129,9 @@ cart_load_err_t cart_load_n64_rom_and_save (menu_t *menu, flashcart_progress_cal
         save_progress(1.0f);
     }
 
-    sound_launch_log("save path ready");
     flashcart_set_wait_callback(sound_bgm_keep_alive);
     menu->flashcart_err = flashcart_load_save(path_get(path), save_type);
     flashcart_set_wait_callback(NULL);
-    sound_launch_log("save loaded");
     if (menu->flashcart_err != FLASHCART_OK) {
         path_free(path);
         return CART_LOAD_ERR_SAVE_LOAD_FAIL;

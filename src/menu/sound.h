@@ -161,12 +161,6 @@ void sound_bgm_begin_load(void);
 /** @brief The launch failed: back to the menu's short audio queue. */
 void sound_bgm_end_load(void);
 
-/** @brief Temporary launch diagnostics: note a step (the first call, "A pressed", starts the clock). */
-void sound_launch_log(const char *label);
-
-/** @brief Temporary launch diagnostics: write the notes to a text file. */
-void sound_launch_log_write(const char *path);
-
 /**
  * @brief Play a specified sound effect.
  * 
