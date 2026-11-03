@@ -694,6 +694,66 @@ static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, in
     flat_end();
 }
 
+#define FOCUS_EASE          (0.35f) /* Fraction of the remaining distance moved per frame (as the carousel) */
+#define FOCUS_LIFT          (3)     /* Pixels the selected tile rises */
+#define FOCUS_LIFT_MS       (120)
+#define FOCUS_SNAP_DISTANCE (220)   /* Farther jumps than this appear in place */
+
+static bool ring_valid = false;
+static float ring_x0, ring_y0, ring_x1, ring_y1, ring_radius;
+
+int launcher_px (int x) {
+    return px(x);
+}
+
+float launcher_ease (float current, float target) {
+    float next = current + (target - current) * FOCUS_EASE;
+    if (fabsf(target - next) < 0.5f) {
+        next = target;
+    }
+    return next;
+}
+
+void launcher_focus_reset (void) {
+    ring_valid = false;
+}
+
+void launcher_draw_focus_ring (int x0, int y0, int x1, int y1, int radius) {
+    if (!ring_valid || fabsf(x0 - ring_x0) > FOCUS_SNAP_DISTANCE || fabsf(y0 - ring_y0) > FOCUS_SNAP_DISTANCE) {
+        ring_x0 = x0;
+        ring_y0 = y0;
+        ring_x1 = x1;
+        ring_y1 = y1;
+        ring_radius = radius;
+        ring_valid = true;
+    } else {
+        ring_x0 = launcher_ease(ring_x0, x0);
+        ring_y0 = launcher_ease(ring_y0, y0);
+        ring_x1 = launcher_ease(ring_x1, x1);
+        ring_y1 = launcher_ease(ring_y1, y1);
+        ring_radius = launcher_ease(ring_radius, radius);
+    }
+    launcher_draw_ring((int)lroundf(ring_x0), (int)lroundf(ring_y0), (int)lroundf(ring_x1), (int)lroundf(ring_y1),
+        (int)lroundf(ring_radius));
+}
+
+void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {
+    launcher_draw_focus_ring(x, y, x + w, y + h, TILE_RADIUS);
+}
+
+int launcher_focus_lift (int key) {
+    static int last_key = -1;
+    static uint64_t since = 0;
+    uint64_t now = get_ticks_ms();
+    if (key != last_key) {
+        last_key = key;
+        since = now;
+    }
+    float t = fminf(1.0f, (float)(now - since) / FOCUS_LIFT_MS);
+    float e = 1.0f - (1.0f - t) * (1.0f - t);
+    return (int)(FOCUS_LIFT * e + 0.5f);
+}
+
 void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
     outline_rounded_real(px(x0 - LAUNCHER_RING), y0 - LAUNCHER_RING, px(x1 + LAUNCHER_RING), y1 + LAUNCHER_RING,
         radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, theme_current()->accent);

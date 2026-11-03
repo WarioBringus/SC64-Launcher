@@ -69,6 +69,8 @@ static int category_index = 0;
 static bool category_restored = false;
 static int selections[MAX_REMEMBERED_CATEGORIES];
 static int top_row = 0;
+static float grid_scroll = 0.0f;    /* Drawn scroll position in pixels, gliding toward top_row */
+static bool motion_snap = true;     /* Next grid frame appears in place (screen opened, layout or list changed) */
 static float carousel_position = 0.0f;
 static char group_badge[48] = "";
 static uint64_t group_badge_until_ms = 0;
@@ -844,17 +846,50 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         last = c->shown;
     }
 
-    for (int i = first; i < last; i++) {
+    // Glide to the scroll position; a different list, size or a jump of more than a screen appears in place.
+    static library_category_t *motion_category = NULL;
+    static int motion_tile_size = -1;
+    static int motion_cols = -1;
+    static int motion_shown = -1;
+    if (c != motion_category || menu->settings.launcher_tile_size != motion_tile_size ||
+        g.cols != motion_cols || c->shown != motion_shown) {
+        motion_category = c;
+        motion_tile_size = menu->settings.launcher_tile_size;
+        motion_cols = g.cols;
+        motion_shown = c->shown;
+        motion_snap = true;
+    }
+    float target_scroll = (float)(top_row * g.row_h);
+    if (motion_snap || fabsf(target_scroll - grid_scroll) > g.rows * g.row_h) {
+        grid_scroll = target_scroll;
+        launcher_focus_reset();
+        motion_snap = false;
+    } else {
+        grid_scroll = launcher_ease(grid_scroll, target_scroll);
+    }
+    int scroll = (int)lroundf(grid_scroll);
+    int draw_first = (scroll / g.row_h) * g.cols;
+    int draw_last = ((scroll + g.rows * g.row_h + g.row_h - 1) / g.row_h) * g.cols;
+    if (draw_last > c->shown) {
+        draw_last = c->shown;
+    }
+
+    rdpq_set_scissor(0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2, display_get_width(), LAUNCHER_CONTENT_Y1 + 2);
+    int lift = launcher_focus_lift(category_index * 100000 + sel);
+    for (int i = draw_first; i < draw_last; i++) {
         int col = i % g.cols;
-        int r = (i / g.cols) - top_row;
         int x = g.x0 + col * (g.w + g.gap);
-        int y = LAUNCHER_CONTENT_Y + r * g.row_h;
+        int y = LAUNCHER_CONTENT_Y + (i / g.cols) * g.row_h - scroll;
         bool selected = (i == sel);
+        int tile_y = selected ? y - lift : y;
 
         surface_t *image = game_cover(menu, &c->games[i], g.w, g.h, &lookups_left, &pending);
-        launcher_draw_tile(x, y, g.w, g.h, image, pending, c->games[i].title, selected, theme_current()->bg);
+        launcher_draw_tile(x, tile_y, g.w, g.h, image, pending, c->games[i].title, false, theme_current()->bg);
+        if (selected) {
+            launcher_note_focused_cover(image, x, tile_y, g.w, g.h);
+        }
         if (game_is_favorite(menu, &c->games[i])) {
-            launcher_draw_favorite_star(x, y, g.w);
+            launcher_draw_favorite_star(x, tile_y, g.w);
         }
 
         if (selected || !highlight_only) {
@@ -871,6 +906,11 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
             launcher_name(tx, y + g.h + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, c->games[i].title);
         }
     }
+
+    // The ring glides to where the selected tile is headed.
+    int sel_y = LAUNCHER_CONTENT_Y + (sel / g.cols - top_row) * g.row_h - lift;
+    launcher_draw_focus_ring_tile(g.x0 + (sel % g.cols) * (g.w + g.gap), sel_y, g.w, g.h);
+    rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
     // Preload the row below so scrolling down shows covers straight away.
     bool any_pending = false;
@@ -910,6 +950,8 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     int sw = (int)(cw * CAROUSEL_SIDE_SCALE);
     int lookups_left = 1;
     bool pending;
+
+    motion_snap = true;     // Back in the grid, it appears in place.
 
     // Ease toward the selection; snap when close.
     carousel_position += (sel - carousel_position) * CAROUSEL_EASE;
@@ -1067,6 +1109,8 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_library_init (menu_t *menu) {
+    motion_snap = true;
+    launcher_focus_reset();
     library_init(menu);
     launcher_favorites_touched();
     launcher_menu_init();

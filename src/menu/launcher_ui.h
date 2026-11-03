@@ -211,6 +211,24 @@ void launcher_fill_rounded(int x0, int y0, int x1, int y1, int radius, color_t c
  */
 void launcher_draw_ring(int x0, int y0, int x1, int y1, int radius);
 
+/** @brief Logical x to framebuffer x (for scissor rectangles). */
+int launcher_px(int x);
+
+/** @brief Move a value part of the way to its target (one frame of a glide); snaps when close. */
+float launcher_ease(float current, float target);
+
+/** @brief Draw the selection ring gliding toward this rectangle (it snaps after launcher_focus_reset). */
+void launcher_draw_focus_ring(int x0, int y0, int x1, int y1, int radius);
+
+/** @brief The same for a tile's rectangle. */
+void launcher_draw_focus_ring_tile(int x, int y, int w, int h);
+
+/** @brief Make the next selection ring appear in place rather than glide (e.g. a screen opened). */
+void launcher_focus_reset(void);
+
+/** @brief How far the selected tile is lifted, rising briefly whenever the selection (key) changes. */
+int launcher_focus_lift(int key);
+
 /**
  * @brief Draw a category pill; active pills are filled with the accent color.
  *

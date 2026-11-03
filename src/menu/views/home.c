@@ -4,6 +4,7 @@
  * @ingroup view
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +72,7 @@ typedef struct {
     int count;
     int selected;
     int scroll;
+    float scroll_pos;           /**< Drawn scroll in pixels, gliding toward scroll */
 } home_row_t;
 
 /* ROM path -> cover path, kept across visits so covers are only looked up once. */
@@ -83,6 +85,9 @@ static home_row_t rows[ROW_KINDS];
 static int row_count = 0;
 static int row_selected = 0;
 static int scroll_y = 0;
+static float scroll_y_pos = 0.0f;       /* Drawn page scroll, gliding toward scroll_y */
+static int scroll_y_ahead = 0;          /* Drawn minus target scroll: where things are headed is this much lower */
+static bool motion_snap = true;
 static cover_lookup_t cover_lookups[COVER_CACHE_SIZE];
 static int cover_lookup_next = 0;
 
@@ -256,7 +261,7 @@ static void process (menu_t *menu) {
 static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int *lookups_left) {
     home_item_t *h = &row->items[0];
     if (focused) {
-        launcher_draw_ring(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H, CARD_RADIUS);
+        launcher_draw_focus_ring(LAUNCHER_X0, y + scroll_y_ahead, LAUNCHER_X1, y + scroll_y_ahead + RESUME_CARD_H, CARD_RADIUS);
     }
     launcher_fill_rounded(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H, CARD_RADIUS, theme_current()->panel);
 
@@ -304,15 +309,27 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
 
     bool highlight_only = menu->settings.launcher_titles_highlight_only;
     int tile_y = y + ROW_LABEL_H;
-    for (int i = row->scroll; i < row->count && i < row->scroll + ROW_VISIBLE_TILES; i++) {
+
+    // Glide sideways to the scroll position rather than jumping a tile.
+    float target = (float)(row->scroll * ROW_TILE_STEP);
+    row->scroll_pos = motion_snap ? target : launcher_ease(row->scroll_pos, target);
+    int scroll_px = (int)lroundf(row->scroll_pos);
+    int lift = focused ? launcher_focus_lift((int)(row - rows) * 1000 + row->selected) : 0;
+    for (int i = scroll_px / ROW_TILE_STEP; i < row->count && i <= scroll_px / ROW_TILE_STEP + ROW_VISIBLE_TILES; i++) {
         home_item_t *h = &row->items[i];
-        int x = LAUNCHER_X0 + (i - row->scroll) * ROW_TILE_STEP;
+        int x = LAUNCHER_X0 + i * ROW_TILE_STEP - scroll_px;
         bool selected = focused && (i == row->selected);
+        int item_y = selected ? tile_y - lift : tile_y;
         bool pending;
         surface_t *image = item_image(menu, h, ROW_TILE_W, ROW_TILE_H, lookups_left, &pending);
-        launcher_draw_tile(x, tile_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, selected, theme_current()->bg);
+        launcher_draw_tile(x, item_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, false, theme_current()->bg);
+        if (selected) {
+            launcher_note_focused_cover(image, x, item_y, ROW_TILE_W, ROW_TILE_H);
+            launcher_draw_focus_ring_tile(LAUNCHER_X0 + (i - row->scroll) * ROW_TILE_STEP, item_y + scroll_y_ahead,
+                ROW_TILE_W, ROW_TILE_H);
+        }
         if (row->kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
-            launcher_draw_favorite_star(x, tile_y, ROW_TILE_W);
+            launcher_draw_favorite_star(x, item_y, ROW_TILE_W);
         }
         if (selected || !highlight_only) {
             int extra = selected && highlight_only ? 60 : 3;
@@ -356,8 +373,14 @@ static void draw (menu_t *menu, surface_t *d) {
             scroll_y = row_bottom - CONTENT_BOTTOM;
         }
 
-        rdpq_set_scissor(0, CONTENT_TOP - LAUNCHER_RING - 2, display_get_width(), CONTENT_BOTTOM + 2);
-        int y = CONTENT_TOP - scroll_y;
+        // The page glides to its scroll position too.
+        scroll_y_pos = motion_snap ? (float)scroll_y : launcher_ease(scroll_y_pos, (float)scroll_y);
+        int drawn_scroll = (int)lroundf(scroll_y_pos);
+        scroll_y_ahead = drawn_scroll - scroll_y;
+
+        rdpq_set_scissor(launcher_px(LAUNCHER_X0 - LAUNCHER_RING - 2), CONTENT_TOP - LAUNCHER_RING - 2,
+            launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2), CONTENT_BOTTOM + 2);
+        int y = CONTENT_TOP - drawn_scroll;
         for (int r = 0; r < row_count; r++) {
             bool focused = (r == row_selected);
             int height = (rows[r].kind == ROW_RESUME) ? RESUME_CARD_H + ROW_GAP : ROW_H;
@@ -372,6 +395,7 @@ static void draw (menu_t *menu, surface_t *d) {
             }
         }
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+        motion_snap = false;
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
 
@@ -384,6 +408,8 @@ static void draw (menu_t *menu, surface_t *d) {
 void view_home_init (menu_t *menu) {
     launcher_menu_init();
     build_rows(menu);
+    motion_snap = true;
+    launcher_focus_reset();
 }
 
 void view_home_display (menu_t *menu, surface_t *display) {
