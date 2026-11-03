@@ -554,12 +554,14 @@ static int transition_y0 = 0;
 static float transition_fade = 0.0f;        /* Content fade still to clear this frame (1 = background only) */
 
 void launcher_transition (menu_mode_t from, menu_mode_t to) {
-    if (from == to || (to != MENU_MODE_HOME && to != MENU_MODE_LIBRARY && to != MENU_MODE_ABOUT)) {
+    if (from == to || (to != MENU_MODE_HOME && to != MENU_MODE_LIBRARY && to != MENU_MODE_ABOUT &&
+        to != MENU_MODE_SETTINGS_EDITOR)) {
         return;
     }
     // The tabs read Home | Library: going right slides in from the right, going left from the left.
-    // About fades in and out without a slide.
-    if (from == MENU_MODE_ABOUT || to == MENU_MODE_ABOUT) {
+    // About and Settings fade in and out without a slide.
+    if (from == MENU_MODE_ABOUT || to == MENU_MODE_ABOUT ||
+        from == MENU_MODE_SETTINGS_EDITOR || to == MENU_MODE_SETTINGS_EDITOR) {
         transition_dir = 0;
     } else {
         transition_dir = (to == MENU_MODE_LIBRARY) ? 1 : -1;
