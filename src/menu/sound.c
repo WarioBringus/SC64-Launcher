@@ -24,6 +24,7 @@
 #define BGM_MAX_TRACKS      (64)
 
 static wav64_t sfx_cursor, sfx_error, sfx_enter, sfx_exit, sfx_setting, bgm;
+static wav64_t sfx_tick, sfx_swish, sfx_pop;
 
 static char *bgm_tracks[BGM_MAX_TRACKS];
 static int bgm_track_count = 0;
@@ -126,6 +127,9 @@ void sound_init_sfx (void) {
     wav64_open(&sfx_setting, "rom:/menu/sounds/settings.wav64");
     wav64_open(&sfx_enter, "rom:/menu/sounds/enter.wav64");
     wav64_open(&sfx_error, "rom:/menu/sounds/error.wav64");
+    wav64_open(&sfx_tick, "rom:/menu/sounds/tick.wav64");
+    wav64_open(&sfx_swish, "rom:/menu/sounds/swish.wav64");
+    wav64_open(&sfx_pop, "rom:/menu/sounds/pop.wav64");
     sfx_enabled = true;
     sfx_opened = true;
 }
@@ -444,6 +448,15 @@ void sound_play_effect(sound_effect_t sfx) {
             case SFX_ERROR:
                 wav64_play(&sfx_error, SOUND_SFX_CHANNEL);
                 break;
+            case SFX_TICK:
+                wav64_play(&sfx_tick, SOUND_SFX_CHANNEL);
+                break;
+            case SFX_SWISH:
+                wav64_play(&sfx_swish, SOUND_SFX_CHANNEL);
+                break;
+            case SFX_POP:
+                wav64_play(&sfx_pop, SOUND_SFX_CHANNEL);
+                break;
             default:
                 break;
         } 
@@ -461,6 +474,9 @@ void sound_deinit (void) {
             wav64_close(&sfx_setting);
             wav64_close(&sfx_enter);
             wav64_close(&sfx_error);
+            wav64_close(&sfx_tick);
+            wav64_close(&sfx_swish);
+            wav64_close(&sfx_pop);
             sfx_opened = false;
         }
         if (bgm_opened) {

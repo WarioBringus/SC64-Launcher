@@ -120,7 +120,10 @@ SOUNDS_WAV = \
 	bgm.wav \
 	enter.wav \
 	error.wav \
-	settings.wav
+	settings.wav \
+	tick.wav \
+	swish.wav \
+	pop.wav
 
 SOUNDS_XM ?=
 

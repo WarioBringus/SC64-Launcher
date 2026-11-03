@@ -1558,7 +1558,7 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
 void launcher_menu_show (menu_t *menu, path_t *rom) {
     prepare_menus(menu, rom);
     ui_components_context_menu_show(&start_menu);
-    sound_play_effect(SFX_SETTING);
+    sound_play_effect(SFX_POP);
 }
 
 void launcher_game_menu_show (menu_t *menu, path_t *rom) {
@@ -1567,7 +1567,7 @@ void launcher_game_menu_show (menu_t *menu, path_t *rom) {
     }
     prepare_menus(menu, rom);
     ui_components_context_menu_show(&game_menu);
-    sound_play_effect(SFX_SETTING);
+    sound_play_effect(SFX_POP);
 }
 
 bool launcher_menu_process (menu_t *menu) {

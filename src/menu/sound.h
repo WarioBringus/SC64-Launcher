@@ -28,6 +28,9 @@ typedef enum {
     SFX_ENTER,   /**< Sound effect for entering a menu */
     SFX_EXIT,    /**< Sound effect for exiting a menu */
     SFX_SETTING, /**< Sound effect for changing a setting */
+    SFX_TICK,    /**< Launcher: the selection moving from game to game */
+    SFX_SWISH,   /**< Launcher: Home and the Library sliding in */
+    SFX_POP,     /**< Launcher: the Start or game menu opening */
 } sound_effect_t;
 
 /** @brief Order in which background music tracks from the SD card play. */

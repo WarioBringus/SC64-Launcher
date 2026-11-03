@@ -229,7 +229,7 @@ static void process (menu_t *menu) {
         return;
     }
     if (menu->actions.shoulder_r) {
-        sound_play_effect(SFX_CURSOR);
+        sound_play_effect(SFX_SWISH);
         launcher_transition(menu->mode, MENU_MODE_LIBRARY);
         menu->next_mode = MENU_MODE_LIBRARY;
         return;
@@ -242,16 +242,16 @@ static void process (menu_t *menu) {
 
     if (menu->actions.go_up && row_selected > 0) {
         row_selected--;
-        sound_play_effect(SFX_CURSOR);
+        sound_play_effect(SFX_TICK);
     } else if (menu->actions.go_down && row_selected < row_count - 1) {
         row_selected++;
-        sound_play_effect(SFX_CURSOR);
+        sound_play_effect(SFX_TICK);
     } else if (menu->actions.go_left && row->selected > 0) {
         row->selected--;
-        sound_play_effect(SFX_CURSOR);
+        sound_play_effect(SFX_TICK);
     } else if (menu->actions.go_right && row->selected < row->count - 1) {
         row->selected++;
-        sound_play_effect(SFX_CURSOR);
+        sound_play_effect(SFX_TICK);
     } else if (menu->actions.enter && row->count > 0) {
         launch(menu, &row->items[row->selected]);
     } else if (menu->actions.trigger_z && row->count > 0) {

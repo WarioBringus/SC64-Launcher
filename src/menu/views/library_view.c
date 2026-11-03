@@ -640,7 +640,7 @@ static void process (menu_t *menu) {
     }
     // L (the Home tab is to the left) or B goes back to Home; R on Home comes here.
     if (menu->actions.back || menu->actions.shoulder_l) {
-        sound_play_effect(menu->actions.back ? SFX_EXIT : SFX_CURSOR);
+        sound_play_effect(menu->actions.back ? SFX_EXIT : SFX_SWISH);
         settings_save(&menu->settings);
         launcher_transition(menu->mode, MENU_MODE_HOME);
         menu->next_mode = MENU_MODE_HOME;
@@ -669,7 +669,7 @@ static void process (menu_t *menu) {
             *sel += 1;
         }
         if (*sel != previous) {
-            sound_play_effect(SFX_CURSOR);
+            sound_play_effect(SFX_TICK);
         }
         if (menu->actions.enter) {
             launch(menu, &c->games[*sel]);
@@ -689,7 +689,7 @@ static void process (menu_t *menu) {
         *sel = jump_group(c, *sel, menu->actions.go_down ? 1 : -1);
         show_group_badge(c, *sel);
         if (*sel != previous) {
-            sound_play_effect(SFX_CURSOR);
+            sound_play_effect(SFX_TICK);
         }
         return;
     }
@@ -715,7 +715,7 @@ static void process (menu_t *menu) {
     }
 
     if (*sel != previous) {
-        sound_play_effect(SFX_CURSOR);
+        sound_play_effect(SFX_TICK);
     }
 
     if (menu->actions.enter) {
