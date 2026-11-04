@@ -492,10 +492,12 @@ static void launch_cover_take (void) {
     launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
 
     // The Large cover from the pack ends the animation sharp; a thumbnail would have to be enlarged.
+    // A cover already shown at that size (carousel, shelf) is read again too: in 16:9 the one on
+    // screen is squeezed and can't be copied.
     bool landscape = focused_image->width >= focused_image->height;
     surface_t *large = launcher_cover_larger(focused_image, landscape ? LAUNCH_LARGE_W : LAUNCH_LARGE_H,
                                              landscape ? LAUNCH_LARGE_H : LAUNCH_LARGE_W);
-    if (large && large->width > focused_image->width) {
+    if (large && large->width >= focused_image->width) {
         launch_cover = *large;
         free(large);
         launch_cover_valid = true;
