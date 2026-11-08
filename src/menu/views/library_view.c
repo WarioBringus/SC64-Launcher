@@ -19,13 +19,13 @@
 #define MAX_REMEMBERED_CATEGORIES   (32)
 #define TITLE_EXTRA_HIGHLIGHT_ONLY  (48)
 
-#define CAROUSEL_CENTER_Y           (222)   /* Vertical center of the covers */
+#define CAROUSEL_CENTER_Y           (214)   /* Vertical center of the covers */
 #define CAROUSEL_SIDE_SCALE         (0.66f) /* Size of the covers beside the highlighted one */
 #define CAROUSEL_SPACING            (14)
 #define CAROUSEL_REACH              (5)     /* Covers considered on each side (off-screen ones are skipped) */
 #define CAROUSEL_EASE               (0.35f) /* Fraction of the remaining distance moved per frame */
 #define CAROUSEL_FAST_STEP          (5)
-#define CAROUSEL_TITLE_Y            (330)
+#define CAROUSEL_TITLE_Y            (334)
 
 #define GROUP_BADGE_HEIGHT          (64)
 #define GROUP_BADGE_MIN_WIDTH       (84)
@@ -1196,8 +1196,10 @@ static void carousel_slot (float t, int cw, int sw, float *center_x, float *scal
 }
 
 static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
-    int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
-    int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+    int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;   // As drawn...
+    int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
+    int rw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;         // ...from full-size covers
+    int rh = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
     int sw = (int)(cw * CAROUSEL_SIDE_SCALE);
     int lookups_left = 1;
     bool pending;
@@ -1211,7 +1213,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     }
 
     // Highlighted cover first so it loads before its neighbours (the only one read while scrolling fast).
-    game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
+    game_cover(menu, &c->games[sel], rw, rh, &lookups_left, &pending);
     launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
     // Far covers first so nearer ones draw on top.
@@ -1234,10 +1236,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
                 continue;
             }
 
-            surface_t *image = game_cover(menu, &c->games[i], cw, ch, &lookups_left, &pending);
+            surface_t *image = game_cover(menu, &c->games[i], rw, rh, &lookups_left, &pending);
             bool settled = (i == sel) && (carousel_position == (float)sel);
             if (settled) {
-                launcher_draw_tile(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg);
+                launcher_draw_tile_zoomed(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg, LAUNCHER_SHOWCASE_ZOOM);
                 if (game_is_favorite(menu, &c->games[i])) {
                     launcher_draw_favorite_star(x, y, w);
                 }
@@ -1274,7 +1276,9 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 }
 
 
-#define SHELF_BASE_Y        (300)   /* Top of the shelf plank: spines and the open box stand on it */
+#define SHELF_BASE_Y        (314)   /* Top of the shelf plank: spines and the open box stand on it */
+#define SHELF_SPINE_W       ((int)(LAUNCHER_SPINE_W * LAUNCHER_SHOWCASE_ZOOM))
+#define SHELF_SPINE_H       ((int)(LAUNCHER_SPINE_H * LAUNCHER_SHOWCASE_ZOOM))
 #define SHELF_GAP           (3)
 #define SHELF_OPEN_GAP      (10)    /* Space either side of the open box */
 #define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
@@ -1283,8 +1287,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 static float shelf_position = 0.0f;     /* Drawn selection, gliding toward it (fractional while moving) */
 
 static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
-    int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
-    int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+    int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;   // As drawn...
+    int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
+    int rw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;         // ...from full-size covers
+    int rh = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
     int lookups_left = 1;
     bool pending;
 
@@ -1301,33 +1307,33 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 
     // The open box sits in the middle; the shelf glides to it.
     int lift = launcher_focus_lift(category_index * 100000 + sel);
-    int step = LAUNCHER_SPINE_W + SHELF_GAP;
+    int step = SHELF_SPINE_W + SHELF_GAP;
     int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step);
 
     // The open box's cover first; while scrolling fast it is the only cover read.
-    surface_t *front = game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
+    surface_t *front = game_cover(menu, &c->games[sel], rw, rh, &lookups_left, &pending);
     bool front_pending = pending;
     launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
-    // The shelf runs edge to edge. (Spines are copied in COPY mode, where a scissor not starting at
-    // x = 0 hangs the RDP: a hardware bug.)
+    // The shelf runs edge to edge. (Launcher scissors always start at x = 0: in COPY mode, one that
+    // doesn't hangs the RDP, a hardware bug.)
     rdpq_set_scissor(0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2, display_get_width(), SHELF_BASE_Y);
 
-    int spine_y = SHELF_BASE_Y - LAUNCHER_SPINE_H;
+    int spine_y = SHELF_BASE_Y - SHELF_SPINE_H;
     // Spines to the left, then to the right, until they leave the screen.
-    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - LAUNCHER_SPINE_W; i >= 0 && x + LAUNCHER_SPINE_W > 0; i--, x -= step) {
+    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - SHELF_SPINE_W; i >= 0 && x + SHELF_SPINE_W > 0; i--, x -= step) {
         const char *path = library_game_cover(menu, &c->games[i]);
-        launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+        launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
     }
     for (int i = sel + 1, x = open_x + cw + SHELF_OPEN_GAP; i < c->shown && x < launcher_screen_width(); i++, x += step) {
         const char *path = library_game_cover(menu, &c->games[i]);
-        launcher_draw_spine(x, spine_y, launcher_spine_get(path, &pending));
+        launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
     }
 
     // The open box, lifted a little, with the selection ring.
     int open_y = SHELF_BASE_Y - ch - lift;
-    launcher_draw_tile(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg);
-    launcher_note_focused_cover(front, open_x, open_y, cw, ch);
+    launcher_draw_tile_zoomed(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg, LAUNCHER_SHOWCASE_ZOOM);
+    launcher_note_focused_cover_zoomed(front, open_x, open_y, cw, ch, LAUNCHER_SHOWCASE_ZOOM);
     if (game_is_favorite(menu, &c->games[sel])) {
         launcher_draw_favorite_star(open_x, open_y, cw);
     }

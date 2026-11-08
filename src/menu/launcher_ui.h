@@ -35,6 +35,12 @@
 #define LAUNCHER_COVER_W        (158)
 #define LAUNCHER_COVER_H        (112)
 
+/* The carousel's cover and the shelf's open box and spines: full-size covers drawn a third larger
+   (cover art is no larger than 158x112, so this is as sharp as a bigger pack would be) */
+#define LAUNCHER_SHOWCASE_ZOOM  (4.0f / 3.0f)
+#define LAUNCHER_SHOWCASE_W     (210)   /**< LAUNCHER_COVER_W x zoom, as drawn */
+#define LAUNCHER_SHOWCASE_H     (149)
+
 /** @brief Controller buttons shown in the hints bar (sets the icon color). */
 typedef enum {
     LAUNCHER_BUTTON_A,
@@ -118,8 +124,8 @@ void launcher_set_cartridge_art(bool enabled);
  */
 surface_t *launcher_spine_get(const char *front_path, bool *pending);
 
-/** @brief Draw a spine (or, without one, a plain panel) with slightly rounded corners. */
-void launcher_draw_spine(int x, int y, surface_t *image);
+/** @brief Draw a spine resized to w x h (or, without one, a plain panel) with slightly rounded corners. */
+void launcher_draw_spine(int x, int y, int w, int h, surface_t *image);
 
 /**
  * @brief Read a cover on screen again at a larger pack size (max_w x max_h), straight from its pack.
@@ -238,6 +244,9 @@ void launcher_draw_loading(const char *title, const char *details, float progres
 /** @brief Note the cover in the focused tile this frame (the one a quick launch grows from). */
 void launcher_note_focused_cover(surface_t *image, int x, int y, int w, int h);
 
+/** @brief As launcher_note_focused_cover, for a cover drawn enlarged by zoom. */
+void launcher_note_focused_cover_zoomed(surface_t *image, int x, int y, int w, int h, float zoom);
+
 /** @brief Forget the focused cover; called at the start of every launcher frame. */
 void launcher_clear_focused_cover(void);
 
@@ -297,6 +306,9 @@ int launcher_draw_pill(int x, int y, const char *name, bool active);
  * @param behind Color behind the tile, used to round the cover's corners.
  */
 void launcher_draw_tile(int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind);
+
+/** @brief As launcher_draw_tile, with the cover drawn enlarged by zoom (the tile is sized for that). */
+void launcher_draw_tile_zoomed(int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind, float zoom);
 
 /**
  * @brief Draw a cover scaled to fit inside a box (used by the carousel).

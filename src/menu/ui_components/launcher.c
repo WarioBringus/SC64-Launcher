@@ -453,20 +453,26 @@ void launcher_draw_new_games_notice (void) {
 #define LAUNCH_GROW_MS      (300)
 
 static surface_t *focused_image = NULL;     /* Cover in the focused tile this frame (owned by the cover cache) */
-static int focused_x, focused_y;
+static int focused_x, focused_y, focused_w, focused_h;
 static surface_t launch_cover;              /* Our own copy: the cover cache is freed when the launcher is left */
 static bool launch_cover_valid = false;
 static bool launch_cover_large = false;     /* The copy is the Large pack cover: shown at its own size */
 static int launch_from_x, launch_from_y, launch_from_w, launch_from_h;
 static uint64_t launch_grow_start_ms = 0;
 
-void launcher_note_focused_cover (surface_t *image, int x, int y, int w, int h) {
+void launcher_note_focused_cover_zoomed (surface_t *image, int x, int y, int w, int h, float zoom) {
     if (!image) {
         return;
     }
     focused_image = image;
-    focused_x = x + (w - image->width) / 2;
-    focused_y = y + (h - image->height) / 2;
+    focused_w = (int)(image->width * zoom);
+    focused_h = (int)(image->height * zoom);
+    focused_x = x + (w - focused_w) / 2;
+    focused_y = y + (h - focused_h) / 2;
+}
+
+void launcher_note_focused_cover (surface_t *image, int x, int y, int w, int h) {
+    launcher_note_focused_cover_zoomed(image, x, y, w, h, 1.0f);
 }
 
 void launcher_clear_focused_cover (void) {
@@ -487,8 +493,8 @@ static void launch_cover_take (void) {
     }
     launch_from_x = focused_x;
     launch_from_y = focused_y;
-    launch_from_w = focused_image->width;
-    launch_from_h = focused_image->height;
+    launch_from_w = focused_w;
+    launch_from_h = focused_h;
     launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
 
     // The Large cover from the pack ends the animation sharp; a thumbnail would have to be enlarged.
@@ -1008,25 +1014,50 @@ static void blit_cover (surface_t *image, int x, int y) {
     rdpq_mode_pop();
 }
 
-void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind) {
+/**
+ * @brief Draw a cover resized to fill logical (x, y, w, h) (filtered). In 16:9 it ends where
+ * launcher_draw_ring's inner edge begins, as a copied cover does.
+ */
+static void blit_cover_resized (surface_t *image, int x, int y, int w, int h) {
+    surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
+    surface_t *source = squeezed ? squeezed : image;
+    int real_w = px(x + w) - px(x) - (widescreen ? 1 : 0);
+    rdpq_mode_push();
+        rdpq_set_mode_standard();
+        rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
+        rdpq_tex_blit(source, px(x), y, &(rdpq_blitparms_t) {
+            .scale_x = (float)real_w / source->width,
+            .scale_y = (float)h / source->height,
+        });
+    rdpq_mode_pop();
+}
+
+void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind, float zoom) {
     color_t edge = behind;
     if (selected) {
         launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
-        launcher_note_focused_cover(image, x, y, w, h);
+        launcher_note_focused_cover_zoomed(image, x, y, w, h, zoom);
     }
 
     // Covers that nearly fill the tile are drawn edge to edge; others sit on a rounded panel.
-    bool fills_tile = image && image->width >= w - 2 && image->height >= h - 2;
+    int iw = image ? (int)(image->width * zoom) : 0;
+    int ih = image ? (int)(image->height * zoom) : 0;
+    bool fills_tile = image && iw >= w - 2 && ih >= h - 2;
     if (!fills_tile) {
         launcher_fill_rounded(x, y, x + w, y + h, TILE_RADIUS, theme_current()->panel);
     }
 
     if (image) {
-        int ix = x + (w - image->width) / 2;
-        int iy = y + (h - image->height) / 2;
-        blit_cover(image, ix, iy);
+        int ix = x + (w - iw) / 2;
+        int iy = y + (h - ih) / 2;
+        if (zoom == 1.0f) {
+            blit_cover(image, ix, iy);
+        } else {
+            blit_cover_resized(image, ix, iy, iw, ih);
+        }
         if (fills_tile) {
-            mask_corners(ix, iy, ix + image->width, iy + image->height, TILE_RADIUS, edge);
+            mask_corners(ix, iy, ix + iw, iy + ih, TILE_RADIUS, edge);
         }
     } else if (!pending && title) {
         char escaped[256];
@@ -1049,17 +1080,20 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
     }
 }
 
+void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind) {
+    launcher_draw_tile_zoomed(x, y, w, h, image, pending, title, selected, behind, 1.0f);
+}
+
 #define SPINE_RADIUS        (2)
 
-void launcher_draw_spine (int x, int y, surface_t *image) {
+void launcher_draw_spine (int x, int y, int w, int h, surface_t *image) {
     if (!image) {
-        launcher_fill_rounded(x, y, x + LAUNCHER_SPINE_W, y + LAUNCHER_SPINE_H, SPINE_RADIUS, theme_current()->panel);
+        launcher_fill_rounded(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->panel);
         return;
     }
-    int ix = x + (LAUNCHER_SPINE_W - image->width) / 2;
-    int iy = y + (LAUNCHER_SPINE_H - image->height);    // Stand on the shelf.
-    blit_cover(image, ix, iy);
-    mask_corners(ix, iy, ix + image->width, iy + image->height, SPINE_RADIUS, theme_current()->bg);
+    // Every spine in the pack has the pack's full size, so it is resized to fill.
+    blit_cover_resized(image, x, y, w, h);
+    mask_corners(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->bg);
 }
 
 void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, color_t behind) {
