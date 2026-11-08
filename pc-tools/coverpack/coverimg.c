@@ -15,6 +15,11 @@
  *   <out-prefix>_<W>x<H>w.raw holds "CVW1", stored width, height, the 4:3 width it stands
  *   for (u16 BE each), two zero bytes, then the RGBA5551 pixels.
  *
+ *   coverimg box <in.png> <out-prefix> WxH [WxH ...]
+ *       As raw, for box art drawn edge to edge in its tile: see-through lines along the image's
+ *       edges (many scans have a few) are trimmed first, and a cover within 5% of the box's size
+ *       is stretched to fill it, so no gap shows between the cover and the selection ring.
+ *
  *   coverimg png <in.png> <out.png> WxH
  *       Fit the image inside the box and save it as an RGBA PNG (for adding box art).
  *
@@ -81,6 +86,38 @@ static void fit (int src_w, int src_h, int max_w, int max_h, int *dst_w, int *ds
     }
     *dst_w = (w < 1) ? 1 : w;
     *dst_h = (h < 1) ? 1 : h;
+}
+
+/* Box art: a cover this close to the box's size fills it (a stretch too small to see). */
+static void fill_near_fit (int bw, int bh, int *dw, int *dh) {
+    if (*dw * 100 >= bw * 95 && *dh * 100 >= bh * 95) {
+        *dw = bw;
+        *dh = bh;
+    }
+}
+
+/* A row or column counts as empty when nearly all of it is see-through. */
+static int line_is_clear (const image_t *img, int x, int y, int dx, int dy, int n) {
+    int clear = 0;
+    for (int i = 0; i < n; i++, x += dx, y += dy) {
+        clear += img->rgba[((size_t)y * img->w + x) * 4 + 3] < 128;
+    }
+    return clear * 10 >= n * 9;
+}
+
+/* Drop empty rows and columns along the edges (no more than 8% of the image from any side). */
+static image_t trim_clear_edges (const image_t *src) {
+    int x0 = 0, y0 = 0, x1 = src->w, y1 = src->h;
+    int max_x = src->w * 8 / 100, max_y = src->h * 8 / 100;
+    while (x0 < max_x && line_is_clear(src, x0, 0, 0, 1, src->h)) x0++;
+    while (src->w - x1 < max_x && line_is_clear(src, x1 - 1, 0, 0, 1, src->h)) x1--;
+    while (y0 < max_y && line_is_clear(src, x0, y0, 1, 0, x1 - x0)) y0++;
+    while (src->h - y1 < max_y && line_is_clear(src, x0, y1 - 1, 1, 0, x1 - x0)) y1--;
+    image_t out = { x1 - x0, y1 - y0, malloc((size_t)(x1 - x0) * (y1 - y0) * 4) };
+    for (int y = 0; y < out.h; y++) {
+        memcpy(&out.rgba[(size_t)y * out.w * 4], &src->rgba[((size_t)(y0 + y) * src->w + x0) * 4], (size_t)out.w * 4);
+    }
+    return out;
 }
 
 /* Area-average resample to dst_w x dst_h (alpha-weighted colour). */
@@ -225,10 +262,16 @@ static int write_png (const char *path, const image_t *img) {
 }
 
 int main (int argc, char **argv) {
-    if (argc >= 5 && strcmp(argv[1], "raw") == 0) {
+    if (argc >= 5 && (strcmp(argv[1], "raw") == 0 || strcmp(argv[1], "box") == 0)) {
+        int box_art = (strcmp(argv[1], "box") == 0);
         image_t src;
         if (load_png(argv[2], &src)) {
             return 1;
+        }
+        if (box_art) {
+            image_t trimmed = trim_clear_edges(&src);
+            free(src.rgba);
+            src = trimmed;
         }
         int failed = 0;
         for (int i = 4; i < argc; i++) {
@@ -248,6 +291,8 @@ int main (int argc, char **argv) {
             if (shaped.rgba && box_has(argv[i], 's')) {
                 dw = bw;    // A stand-in spine fills the spine's size even from a small front.
                 dh = bh;
+            } else if (box_art && !shaped.rgba) {
+                fill_near_fit(bw, bh, &dw, &dh);
             }
             char path[1024];
             if (box_is_wide(argv[i])) {
@@ -288,7 +333,7 @@ int main (int argc, char **argv) {
     }
     fprintf(stderr,
         "usage:\n"
-        "  coverimg raw <in.png> <out-prefix> WxH[w] [WxH[w] ...]\n"
+        "  coverimg raw|box <in.png> <out-prefix> WxH[w] [WxH[w] ...]\n"
         "  coverimg png <in.png> <out.png> WxH\n");
     return 2;
 }

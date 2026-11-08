@@ -201,7 +201,8 @@ def main():
         for i, cover in enumerate(covers):
             full = os.path.join(menu_dir, cover)
             st = os.stat(full)
-            signature = '%s|%d|%d' % (cover, st.st_size, int(st.st_mtime))
+            box_art = not cover.endswith('/gamepak_front.png')    # Cartridge art keeps its see-through outline
+            signature = '%s|%d|%d' % (cover, st.st_size, int(st.st_mtime)) + ('|fill' if box_art else '')
             signatures.append(signature)
             cached = thumb_cache.get(signature)
             if cached is None:
@@ -209,7 +210,7 @@ def main():
                 src = os.path.join(work, 'in.png')
                 shutil.copyfile(full, src)
                 prefix = os.path.join(work, 'c')
-                r = subprocess.run([args.tool, 'raw', src, prefix] + [arg for arg, _ in PACKS],
+                r = subprocess.run([args.tool, 'box' if box_art else 'raw', src, prefix] + [arg for arg, _ in PACKS],
                                    capture_output=True, text=True)
                 if r.returncode != 0:
                     failed += 1
