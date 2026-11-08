@@ -43,6 +43,7 @@ typedef struct {
     surface_t *image;           /**< Handed out; for a 16:9 cover, a header with the 4:3 size over wide's pixels */
     surface_t *wide;            /**< 16:9 cover: the squeezed image, copied 1:1 */
     bool for_wide;              /**< Loaded for the 16:9 screen */
+    uint32_t path_hash;         /**< Hash of path, compared before the path itself */
     bool loading;
     bool failed;
     uint32_t failed_frame;      /**< When it failed; it is retried after FAILED_RETRY_FRAMES */
@@ -383,6 +384,14 @@ void launcher_set_cartridge_art (bool enabled) {
 /**
  * @brief The cartridge image beside a box front, if the cover index has it (so it's in the packs).
  */
+static uint32_t path_hash (const char *path) {
+    uint32_t hash = 2166136261u;    // FNV-1a
+    for (const char *p = path; *p; p++) {
+        hash = (hash ^ (uint8_t)*p) * 16777619u;
+    }
+    return hash;
+}
+
 static bool cartridge_path (const char *box, char *buffer, size_t size) {
     const char *name = strstr(box, "boxart_front.png");
     const char *rel = strstr(box, ":/menu/");
@@ -406,6 +415,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
         path = cartridge;
     }
     bool want_wide = launcher_is_widescreen();
+    uint32_t hash = path_hash(path);
 
     if (slot_count == 0) {
         slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
@@ -413,7 +423,8 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
 
     for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];
-        if (s->path && s->max_w == max_w && s->max_h == max_h && s->for_wide == want_wide && strcmp(s->path, path) == 0) {
+        if (s->path && s->path_hash == hash && s->max_w == max_w && s->max_h == max_h && s->for_wide == want_wide &&
+            strcmp(s->path, path) == 0) {
             if (s->failed && (frame - s->failed_frame) > FAILED_RETRY_FRAMES) {
                 // Give a failed cover another try rather than leaving it blank.
                 slot_free(s);
@@ -488,6 +499,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     }
 
     victim->path = strdup(path);
+    victim->path_hash = hash;
     victim->max_w = max_w;
     victim->max_h = max_h;
     victim->for_wide = want_wide;
