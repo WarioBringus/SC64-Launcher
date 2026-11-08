@@ -353,13 +353,21 @@ void launcher_fill_rounded_px (int x0, int y0, int x1, int y1, int radius, color
 }
 
 /**
+ * @brief Real pixel width of a cover w logical pixels wide: in 16:9, the width the 16:9 packs squeeze
+ * it to (pc-tools/coverpack/coverimg.c: an even width, 3/4 of it rounded to an even number).
+ */
+static int real_cover_width (int w) {
+    return widescreen ? 2 * (int)((w & ~1) * 0.375f + 0.5f) : w;
+}
+
+/**
  * @brief Round off the corners of something already drawn by painting them in the color behind it.
  * Coordinates are logical.
  */
 static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t behind) {
     float squeeze = widescreen ? WIDE_SQUEEZE : 1.0f;
     int rx0 = px(x0);
-    int rx1 = px(x1);
+    int rx1 = rx0 + real_cover_width(x1 - x0);
     flat_begin(behind);
     for (int i = 0; i < radius; i++) {
         int inset = (int)(corner_inset(radius, i) * squeeze + 0.5f);
@@ -989,11 +997,10 @@ int launcher_focus_lift (int key) {
 }
 
 void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
-    // The band's inner edges meet what it surrounds. In 16:9 a squeezed cover can end a pixel
-    // before px(x1), so the right side reaches a pixel further in rather than leave a gap.
+    // The band's inner edges meet what it surrounds: in 16:9, a squeezed cover's real width.
     int t = (int)(LAUNCHER_RING * (widescreen ? WIDE_SQUEEZE : 1.0f) + 0.5f);
     int rx0 = px(x0) - t;
-    int rx1 = px(x1) - (widescreen ? 1 : 0) + t;
+    int rx1 = px(x0) + real_cover_width(x1 - x0) + t;
     outline_rounded_real(rx0, y0 - LAUNCHER_RING, rx1, y1 + LAUNCHER_RING,
         radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, theme_current()->accent);
 }
@@ -1027,7 +1034,7 @@ static void blit_cover (surface_t *image, int x, int y) {
 static void blit_cover_resized (surface_t *image, int x, int y, int w, int h) {
     surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
     surface_t *source = squeezed ? squeezed : image;
-    int real_w = px(x + w) - px(x) - (widescreen ? 1 : 0);
+    int real_w = real_cover_width(w);
     rdpq_mode_push();
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
