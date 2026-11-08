@@ -987,9 +987,6 @@ static void preload_category_covers (menu_t *menu, int index, int *lookups_left)
  * @brief Load the covers shown after jumping to the next or previous group, so jumps land on ready covers.
  */
 static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, int *lookups_left) {
-    if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
-        return;
-    }
     bool pending;
     // Finding group edges scans the list, so only redo it when the selection, list or sort changes.
     static library_category_t *cached_category = NULL;
@@ -1008,7 +1005,12 @@ static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, i
         if (target == sel) {
             continue;
         }
-        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
+        if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
+            // The open box there; its neighbours' spines come with the shelf's own read-ahead.
+            int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;
+            int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
+            game_cover(menu, &c->games[target], cw, ch, lookups_left, &pending);
+        } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
             int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;
             int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
             for (int i = target - 2; i <= target + 2; i++) {
@@ -1304,6 +1306,8 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 #define SHELF_LABEL_INSET   (6)     /* Tab below the top of the spines */
 #define SHELF_MAX_DIVIDERS  (48)
 #define SHELF_STAR_RISE     (12)    /* A favorite's star, this far above the foot of its spine */
+#define SHELF_READ_AHEAD    (12)    /* Spines read beyond each screen edge while the shelf rests */
+#define SHELF_BOX_AHEAD     (2)     /* Open-box covers read either side of the selection */
 #define SHELF_GAP           (3)
 #define SHELF_OPEN_GAP      (10)    /* Space either side of the open box */
 #define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
@@ -1404,7 +1408,9 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
         left_count++;
     }
     x = open_x + cw + SHELF_OPEN_GAP;
+    int rightmost = sel;
     for (int i = sel + 1; i < c->shown && x < launcher_screen_width(); i++) {
+        rightmost = i;
         if (shelf_group_starts(c, i)) {
             launcher_fill_rounded(x, spine_y, x + SHELF_DIVIDER_W, SHELF_BASE_Y, 1, divider_color);
             if (right_count < SHELF_MAX_DIVIDERS) {
@@ -1471,8 +1477,32 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
         launcher_game_details(LAUNCHER_X0, SHELF_DETAILS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
 
-    if (!front_pending && shelf_position == (float)sel) {
-        library_check_new_games(NEW_GAMES_CHECK_US);
+    // At rest, get ready what comes next, nearest first: the boxes either side, the spines just off
+    // screen, then the boxes a C jump lands on. Reads stay within each frame's budget.
+    if (!front_pending && shelf_position == (float)sel && !launcher_transition_running()) {
+        bool any_pending = false;
+        for (int d = 1; d <= SHELF_BOX_AHEAD; d++) {
+            for (int side = -1; side <= 1; side += 2) {
+                int i = sel + side * d;
+                if (i >= 0 && i < c->shown) {
+                    game_cover(menu, &c->games[i], cw, ch, &lookups_left, &pending);
+                    any_pending |= pending;
+                }
+            }
+        }
+        for (int d = 1; !any_pending && d <= SHELF_READ_AHEAD; d++) {
+            int ahead[2] = { leftmost - d, rightmost + d };
+            for (int k = 0; k < 2; k++) {
+                if (ahead[k] >= 0 && ahead[k] < c->shown) {
+                    launcher_spine_get(library_game_cover(menu, &c->games[ahead[k]]), &pending);
+                    any_pending |= pending;
+                }
+            }
+        }
+        if (!any_pending) {
+            library_check_new_games(NEW_GAMES_CHECK_US);
+            preload_group_jumps(menu, c, sel, &lookups_left);
+        }
     }
 }
 
