@@ -106,7 +106,7 @@ static void free_rows (void) {
     row_count = 0;
 }
 
-static void add_item (home_row_t *row, bookkeeping_item_t *item, bool favorite, int index) {
+static void add_item (menu_t *menu, home_row_t *row, bookkeeping_item_t *item, bool favorite, int index) {
     if (item->bookkeeping_type == BOOKKEEPING_TYPE_EMPTY || !item->primary_path || row->count >= MAX_ROW_ITEMS) {
         return;
     }
@@ -114,7 +114,7 @@ static void add_item (home_row_t *row, bookkeeping_item_t *item, bool favorite, 
     h->favorite = favorite;
     h->index = index;
     h->item = item;
-    h->title = library_title_from_path(item->primary_path);
+    h->title = library_title_from_path(menu, item->primary_path);
 }
 
 static void build_rows (menu_t *menu) {
@@ -129,17 +129,17 @@ static void build_rows (menu_t *menu) {
     memset(built, 0, sizeof(built));
 
     built[ROW_RESUME].kind = ROW_RESUME;
-    add_item(&built[ROW_RESUME], &b->history_items[0], false, 0);
+    add_item(menu, &built[ROW_RESUME], &b->history_items[0], false, 0);
 
     built[ROW_RECENT].kind = ROW_RECENT;
     // With the resume card shown, the first history entry is already on screen.
     for (int i = menu->settings.launcher_home_resume ? 1 : 0; i < HISTORY_COUNT; i++) {
-        add_item(&built[ROW_RECENT], &b->history_items[i], false, i);
+        add_item(menu, &built[ROW_RECENT], &b->history_items[i], false, i);
     }
 
     built[ROW_FAVORITES].kind = ROW_FAVORITES;
     for (int i = 0; i < FAVORITES_COUNT; i++) {
-        add_item(&built[ROW_FAVORITES], &b->favorite_items[i], true, i);
+        add_item(menu, &built[ROW_FAVORITES], &b->favorite_items[i], true, i);
     }
 
     bool show[ROW_KINDS] = {

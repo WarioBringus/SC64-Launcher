@@ -587,7 +587,7 @@ static void hidden_draw (menu_t *menu) {
         // "sd:/N64 USA/Game.n64" -> "Game" and its folder.
         const char *full = library_hidden_at(i);
         path_t *path = path_create(full);
-        char *title = library_title_from_path(path);
+        char *title = library_title_from_path(menu, path);
         path_pop(path);
         launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_DEFAULT, title);
         launcher_name(LAUNCHER_X1 - 180, y, 156, ALIGN_RIGHT, STL_GRAY, path_last_get(path));

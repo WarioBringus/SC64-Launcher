@@ -113,9 +113,10 @@ const char *library_game_cover(menu_t *menu, library_game_t *game);
 char *library_find_cover(menu_t *menu, path_t *rom_path);
 
 /**
- * @brief Display title for a ROM path (file name without extension). Caller frees.
+ * @brief Display title for a ROM path (file name without extension, or its fix in
+ * menu/game-fixes.txt). Caller frees.
  */
-char *library_title_from_path(path_t *rom_path);
+char *library_title_from_path(menu_t *menu, path_t *rom_path);
 
 /**
  * @brief Id of a cover in the PC-built cover index (menu/cache/launcher/covers.idx).

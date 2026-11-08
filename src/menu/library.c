@@ -28,6 +28,7 @@
 #define COVER_INDEX_FILE        "menu/cache/launcher/covers.idx"
 #define HIDDEN_FILE             "menu/cache/launcher/hidden.txt"
 #define FOLDERS_FILE            "menu/cache/launcher/folders.txt"
+#define FIXES_FILE              "menu/game-fixes.txt"
 #define MAX_HIDDEN              (256)
 #define COVER_INDEX_MAGIC       "LCIDX1"
 
@@ -134,7 +135,146 @@ static char *file_stem (const char *file_name) {
     return stem;
 }
 
+/*
+ * Game fixes (FIXES_FILE), written by hand: a game's file name in brackets, then the details to
+ * change, one "name = value" per line. Read once, when the library first needs it.
+ *
+ *   [Castlevania - Legacy of Darkness.z64]
+ *   title = Castlevania: Legacy of Darkness
+ *   genre = Action
+ */
+typedef struct {
+    const char *file;
+    const char *title;
+    const char *genre;
+    const char *developer;
+    const char *year;
+    const char *publisher;
+    int players;                /**< 0 when not given */
+} game_fix_t;
+
+static char *fixes_text = NULL;
+static game_fix_t *fixes = NULL;
+static int fix_count = 0;
+static bool fixes_tried = false;
+
+static char *trim_space (char *s) {
+    while (*s == ' ' || *s == '\t') {
+        s++;
+    }
+    char *end = s + strlen(s);
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) {
+        *--end = '\0';
+    }
+    return s;
+}
+
+static void fixes_load (void) {
+    if (fixes_tried || !storage_prefix) {
+        return;
+    }
+    fixes_tried = true;
+
+    path_t *path = path_init(storage_prefix, FIXES_FILE);
+    FILE *f = fopen(path_get(path), "rb");
+    path_free(path);
+    if (!f) {
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    fixes_text = (size > 0) ? malloc(size + 1) : NULL;
+    if (!fixes_text || fread(fixes_text, 1, size, f) != (size_t)size) {
+        fclose(f);
+        free(fixes_text);
+        fixes_text = NULL;
+        return;
+    }
+    fclose(f);
+    fixes_text[size] = '\0';
+
+    int lines = 1;
+    for (char *p = fixes_text; *p; p++) {
+        lines += (*p == '\n');
+    }
+    fixes = calloc(lines, sizeof(game_fix_t));
+    game_fix_t *current = NULL;
+    char *start = fixes_text;
+    if (strncmp(start, "\xEF\xBB\xBF", 3) == 0) {
+        start += 3;     // Notepad's UTF-8 mark
+    }
+    for (char *line = start; line; ) {
+        char *next = strchr(line, '\n');
+        if (next) {
+            *next++ = '\0';
+        }
+        char *s = trim_space(line);
+        size_t len = strlen(s);
+        if (s[0] == '[' && len > 2 && s[len - 1] == ']') {
+            s[len - 1] = '\0';
+            current = &fixes[fix_count++];
+            current->file = trim_space(s + 1);
+        } else if (current && s[0] != '#' && s[0] != ';' && strchr(s, '=')) {
+            char *value = strchr(s, '=');
+            *value++ = '\0';
+            char *key = trim_space(s);
+            value = trim_space(value);
+            if (!value[0]) {
+                // Nothing to change.
+            } else if (strcasecmp(key, "title") == 0) {
+                current->title = value;
+            } else if (strcasecmp(key, "genre") == 0) {
+                current->genre = value;
+            } else if (strcasecmp(key, "developer") == 0) {
+                current->developer = value;
+            } else if (strcasecmp(key, "year") == 0) {
+                current->year = value;
+            } else if (strcasecmp(key, "publisher") == 0) {
+                current->publisher = value;
+            } else if (strcasecmp(key, "players") == 0) {
+                current->players = atoi(value);
+            }
+        }
+        line = next;
+    }
+}
+
+static game_fix_t *fix_for (const char *file_name) {
+    fixes_load();
+    for (int i = 0; i < fix_count; i++) {
+        if (strcasecmp(fixes[i].file, file_name) == 0) {
+            return &fixes[i];
+        }
+    }
+    return NULL;
+}
+
+/** @brief Replace a game's details with any its fix gives. */
+static void apply_fix (const char *file_name, const char **genre, const char **developer, const char **year, int *players) {
+    game_fix_t *fix = fix_for(file_name);
+    if (!fix) {
+        return;
+    }
+    if (fix->genre) {
+        *genre = fix->genre;
+    }
+    if (fix->developer) {
+        *developer = fix->developer;
+    }
+    if (fix->year) {
+        *year = fix->year;
+    }
+    if (fix->players > 0) {
+        *players = fix->players;
+    }
+}
+
 static char *title_from_file_name (const char *file_name) {
+    game_fix_t *fix = fix_for(file_name);
+    if (fix && fix->title) {
+        return strdup(fix->title);
+    }
     char *title = file_stem(file_name);
     // File names can't hold a colon, so "Castlevania - Legacy of Darkness" stands for one.
     char *dash;
@@ -536,6 +676,7 @@ static void load_index_games (library_category_t *c) {
                 g->players = m->players;
             }
         }
+        apply_fix(file, &g->genre, &g->developer, &g->year, &g->players);
 
         int id = index_roms[k].cover;
         if (id >= 0 && id < index_cover_count) {
@@ -580,6 +721,7 @@ static void load_folder_games (library_category_t *c) {
             g->file_name = strdup(info.d_name);
             g->title = title_from_file_name(info.d_name);
             g->directory = c->directory;
+            apply_fix(info.d_name, &g->genre, &g->developer, &g->year, &g->players);
             if ((c->count & 15) == 0) {
                 sound_bgm_keep_alive();     // A big folder takes a while: keep the music going.
             }
@@ -1345,15 +1487,21 @@ static index_meta_t *meta_for_path (menu_t *menu, path_t *rom_path) {
 }
 
 void library_details_for_path (menu_t *menu, path_t *rom_path, char *buffer, size_t size) {
-    buffer[0] = '\0';
     index_meta_t *m = meta_for_path(menu, rom_path);
-    if (m) {
-        details_text(m->genre, m->year, m->developer, m->players, buffer, size);
-    }
+    const char *genre = m ? m->genre : NULL;
+    const char *developer = m ? m->developer : NULL;
+    const char *year = m ? m->year : NULL;
+    int players = m ? m->players : 0;
+    apply_fix(path_last_get(rom_path), &genre, &developer, &year, &players);
+    details_text(genre, year, developer, players, buffer, size);
 }
 
 const char *library_publisher_for_path (menu_t *menu, path_t *rom_path) {
     index_meta_t *m = meta_for_path(menu, rom_path);
+    game_fix_t *fix = fix_for(path_last_get(rom_path));
+    if (fix && fix->publisher) {
+        return fix->publisher;
+    }
     return m ? m->publisher : NULL;
 }
 
@@ -1478,7 +1626,10 @@ char *library_find_cover (menu_t *menu, path_t *rom_path) {
     return find_cover(rom_path);
 }
 
-char *library_title_from_path (path_t *rom_path) {
+char *library_title_from_path (menu_t *menu, path_t *rom_path) {
+    if (!storage_prefix) {
+        storage_prefix = menu->storage_prefix;
+    }
     return title_from_file_name(path_last_get(rom_path));
 }
 

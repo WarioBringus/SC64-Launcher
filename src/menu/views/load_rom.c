@@ -1153,7 +1153,7 @@ void view_load_rom_init (menu_t *menu) {
     loading_title[0] = '\0';
     loading_details[0] = '\0';
     if (menu->load.rom_path) {
-        char *title = library_title_from_path(menu->load.rom_path);
+        char *title = library_title_from_path(menu, menu->load.rom_path);
         snprintf(loading_title, sizeof(loading_title), "%s", title ? title : "");
         free(title);
         library_details_for_path(menu, menu->load.rom_path, loading_details, sizeof(loading_details));
