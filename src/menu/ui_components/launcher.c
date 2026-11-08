@@ -795,6 +795,12 @@ void launcher_transition_content_begin (int y0) {
 }
 
 /** @brief Cover a band of the screen with a colour at some opacity (fading things in or back). */
+static void fade_band (int y0, int y1, color_t color, int alpha);
+
+void launcher_draw_screen_fade (int alpha) {
+    fade_band(0, display_get_height(), RGBA32(0x00, 0x00, 0x00, 0xFF), alpha);
+}
+
 static void fade_band (int y0, int y1, color_t color, int alpha) {
     if (alpha <= 0) {
         return;

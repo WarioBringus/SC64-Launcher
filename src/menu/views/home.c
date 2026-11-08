@@ -47,6 +47,9 @@ static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
+#define REVEAL_TIMEOUT_MS   (2500)  /* The first Home shows by then even if covers are still loading */
+#define REVEAL_LOOKUPS      (64)    /* Cover lookups per frame while it's hidden */
+
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
 typedef enum {
@@ -194,12 +197,25 @@ static const char *item_cover (menu_t *menu, home_item_t *h, int *lookups_left, 
     return slot->cover_path;
 }
 
+/*
+ * The first Home after power-on stays hidden behind black while it loads every cover it shows (and the
+ * one-off startup work runs), so it appears complete rather than filling in.
+ */
+typedef enum {
+    REVEAL_HIDDEN,
+    REVEAL_SHOWN,
+} reveal_t;
+
+static reveal_t reveal = REVEAL_HIDDEN;
+static uint64_t reveal_since_ms = 0;
+static int reveal_frames = 0;
+static bool covers_pending = false;     /* A cover drawn this frame is still loading */
+
 static surface_t *item_image (menu_t *menu, home_item_t *h, int w, int hgt, int *lookups_left, bool *pending) {
     const char *path = item_cover(menu, h, lookups_left, pending);
-    if (!path) {
-        return NULL;
-    }
-    return launcher_cover_get(path, w, hgt, pending);
+    surface_t *image = path ? launcher_cover_get(path, w, hgt, pending) : NULL;
+    covers_pending |= *pending;
+    return image;
 }
 
 static void launch (menu_t *menu, home_item_t *h) {
@@ -372,11 +388,11 @@ static void draw (menu_t *menu, surface_t *d) {
     launcher_covers_begin_frame();
     launcher_draw_header(menu, LAUNCHER_TAB_HOME);
 
-    // The first Home after power-on shows before any cover is looked up: the first lookup loads the
-    // whole cover index, so covers fill in a moment later instead of the screen waiting for them.
-    static bool shown_once = false;
-    int lookups_left = shown_once ? 1 : 0;
-    shown_once = true;
+    if (reveal == REVEAL_HIDDEN && reveal_frames == 0) {
+        reveal_since_ms = get_ticks_ms();
+    }
+    int lookups_left = (reveal == REVEAL_HIDDEN) ? REVEAL_LOOKUPS : 1;
+    covers_pending = false;
     if (row_count == 0) {
         launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Games you play and favorite will show up here");
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Press R to browse your library");
@@ -421,13 +437,24 @@ static void draw (menu_t *menu, surface_t *d) {
         }
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
-        if (lookups_left > 0) {
+        if (lookups_left > 0 && reveal != REVEAL_HIDDEN) {
             view_library_preload(menu, &lookups_left);  // Home's own covers come first.
         }
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
 
     launcher_menu_draw();
+
+    if (reveal == REVEAL_HIDDEN) {
+        // Shown once a frame (after the first two, so startup's one-off work has run) draws every cover.
+        reveal_frames++;
+        bool timed_out = (get_ticks_ms() - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
+        if ((reveal_frames > 2 && !covers_pending) || timed_out) {
+            reveal = REVEAL_SHOWN;
+        } else {
+            launcher_draw_screen_fade(255);
+        }
+    }
 
     rdpq_detach_show();
 }
@@ -449,7 +476,9 @@ void view_home_display (menu_t *menu, surface_t *display) {
         build_rows(menu);
     }
 
-    process(menu);
+    if (reveal != REVEAL_HIDDEN) {
+        process(menu);  // Nothing to act on before Home can be seen.
+    }
 
     perf_log_draw_begin();
     draw(menu, display);
