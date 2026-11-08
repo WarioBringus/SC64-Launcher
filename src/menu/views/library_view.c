@@ -1292,6 +1292,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 #define SHELF_DIVIDER_STEP  (SHELF_DIVIDER_W + SHELF_GAP)
 #define SHELF_LABEL_INSET   (6)     /* Tab below the top of the spines */
 #define SHELF_MAX_DIVIDERS  (48)
+#define SHELF_STAR_RISE     (12)    /* A favorite's star, this far above the foot of its spine */
 #define SHELF_GAP           (3)
 #define SHELF_OPEN_GAP      (10)    /* Space either side of the open box */
 #define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
@@ -1370,6 +1371,9 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
             x -= SHELF_SPINE_W;
             const char *path = library_game_cover(menu, &c->games[i]);
             launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+            if (game_is_favorite(menu, &c->games[i])) {
+                launcher_draw_favorite_mark(x + SHELF_SPINE_W / 2, SHELF_BASE_Y - SHELF_STAR_RISE);
+            }
             x -= SHELF_GAP;
         }
         if (shelf_group_starts(c, i)) {
@@ -1399,6 +1403,9 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
         }
         const char *path = library_game_cover(menu, &c->games[i]);
         launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+        if (game_is_favorite(menu, &c->games[i])) {
+            launcher_draw_favorite_mark(x + SHELF_SPINE_W / 2, SHELF_BASE_Y - SHELF_STAR_RISE);
+        }
         x += step;
     }
 

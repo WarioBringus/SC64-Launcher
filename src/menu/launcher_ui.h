@@ -397,6 +397,9 @@ bool launcher_is_favorite(menu_t *menu, path_t *rom);
 /** @brief Draw the favorite star in the top-right corner of a tile. */
 void launcher_draw_favorite_star(int x, int y, int w);
 
+/** @brief The favorite star centered on logical (cx, cy), e.g. at the foot of a shelf spine. */
+void launcher_draw_favorite_mark(int cx, int cy);
+
 /**
  * @brief Draw a short line in the small font (game details, filter rows).
  *

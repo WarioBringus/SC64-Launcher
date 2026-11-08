@@ -870,11 +870,13 @@ static void fill_star (float cx, float cy, float radius, color_t color) {
     flat_end();
 }
 
-void launcher_draw_favorite_star (int x, int y, int w) {
-    float cx = x + w - 9;
-    float cy = y + 9;
+void launcher_draw_favorite_mark (int cx, int cy) {
     fill_star(cx, cy, 8.0f, theme_current()->bg);           // backing, so it reads on any cover
     fill_star(cx, cy, 6.0f, theme_current()->accent);
+}
+
+void launcher_draw_favorite_star (int x, int y, int w) {
+    launcher_draw_favorite_mark(x + w - 9, y + 9);
 }
 
 /**
