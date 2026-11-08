@@ -977,7 +977,12 @@ int launcher_focus_lift (int key) {
 }
 
 void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
-    outline_rounded_real(px(x0 - LAUNCHER_RING), y0 - LAUNCHER_RING, px(x1 + LAUNCHER_RING), y1 + LAUNCHER_RING,
+    // The band's inner edges meet what it surrounds. In 16:9 a squeezed cover can end a pixel
+    // before px(x1), so the right side reaches a pixel further in rather than leave a gap.
+    int t = (int)(LAUNCHER_RING * (widescreen ? WIDE_SQUEEZE : 1.0f) + 0.5f);
+    int rx0 = px(x0) - t;
+    int rx1 = px(x1) - (widescreen ? 1 : 0) + t;
+    outline_rounded_real(rx0, y0 - LAUNCHER_RING, rx1, y1 + LAUNCHER_RING,
         radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, theme_current()->accent);
 }
 
