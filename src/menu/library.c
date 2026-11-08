@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 
 #include <libdragon.h>
 
@@ -159,6 +160,37 @@ static char *fixes_text = NULL;
 static game_fix_t *fixes = NULL;
 static int fix_count = 0;
 static bool fixes_tried = false;
+static long fixes_size = -1;            /* The file as read (-1: none), to notice an edit */
+static time_t fixes_mtime = 0;
+
+static void fixes_stamp (long *size, time_t *mtime) {
+    struct stat st;
+    path_t *path = path_init(storage_prefix, FIXES_FILE);
+    bool found = (stat(path_get(path), &st) == 0);
+    path_free(path);
+    *size = found ? (long)st.st_size : -1;
+    *mtime = found ? st.st_mtime : 0;
+}
+
+/** @brief Whether the fixes file was edited since it was read (so the library is listed again). */
+static bool fixes_changed (void) {
+    if (!fixes_tried || !storage_prefix) {
+        return false;
+    }
+    long size;
+    time_t mtime;
+    fixes_stamp(&size, &mtime);
+    return size != fixes_size || mtime != fixes_mtime;
+}
+
+static void fixes_free (void) {
+    free(fixes_text);
+    free(fixes);
+    fixes_text = NULL;
+    fixes = NULL;
+    fix_count = 0;
+    fixes_tried = false;
+}
 
 static char *trim_space (char *s) {
     while (*s == ' ' || *s == '\t') {
@@ -176,6 +208,7 @@ static void fixes_load (void) {
         return;
     }
     fixes_tried = true;
+    fixes_stamp(&fixes_size, &fixes_mtime);
 
     path_t *path = path_init(storage_prefix, FIXES_FILE);
     FILE *f = fopen(path_get(path), "rb");
@@ -1141,6 +1174,11 @@ void library_init (menu_t *menu) {
     const char *root_setting = menu->settings.launcher_library_root;
     if (!root_setting || root_setting[0] == '\0') {
         root_setting = "/";
+    }
+    if (scanned && fixes_changed()) {
+        // game-fixes.txt was edited: read it again, and list the games again with it.
+        fixes_free();
+        scanned = false;
     }
     if (scanned && scanned_root && strcmp(scanned_root, root_setting) == 0 &&
         categories_enabled == menu->settings.launcher_categories_enabled &&
