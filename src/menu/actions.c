@@ -15,8 +15,15 @@
 #define STICK_DELAY_SLOW_MS         (250)
 #define STICK_DELAY_FAST_MS         (150)
 
+/* Held for long, a direction speeds up: after HOLD_SPEEDUP_AFTER_MS the gap between steps shrinks,
+   reaching HOLD_SPEEDUP_MIN of itself HOLD_SPEEDUP_RAMP_MS later. Letting go starts over. */
+#define HOLD_SPEEDUP_AFTER_MS       (1000)
+#define HOLD_SPEEDUP_RAMP_MS        (2000)
+#define HOLD_SPEEDUP_MIN            (0.4f)
+
 
 static uint64_t repeat_at_ms;
+static uint64_t held_since_ms;
 static joypad_8way_t last_dir = JOYPAD_8WAY_NONE;
 
 
@@ -79,8 +86,14 @@ static void actions_update_direction (menu_t *menu) {
     } else if (held_dir != last_dir) {
         // New press (or a change of direction): act now, then wait before repeating.
         repeat_at_ms = now + delay_ms;
+        held_since_ms = now;
     } else if (now >= repeat_at_ms) {
-        repeat_at_ms = now + interval_ms;
+        float speedup = 1.0f;
+        if (!menu->actions.go_fast && now - held_since_ms > HOLD_SPEEDUP_AFTER_MS) {
+            float t = (float)(now - held_since_ms - HOLD_SPEEDUP_AFTER_MS) / HOLD_SPEEDUP_RAMP_MS;
+            speedup = 1.0f - (1.0f - HOLD_SPEEDUP_MIN) * (t > 1.0f ? 1.0f : t);
+        }
+        repeat_at_ms = now + (uint64_t)(interval_ms * speedup);
     } else {
         final_dir = JOYPAD_8WAY_NONE;
     }
