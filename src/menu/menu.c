@@ -115,7 +115,10 @@ static void menu_init (boot_params_t *boot_params) {
         .interlaced = interlaced ? INTERLACE_HALF : INTERLACE_OFF,
     };
 
-    display_init(resolution, DEPTH_16_BPP, 2, GAMMA_NONE, interlaced ? FILTERS_DISABLED : FILTERS_RESAMPLE);
+    // Three framebuffers with the Expansion Pak: with two, a frame finishing just after a vertical blank
+    // waits a whole extra one before the next can start (the performance log showed frames alternating
+    // between 16.7 and 33 ms). Without it, memory is too tight, so two.
+    display_init(resolution, DEPTH_16_BPP, is_memory_expanded() ? 3 : 2, GAMMA_NONE, interlaced ? FILTERS_DISABLED : FILTERS_RESAMPLE);
     
     if (menu->settings.pal60_enabled) { // it is not given that hardware VI mods understand the output
         tv_type_t tv_type = get_tv_type();
