@@ -96,14 +96,17 @@ static void end_second (uint64_t now_us) {
             header_written = true;
         }
         // Waiting: the rest of each frame, mostly for the RDP to finish or for the next vertical blank.
-        float wait = (frame_total_us - work_total_us - part_total_us[PERF_POLLS]) / 1000.0f / frames;
+        // Signed, and never below zero: the polls can run before a second's first frame is counted, and a
+        // wrapped-around unsigned value is too large for the FPU to convert (an unimplemented-operation exception).
+        int64_t wait_us = (int64_t)frame_total_us - (int64_t)work_total_us - (int64_t)part_total_us[PERF_POLLS];
+        float wait = (wait_us > 0 ? (int32_t)(wait_us / frames) : 0) / 1000.0f;
         add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f\n",
                  (now_us - start_us) / 1e6, screen, frames, frame_total_us / 1000.0f / frames, frame_max_us / 1000.0f,
                  long_frames, work_total_us / 1000.0f / frames, work_max_us / 1000.0f, reads, read_total_us / 1000.0f,
                  (unsigned long)(read_bytes / 1024), steps, input_total_us / 1000.0f / frames,
                  draw_total_us / 1000.0f / frames, part_total_us[PERF_TEXT] / 1000.0f / frames,
                  part_total_us[PERF_COVERS] / 1000.0f / frames, part_total_us[PERF_POLLS] / 1000.0f / frames,
-                 wait < 0 ? 0.0f : wait);
+                 wait);
     }
     second_start_us = now_us;
     frames = long_frames = reads = steps = 0;
