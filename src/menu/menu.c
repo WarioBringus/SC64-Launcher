@@ -365,7 +365,11 @@ void menu_run (boot_params_t *boot_params) {
         png_decoder_poll();
 
         usb_comm_poll(menu);
-        perf_log_add(PERF_POLLS, (uint32_t)(get_ticks_us() - polls_started));
+        // Only the polls right after a drawn frame: the loop also polls over and over while it waits
+        // for a free framebuffer, and that is waiting, not work.
+        if (display != NULL) {
+            perf_log_add(PERF_POLLS, (uint32_t)(get_ticks_us() - polls_started));
+        }
     }
 
     menu_deinit(menu);
