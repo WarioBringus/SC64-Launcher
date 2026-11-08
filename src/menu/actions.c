@@ -7,6 +7,14 @@
 #define ACTIONS_REPEAT_DELAY_MS     (250)
 #define ACTIONS_REPEAT_INTERVAL_MS  (40)
 
+/* With the analog stick, the tilt sets the pace: a gentle tilt steps slowly, a full tilt quickly. */
+#define STICK_TILT_MIN              (30)    /* Stick position where a direction starts to register (of about 85) */
+#define STICK_TILT_FULL             (75)
+#define STICK_INTERVAL_SLOW_MS      (160)
+#define STICK_INTERVAL_FAST_MS      (30)
+#define STICK_DELAY_SLOW_MS         (250)
+#define STICK_DELAY_FAST_MS         (150)
+
 
 static uint64_t repeat_at_ms;
 static joypad_8way_t last_dir = JOYPAD_8WAY_NONE;
@@ -30,13 +38,29 @@ static void actions_clear (menu_t *menu) {
     menu->actions.trigger_z = false;
 }
 
+/** @brief How far the stick is tilted, from 0 (just registering) to 1 (fully). */
+static float stick_tilt (joypad_port_t port) {
+    joypad_inputs_t inputs = joypad_get_inputs(port);
+    int x = inputs.stick_x < 0 ? -inputs.stick_x : inputs.stick_x;
+    int y = inputs.stick_y < 0 ? -inputs.stick_y : inputs.stick_y;
+    float t = (float)((x > y ? x : y) - STICK_TILT_MIN) / (STICK_TILT_FULL - STICK_TILT_MIN);
+    return t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+}
+
 static void actions_update_direction (menu_t *menu) {
     joypad_8way_t held_dir = JOYPAD_8WAY_NONE;
     joypad_8way_t fast_dir = JOYPAD_8WAY_NONE;
+    int delay_ms = ACTIONS_REPEAT_DELAY_MS;
+    int interval_ms = ACTIONS_REPEAT_INTERVAL_MS;
 
     JOYPAD_PORT_FOREACH (i) {
         held_dir = joypad_get_direction(i, JOYPAD_2D_DPAD | JOYPAD_2D_STICK);
         fast_dir = joypad_get_direction(i, JOYPAD_2D_C);
+        if (held_dir != JOYPAD_8WAY_NONE && joypad_get_direction(i, JOYPAD_2D_DPAD) == JOYPAD_8WAY_NONE) {
+            float t = stick_tilt(i);
+            delay_ms = STICK_DELAY_SLOW_MS - (int)(t * (STICK_DELAY_SLOW_MS - STICK_DELAY_FAST_MS));
+            interval_ms = STICK_INTERVAL_SLOW_MS - (int)(t * (STICK_INTERVAL_SLOW_MS - STICK_INTERVAL_FAST_MS));
+        }
         if (held_dir != JOYPAD_8WAY_NONE || fast_dir != JOYPAD_8WAY_NONE) {
             break;
         }
@@ -54,9 +78,9 @@ static void actions_update_direction (menu_t *menu) {
         // Nothing held.
     } else if (held_dir != last_dir) {
         // New press (or a change of direction): act now, then wait before repeating.
-        repeat_at_ms = now + ACTIONS_REPEAT_DELAY_MS;
+        repeat_at_ms = now + delay_ms;
     } else if (now >= repeat_at_ms) {
-        repeat_at_ms = now + ACTIONS_REPEAT_INTERVAL_MS;
+        repeat_at_ms = now + interval_ms;
     } else {
         final_dir = JOYPAD_8WAY_NONE;
     }
