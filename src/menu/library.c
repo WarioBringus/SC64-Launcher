@@ -12,6 +12,7 @@
 
 #include <libdragon.h>
 
+#include "launcher_ui.h"
 #include "library.h"
 #include "sound.h"
 #include "utils/fs.h"
@@ -74,6 +75,7 @@ typedef struct {
 
 static index_meta_t *index_meta = NULL;
 static int index_meta_count = 0;
+static uint8_t *index_spine_widths = NULL;     /* By cover id (W lines); 0 when not given */
 static bool index_tried = false;
 static bool index_lists_disabled = false;
 
@@ -448,6 +450,8 @@ static void index_free (void) {
     free(index_covers);
     free(index_roms);
     free(index_meta);
+    free(index_spine_widths);
+    index_spine_widths = NULL;
     index_text = NULL;
     index_covers = NULL;
     index_roms = NULL;
@@ -504,6 +508,7 @@ static void index_load (void) {
     index_covers = malloc(lines * sizeof(char *));
     index_roms = malloc(lines * sizeof(index_rom_t));
     index_meta = malloc(lines * sizeof(index_meta_t));
+    index_spine_widths = calloc(lines, 1);
 
     // Lines are already sorted byte-wise by the PC tool, so both lists can be binary searched.
     char *line = index_text;
@@ -539,6 +544,14 @@ static void index_load (void) {
                     }
                     m->publisher = fields[5][0] ? fields[5] : NULL;
                 }
+            }
+        } else if (line[0] == 'W' && line[1] == '\t') {
+            // W<TAB>cover id<TAB>spine width
+            char *tab = strchr(line + 2, '\t');
+            int id = atoi(line + 2);
+            int width = tab ? atoi(tab + 1) : 0;
+            if (id >= 0 && id < lines && width > 0 && width < 256) {
+                index_spine_widths[id] = (uint8_t)width;
             }
         } else if (line[0] == 'R' && line[1] == '\t') {
             char *tab = strrchr(line + 2, '\t');
@@ -1607,6 +1620,17 @@ library_category_t *library_category (int index) {
 
 path_t *library_game_path (library_game_t *game) {
     return path_clone_push(game->directory, game->file_name);
+}
+
+int library_game_spine_width (menu_t *menu, library_game_t *game) {
+    if (game->spine_width == 0) {
+        const char *cover = library_game_cover(menu, game);
+        const char *rel = cover ? strstr(cover, ":/menu/") : NULL;
+        int id = rel ? library_cover_id(rel + strlen(":/menu/")) : -1;
+        int width = (id >= 0 && index_spine_widths) ? index_spine_widths[id] : 0;
+        game->spine_width = (width > 0 && width <= LAUNCHER_SPINE_MAX_W) ? width : LAUNCHER_SPINE_W;
+    }
+    return game->spine_width;
 }
 
 const char *library_game_cover (menu_t *menu, library_game_t *game) {

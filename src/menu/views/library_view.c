@@ -1286,7 +1286,6 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 
 
 #define SHELF_BASE_Y        (314)   /* Top of the shelf plank: spines and the open box stand on it */
-#define SHELF_SPINE_W       (LAUNCHER_SPINE_W)
 #define SHELF_SPINE_H       (LAUNCHER_SPINE_H)
 #define SHELF_DIVIDER_W     (4)     /* Card standing before each group, its label on a tab at the top */
 #define SHELF_DIVIDER_STEP  (SHELF_DIVIDER_W + SHELF_GAP)
@@ -1305,13 +1304,14 @@ static bool shelf_group_starts (library_category_t *c, int i) {
     return i == 0 || !same_group(&c->games[i - 1], &c->games[i]);
 }
 
-/** @brief Dividers standing between games a and b (a < b: those before a + 1 ... b). */
-static int shelf_dividers_between (library_category_t *c, int a, int b) {
-    int n = 0;
-    for (int k = a + 1; k <= b; k++) {
-        n += shelf_group_starts(c, k);
+/** @brief How far the shelf moves from game a to game b (a <= b): the spines of a ... b - 1 and the dividers before a + 1 ... b. */
+static int shelf_span (menu_t *menu, library_category_t *c, int a, int b) {
+    int span = 0;
+    for (int k = a; k < b; k++) {
+        span += library_game_spine_width(menu, &c->games[k]) + SHELF_GAP;
+        span += shelf_group_starts(c, k + 1) ? SHELF_DIVIDER_STEP : 0;
     }
-    return n;
+    return span;
 }
 
 typedef struct {
@@ -1337,16 +1337,15 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     }
     motion_snap = true;     // Back in the grid, it appears in place.
 
-    // The open box sits in the middle; the shelf glides to it (dividers passed on the way count too).
+    // The open box sits in the middle; the shelf glides to it past the spines (and dividers) between.
     int lift = launcher_focus_lift(category_index * 100000 + sel);
-    int step = SHELF_SPINE_W + SHELF_GAP;
     int from = (int)floorf(shelf_position);
     float frac = shelf_position - from;
-    float dividers_moved = (sel >= from) ? shelf_dividers_between(c, from, sel) : -shelf_dividers_between(c, sel, from);
+    float moved = (sel >= from) ? shelf_span(menu, c, from, sel) : -shelf_span(menu, c, sel, from);
     if (frac > 0.0f && from + 1 < c->shown) {
-        dividers_moved -= frac * shelf_group_starts(c, from + 1);
+        moved -= frac * shelf_span(menu, c, from, from + 1);
     }
-    int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step + dividers_moved * SHELF_DIVIDER_STEP);
+    int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf(moved);
 
     // The open box's cover first; while scrolling fast it is the only cover read.
     surface_t *front = game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
@@ -1368,11 +1367,12 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     for (int i = sel; i >= 0 && x > 0; i--) {
         if (i < sel) {
             leftmost = i;
-            x -= SHELF_SPINE_W;
+            int w = library_game_spine_width(menu, &c->games[i]);
+            x -= w;
             const char *path = library_game_cover(menu, &c->games[i]);
-            launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+            launcher_draw_spine(x, spine_y, w, SHELF_SPINE_H, launcher_spine_get(path, &pending));
             if (game_is_favorite(menu, &c->games[i])) {
-                launcher_draw_favorite_mark(x + SHELF_SPINE_W / 2, SHELF_BASE_Y - SHELF_STAR_RISE);
+                launcher_draw_favorite_mark(x + w / 2, SHELF_BASE_Y - SHELF_STAR_RISE);
             }
             x -= SHELF_GAP;
         }
@@ -1401,12 +1401,13 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
             }
             x += SHELF_DIVIDER_STEP;
         }
+        int w = library_game_spine_width(menu, &c->games[i]);
         const char *path = library_game_cover(menu, &c->games[i]);
-        launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+        launcher_draw_spine(x, spine_y, w, SHELF_SPINE_H, launcher_spine_get(path, &pending));
         if (game_is_favorite(menu, &c->games[i])) {
-            launcher_draw_favorite_mark(x + SHELF_SPINE_W / 2, SHELF_BASE_Y - SHELF_STAR_RISE);
+            launcher_draw_favorite_mark(x + w / 2, SHELF_BASE_Y - SHELF_STAR_RISE);
         }
-        x += step;
+        x += w + SHELF_GAP;
     }
 
     // Labels on tabs at the top, left to right. A tab that would run into the open box hangs to the

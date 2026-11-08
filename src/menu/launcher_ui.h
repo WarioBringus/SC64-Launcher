@@ -113,8 +113,10 @@ surface_t *launcher_cover_get(const char *path, int max_w, int max_h, bool *pend
  */
 void launcher_set_cartridge_art(bool enabled);
 
-/** @brief Spine size in the spine pack (pc-tools/coverpack SPINE_PACKS). */
+/** @brief Spines in the spine pack (pc-tools/coverpack SPINE_PACKS): 210 tall and as thick as the
+ * box, up to LAUNCHER_SPINE_MAX_W; LAUNCHER_SPINE_W when the cover index gives no width. */
 #define LAUNCHER_SPINE_W        (30)
+#define LAUNCHER_SPINE_MAX_W    (64)
 #define LAUNCHER_SPINE_H        (210)
 
 /**

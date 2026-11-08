@@ -526,7 +526,7 @@ surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pen
 }
 
 surface_t *launcher_spine_get (const char *front_path, bool *pending) {
-    return cover_get(front_path, LAUNCHER_SPINE_W, LAUNCHER_SPINE_H, pending, true);
+    return cover_get(front_path, LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H, pending, true);
 }
 
 void launcher_covers_reset (void) {

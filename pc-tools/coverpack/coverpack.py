@@ -7,8 +7,10 @@ Writes to <card>/menu/cache/launcher/:
   covers.idx              which cover each ROM uses (so the menu needn't read ROM headers)
   covers_<W>x<H>.pak      every cover pre-scaled to each tile size (so the menu needn't decode PNGs)
   covers_<W>x<H>_w.pak    the same squeezed to 3/4 width for the launcher's 16:9 screen
-  covers_30x210[_w].pak   box spines for the shelf layout, under each front cover's id: the box's
-                          top-edge art (boxart_top.png) turned upright, or a slice of the front
+  covers_64x210[_w].pak   box spines for the shelf layout, under each front cover's id, 210 tall and as
+                          thick as the box: the box's top edge (boxart_top.png) turned upright, else a
+                          spine scan (boxart_spine.png, e.g. from the LaunchBox Games Database), else a
+                          slice of the front (30 wide). covers.idx gives each one's width (W lines).
 
 Cover matching mirrors the menu (src/menu/library.c): metadata/names/<file name>.png first (an
 override), then metadata/C/I/D/R, metadata/C/I/D, the old boxart folder, and another region of the
@@ -27,6 +29,12 @@ width, u16 height, u16 the 4:3 width it stands for, u16 0, RGBA5551 pixels.
 """
 import argparse, hashlib, json, os, shutil, struct, subprocess, sys, tempfile
 
+
+def png_size(path):
+    with open(path, 'rb') as f:
+        head = f.read(24)
+    return struct.unpack('>II', head[16:24]) if head[:8] == b'\x89PNG\r\n\x1a\n' else (0, 0)
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gamemeta  # noqa: E402
 
@@ -42,9 +50,10 @@ THUMB_VERSION = 'up1'   # See the thumbnail signature in main()
 # Each box twice: as is, and squeezed for 16:9 (the tool's WxHw boxes, packs covers_WxH_w.pak).
 PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' % b) for b in BOXES] + \
     [('%dx%du' % b, '%dx%d' % b) for b in UP_BOXES] + [('%dx%dwu' % b, '%dx%d_w' % b) for b in UP_BOXES]
-# Spines for the shelf layout (LAUNCHER_SPINE_W/H): from the top-edge art turned upright, or else a
-# slice of the front, enlarged to the shelf's size.
-SPINE_PACKS = [('30x210ru', '30x210'), ('30x210rwu', '30x210_w')]
+# Spines for the shelf layout (LAUNCHER_SPINE_MAX_W x LAUNCHER_SPINE_H): 210 tall, as thick as the box.
+# The top-edge art and wide spine scans are turned upright; without either, a slice of the front.
+SPINE_PACKS = [('64x210ru', '64x210'), ('64x210rwu', '64x210_w')]
+SPINE_UPRIGHT = ['64x210u', '64x210wu']
 SPINE_FALLBACK = ['30x210su', '30x210swu']
 
 
@@ -240,25 +249,33 @@ def main():
 
     # Spines, under each front cover's id (other ids, e.g. cartridge art, have none).
     spine_blobs = {name: [None] * len(covers) for _, name in SPINE_PACKS}
+    spine_widths = {}
     spine_signatures = []
     work = tempfile.mkdtemp(prefix='coverpack-')
-    real_spines = 0
+    real_spines = scanned_spines = 0
     try:
         for i, cover in enumerate(covers):
             if not cover.endswith('/boxart_front.png'):
                 continue
-            top = cover[:-len('boxart_front.png')] + 'boxart_top.png'
-            has_top = os.path.isfile(os.path.join(menu_dir, top))
-            source = top if has_top else cover
+            folder = cover[:-len('boxart_front.png')]
+            has_top = os.path.isfile(os.path.join(menu_dir, folder + 'boxart_top.png'))
+            has_scan = not has_top and os.path.isfile(os.path.join(menu_dir, folder + 'boxart_spine.png'))
+            source = folder + ('boxart_top.png' if has_top else 'boxart_spine.png' if has_scan else 'boxart_front.png')
+            if has_top:
+                boxes = [arg for arg, _ in SPINE_PACKS]
+            elif has_scan:
+                w, h = png_size(os.path.join(menu_dir, source))
+                boxes = [arg for arg, _ in SPINE_PACKS] if w > h else SPINE_UPRIGHT
+            else:
+                boxes = SPINE_FALLBACK
             st = os.stat(os.path.join(menu_dir, source))
-            signature = 'spine30|%s|%d|%d' % (source, st.st_size, int(st.st_mtime))
+            signature = 'spine64|%s|%d|%d' % (source, st.st_size, int(st.st_mtime))
             spine_signatures.append(signature)
             cached = thumb_cache.get(signature, len(SPINE_PACKS))
             if cached is None:
                 src = os.path.join(work, 'in.png')
                 shutil.copyfile(os.path.join(menu_dir, source), src)
                 prefix = os.path.join(work, 's')
-                boxes = [arg for arg, _ in SPINE_PACKS] if has_top else SPINE_FALLBACK
                 r = subprocess.run([args.tool, 'raw', src, prefix] + boxes, capture_output=True, text=True)
                 if r.returncode != 0:
                     print('  no spine for %s: %s' % (cover, r.stderr.strip()))
@@ -271,13 +288,18 @@ def main():
                     os.remove(p)
                 thumb_cache.put(signature, cached)
             real_spines += has_top
+            scanned_spines += has_scan
             for (_, name), blob in zip(SPINE_PACKS, cached):
                 spine_blobs[name][i] = blob
+            # The width it stands for on the 16:9 pack ("CVW1" header) is even, as the menu draws it.
+            wide = cached[1]
+            spine_widths[i] = struct.unpack('>H', wide[8:10])[0] if wide[:4] == b'CVW1' else 0
     finally:
         shutil.rmtree(work, ignore_errors=True)
     thumb_cache.save()
     print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
-    print('%d spines from box art, %d made from a slice of the front' % (real_spines, len(spine_signatures) - real_spines))
+    print('%d spines from the box top, %d from spine scans, %d made from a slice of the front' %
+          (real_spines, scanned_spines, len(spine_signatures) - real_spines - scanned_spines))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
     manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown'] + spine_signatures).encode('utf-8')).hexdigest()
@@ -363,6 +385,8 @@ def main():
         c = rom_cover[rom]
         lines.append('R\t%s\t%d' % (rom, cover_id[c] if c else -1))
     lines += meta_lines
+    # W<TAB>cover id<TAB>spine width: lets the shelf lay out spines before reading them.
+    lines += ['W\t%d\t%d' % (i, w) for i, w in sorted(spine_widths.items()) if w]
     with open(out_dir + '/covers.idx.tmp', 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     os.replace(out_dir + '/covers.idx.tmp', out_dir + '/covers.idx')

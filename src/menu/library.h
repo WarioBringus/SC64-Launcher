@@ -30,6 +30,7 @@ typedef struct {
     const char *developer;
     const char *year;
     int players;                /**< Maximum players, 0 when unknown */
+    uint8_t spine_width;        /**< Shelf spine width once worked out (library_game_spine_width), else 0 */
     uint32_t favorite_generation; /**< launcher_favorites_generation() when favorite was worked out */
     bool favorite;              /**< In the favorites (valid when favorite_generation is current) */
     uint32_t hidden_generation; /**< Hidden list version when hidden was worked out */
@@ -102,6 +103,9 @@ path_t *library_game_path(library_game_t *game);
  * @return Full path of the cover PNG, or NULL when there is none.
  */
 const char *library_game_cover(menu_t *menu, library_game_t *game);
+
+/** @brief Width of a game's spine on the shelf: as thick as its box (covers.idx), else LAUNCHER_SPINE_W. */
+int library_game_spine_width(menu_t *menu, library_game_t *game);
 
 /**
  * @brief Look up the cover for any ROM file (used by the home screen).
