@@ -371,7 +371,11 @@ static void draw (menu_t *menu, surface_t *d) {
     launcher_covers_begin_frame();
     launcher_draw_header(menu, LAUNCHER_TAB_HOME);
 
-    int lookups_left = 1;
+    // The first Home after power-on shows before any cover is looked up: the first lookup loads the
+    // whole cover index, so covers fill in a moment later instead of the screen waiting for them.
+    static bool shown_once = false;
+    int lookups_left = shown_once ? 1 : 0;
+    shown_once = true;
     if (row_count == 0) {
         launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Games you play and favorite will show up here");
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Press R to browse your library");

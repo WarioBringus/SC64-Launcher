@@ -108,6 +108,12 @@ void perf_log_frame_begin (const char *screen_name, bool input, bool step) {
         return;
     }
     uint64_t now = get_ticks_us();
+    static bool first_noted = false;
+    if (!first_noted && strcmp(screen_name, "other") != 0) {
+        first_noted = true;
+        add_line("\n# launcher %s: first frame %lu ms after power-on (%s)\n", LAUNCHER_BUILD,
+                 (unsigned long)(now / 1000), screen_name);
+    }
     if (strcmp(screen, screen_name) != 0) {
         end_second(now);
         snprintf(screen, sizeof(screen), "%s", screen_name);
