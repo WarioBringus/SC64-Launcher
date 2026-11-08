@@ -105,6 +105,9 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     if (!p->f) {
         return NULL;
     }
+    // Unbuffered: a cover is then one large read straight into its surface, rather than many small
+    // ones through stdio's buffer (the performance log measured those at about 1 MB/s).
+    setvbuf(p->f, NULL, _IONBF, 0);
     uint8_t head[8];
     if (fread(head, 1, sizeof(head), p->f) != sizeof(head) || memcmp(head, "CVP1", 4) != 0) {
         fclose(p->f);

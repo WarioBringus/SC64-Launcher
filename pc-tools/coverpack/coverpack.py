@@ -309,7 +309,7 @@ def main():
           (real_spines, scanned_spines, len(spine_signatures) - real_spines - scanned_spines))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
-    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown'] + spine_signatures).encode('utf-8')).hexdigest()
+    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown', 'align:8'] + spine_signatures).encode('utf-8')).hexdigest()
     manifest_path = out_dir + '/covers.manifest'
     all_packs = [(name, blobs[pack]) for pack in PACKS for name in [pack[1]]] + \
         [(name, spine_blobs[name]) for _, name in SPINE_PACKS]
@@ -349,6 +349,12 @@ def main():
         for i in order:
             b = items[i]
             if b:
+                # Pixels start on an 8-byte boundary, so the cart reads whole sectors straight into
+                # the cover's memory instead of copying them one at a time.
+                header = 12 if b[:4] == b'CVW1' else 8
+                pad = (-(pos + header)) % 8
+                data += bytes(pad)
+                pos += pad
                 offsets[i] = pos
                 data += b
                 pos += len(b)

@@ -510,6 +510,7 @@ static void index_load (void) {
     if (!f) {
         return;
     }
+    setvbuf(f, NULL, _IONBF, 0);    // Read whole in one go, not 1 KB at a time.
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
