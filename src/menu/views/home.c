@@ -49,7 +49,7 @@ static const launcher_hint_t hints_empty[] = {
 
 #define REVEAL_TIMEOUT_MS   (2500)  /* The first Home shows by then even if covers are still loading */
 #define REVEAL_LOOKUPS      (64)    /* Cover lookups per frame while it's hidden */
-#define REVEAL_FADE_MS      (450)   /* Then it fades in from black over this long */
+#define REVEAL_FADE_MS      (250)   /* Then it fades in from black over this long */
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
@@ -439,8 +439,10 @@ static void draw (menu_t *menu, surface_t *d) {
         }
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
-        if (lookups_left > 0 && reveal != REVEAL_HIDDEN) {
-            view_library_preload(menu, &lookups_left);  // Home's own covers come first.
+        // Home's own covers come first, and the library's wait until the fade-in is over: their card
+        // reads would make its frames uneven.
+        if (lookups_left > 0 && reveal == REVEAL_SHOWN) {
+            view_library_preload(menu, &lookups_left);
         }
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
