@@ -138,6 +138,9 @@ typedef struct {
     /** @brief Larger game titles and details (Look > Text size) */
     bool launcher_large_text;
 
+    /** @brief Write the launcher's performance log (menu/cache/launcher/perf-log.txt); set by hand in config.ini */
+    bool launcher_perf_log;
+
     /** @brief Show the "resume last game" row on the home screen */
     bool launcher_home_resume;
 

@@ -20,6 +20,7 @@
 #include "library.h"
 #include "menu_state.h"
 #include "menu.h"
+#include "perf_log.h"
 #include "audio_player.h"
 #include "png_decoder.h"
 #include "settings.h"
@@ -85,6 +86,7 @@ static void menu_init (boot_params_t *boot_params) {
     path_push(path, MENU_SETTINGS_FILE);
     settings_init(path_get(path));
     settings_load(&menu->settings);
+    perf_log_init(menu->settings.launcher_perf_log, menu->storage_prefix);
     theme_set(theme_find(menu->settings.theme));
     path_pop(path);
 
@@ -258,6 +260,33 @@ static view_t *menu_get_view (menu_mode_t id) {
     return NULL;
 }
 
+/** @brief The screen named in the performance log. */
+static const char *perf_screen_name (menu_t *menu) {
+    switch (menu->mode) {
+        case MENU_MODE_HOME: return "home";
+        case MENU_MODE_ABOUT: return "game-info";
+        case MENU_MODE_ATTRACT: return "screensaver";
+        case MENU_MODE_LOAD_ROM: return "loading";
+        case MENU_MODE_LIBRARY:
+            switch (menu->settings.launcher_layout) {
+                case LAUNCHER_LAYOUT_CAROUSEL: return "carousel";
+                case LAUNCHER_LAYOUT_SHELF: return "shelf";
+                default: return "grid";
+            }
+        default: return "other";
+    }
+}
+
+/** @brief Whether anything is pressed or held this frame (the log waits for a rest to write). */
+static bool perf_input (menu_t *menu) {
+    JOYPAD_PORT_FOREACH (port) {
+        if (joypad_get_buttons_held(port).raw || joypad_get_direction(port, JOYPAD_2D_ANY) != JOYPAD_8WAY_NONE) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /**
  * @brief Run the menu system.
  * 
@@ -273,6 +302,8 @@ void menu_run (boot_params_t *boot_params) {
             actions_update(menu);
 
             view_t *view = menu_get_view(menu->mode);
+            perf_log_frame_begin(perf_screen_name(menu), perf_input(menu),
+                menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right);
             if (view && view->show) {
                 view->show(menu, display);
                 static int startup_stage = 0;
@@ -293,6 +324,8 @@ void menu_run (boot_params_t *boot_params) {
                 display_show(display);
             }
 
+            perf_log_frame_end();
+
             if (menu->mode == MENU_MODE_BOOT) {
                 break;
             }
@@ -304,6 +337,7 @@ void menu_run (boot_params_t *boot_params) {
                 }
                 // Free cover images when leaving the launcher (other screens need the memory and the PNG decoder).
                 if (menu_mode_is_launcher(menu->mode) && !menu_mode_is_launcher(menu->next_mode)) {
+                    perf_log_leave();
                     launcher_covers_reset();
                 }
                 // Screens of the original menu use the main font, loaded after startup.

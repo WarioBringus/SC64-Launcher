@@ -10,6 +10,7 @@
 
 #include "../launcher_ui.h"
 #include "../library.h"
+#include "../perf_log.h"
 #include "../png_decoder.h"
 
 #define COVER_SLOTS             (96)    /* With an Expansion Pak */
@@ -510,10 +511,12 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
             victim->image = pack_read(pack, id, max_w, max_h);
             even_size(victim->image);
         }
-        pack_time_used_us += get_ticks_us() - started;
+        uint32_t read_us = (uint32_t)(get_ticks_us() - started);
+        pack_time_used_us += read_us;
         pack_read_this_frame = true;
         if (victim->image) {
             slot_account(victim);
+            perf_log_read((uint32_t)victim->bytes, read_us);
             if (pending) {
                 *pending = false;
             }

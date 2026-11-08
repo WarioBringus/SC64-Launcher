@@ -63,6 +63,7 @@ SRCS = \
 	menu/id3_parser.c \
 	menu/jpeg_decoder.c \
 	menu/menu.c \
+	menu/perf_log.c \
 	menu/path.c \
 	menu/png_decoder.c \
 	menu/rom_info.c \
@@ -225,6 +226,7 @@ $(BUILD_DIR)/$(PROJECT_NAME).dfs: $(FILESYSTEM)
 
 $(BUILD_DIR)/menu/views/credits.o: .FORCE
 $(BUILD_DIR)/menu/views/credits.o: FLAGS+=-DMENU_VERSION=\"$(MENU_VERSION)\" -DBUILD_TIMESTAMP=\"$(BUILD_TIMESTAMP)\" -DLAUNCHER_BUILD=\"$(LAUNCHER_BUILD)\"
+$(BUILD_DIR)/menu/perf_log.o: FLAGS+=-DLAUNCHER_BUILD=\"$(LAUNCHER_BUILD)\"
 
 $(BUILD_DIR)/$(PROJECT_NAME).elf: $(OBJS)
 
