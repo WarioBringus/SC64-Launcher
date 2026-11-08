@@ -11,6 +11,7 @@
 
 #include "views.h"
 #include "../launcher_ui.h"
+#include "../perf_log.h"
 #include "../library.h"
 #include "../settings.h"
 #include "../sound.h"
@@ -1712,5 +1713,6 @@ void view_library_display (menu_t *menu, surface_t *display) {
 
     process(menu);
 
+    perf_log_draw_begin();
     draw(menu, display);
 }

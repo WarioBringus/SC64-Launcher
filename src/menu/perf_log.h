@@ -19,6 +19,9 @@ void perf_log_frame_begin(const char *screen_name, bool input, bool step);
 /** @brief The frame's work is done (may write the log while the controller rests). */
 void perf_log_frame_end(void);
 
+/** @brief The screen's input handling is done and its drawing starts (splits the frame's work). */
+void perf_log_draw_begin(void);
+
 /** @brief A cover or spine read from the SD card. */
 void perf_log_read(uint32_t bytes, uint32_t us);
 

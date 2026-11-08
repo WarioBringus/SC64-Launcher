@@ -12,6 +12,7 @@
 #include "views.h"
 #include "../bookkeeping.h"
 #include "../launcher_ui.h"
+#include "../perf_log.h"
 #include "../library.h"
 #include "../sound.h"
 #include "../theme.h"
@@ -450,5 +451,6 @@ void view_home_display (menu_t *menu, surface_t *display) {
 
     process(menu);
 
+    perf_log_draw_begin();
     draw(menu, display);
 }

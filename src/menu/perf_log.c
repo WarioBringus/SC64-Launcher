@@ -35,6 +35,7 @@ static bool header_written = false;
 static uint64_t start_us = 0;
 static uint64_t last_frame_us = 0;
 static uint64_t work_start_us = 0;
+static uint64_t draw_start_us = 0;
 static uint64_t last_input_ms = 0;
 static char screen[24] = "";
 
@@ -46,6 +47,8 @@ static uint32_t frame_max_us = 0;
 static int long_frames = 0;
 static uint64_t work_total_us = 0;
 static uint32_t work_max_us = 0;
+static uint64_t input_total_us = 0;     /* Of the work: reading the controller and acting on it */
+static uint64_t draw_total_us = 0;      /* Of the work: drawing (including waits for the RDP) */
 static int reads = 0;
 static uint64_t read_total_us = 0;
 static uint32_t read_bytes = 0;
@@ -88,17 +91,18 @@ static void end_second (uint64_t now_us) {
         if (!header_written) {
             add_line("\n# launcher %s - one line per second\n"
                      "# time(s) screen frames frame_avg(ms) frame_max(ms) long_frames(>20ms) work_avg(ms) work_max(ms) "
-                     "card_reads read_ms read_kb steps\n", LAUNCHER_BUILD);
+                     "card_reads read_ms read_kb steps input_avg(ms) draw_avg(ms)\n", LAUNCHER_BUILD);
             header_written = true;
         }
-        add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d\n",
+        add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d %5.1f %5.1f\n",
                  (now_us - start_us) / 1e6, screen, frames, frame_total_us / 1000.0f / frames, frame_max_us / 1000.0f,
                  long_frames, work_total_us / 1000.0f / frames, work_max_us / 1000.0f, reads, read_total_us / 1000.0f,
-                 (unsigned long)(read_bytes / 1024), steps);
+                 (unsigned long)(read_bytes / 1024), steps, input_total_us / 1000.0f / frames,
+                 draw_total_us / 1000.0f / frames);
     }
     second_start_us = now_us;
     frames = long_frames = reads = steps = 0;
-    frame_total_us = work_total_us = read_total_us = 0;
+    frame_total_us = work_total_us = read_total_us = input_total_us = draw_total_us = 0;
     frame_max_us = work_max_us = 0;
     read_bytes = 0;
 }
@@ -129,6 +133,7 @@ void perf_log_frame_begin (const char *screen_name, bool input, bool step) {
     }
     last_frame_us = now;
     work_start_us = now;
+    draw_start_us = 0;
     steps += step;
     if (input) {
         last_input_ms = now / 1000;
@@ -141,6 +146,10 @@ void perf_log_frame_end (void) {
     }
     uint64_t now = get_ticks_us();
     uint32_t work_us = (uint32_t)(now - work_start_us);
+    if (draw_start_us) {
+        input_total_us += draw_start_us - work_start_us;
+        draw_total_us += now - draw_start_us;
+    }
     work_total_us += work_us;
     work_max_us = (work_us > work_max_us) ? work_us : work_max_us;
     if (used > 0 && (now / 1000 - last_input_ms) >= FLUSH_IDLE_MS) {
@@ -149,6 +158,12 @@ void perf_log_frame_end (void) {
     } else if (used > sizeof(buffer) - 512) {
         flush("buffer full");
         last_frame_us = 0;
+    }
+}
+
+void perf_log_draw_begin (void) {
+    if (enabled) {
+        draw_start_us = get_ticks_us();
     }
 }
 
