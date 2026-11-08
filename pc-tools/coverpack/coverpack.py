@@ -46,7 +46,6 @@ BOXES = [(87, 61), (133, 94), (158, 112), (59, 84), (70, 100), (81, 115), (112, 
 # The carousel's and shelf's covers (LAUNCHER_SHOWCASE_W/H in src/menu/launcher_ui.h): larger than
 # any cover art, so enlarged (the tool's u boxes).
 UP_BOXES = [(210, 150), (150, 210)]
-THUMB_VERSION = 'up1'   # See the thumbnail signature in main()
 # Each box twice: as is, and squeezed for 16:9 (the tool's WxHw boxes, packs covers_WxH_w.pak).
 PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' % b) for b in BOXES] + \
     [('%dx%du' % b, '%dx%d' % b) for b in UP_BOXES] + [('%dx%dwu' % b, '%dx%d_w' % b) for b in UP_BOXES]
@@ -206,8 +205,11 @@ def main():
     print('%d ROMs, %d with covers, %d distinct covers' % (len(roms), sum(1 for c in rom_cover.values() if c), len(covers)))
 
     # Thumbnails: scaled covers are kept in a cache on the PC, keyed by the cover's path, size and
-    # modification time, so only new or changed covers are scaled again.
+    # modification time, so only new or changed covers are scaled again. The key also holds a print
+    # of the image tool and every box it is asked for, so a new tool or size scales everything again.
     thumb_cache = ThumbCache(args.thumb_cache)
+    tool_print = hashlib.sha1(open(args.tool, 'rb').read() +
+                              repr((PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK)).encode('utf-8')).hexdigest()[:12]
     blobs = {pack: [None] * len(covers) for pack in PACKS}
     signatures = []
     work = tempfile.mkdtemp(prefix='coverpack-')
@@ -217,8 +219,7 @@ def main():
             full = os.path.join(menu_dir, cover)
             st = os.stat(full)
             box_art = not cover.endswith('/gamepak_front.png')    # Cartridge art keeps its see-through outline
-            # The tag changes whenever the boxes or how they are scaled change, so cached covers are scaled again.
-            signature = '%s|%d|%d|%s' % (cover, st.st_size, int(st.st_mtime), THUMB_VERSION) + ('|fill' if box_art else '')
+            signature = '%s|%d|%d|%s' % (cover, st.st_size, int(st.st_mtime), tool_print) + ('|fill' if box_art else '')
             signatures.append(signature)
             cached = thumb_cache.get(signature)
             if cached is None:
@@ -269,7 +270,7 @@ def main():
             else:
                 boxes = SPINE_FALLBACK
             st = os.stat(os.path.join(menu_dir, source))
-            signature = 'spine64|%s|%d|%d' % (source, st.st_size, int(st.st_mtime))
+            signature = 'spine|%s|%d|%d|%s' % (source, st.st_size, int(st.st_mtime), tool_print)
             spine_signatures.append(signature)
             cached = thumb_cache.get(signature, len(SPINE_PACKS))
             if cached is None:
