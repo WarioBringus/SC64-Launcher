@@ -1279,12 +1279,36 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 #define SHELF_BASE_Y        (314)   /* Top of the shelf plank: spines and the open box stand on it */
 #define SHELF_SPINE_W       ((int)(LAUNCHER_SPINE_W * LAUNCHER_SHOWCASE_ZOOM))
 #define SHELF_SPINE_H       ((int)(LAUNCHER_SPINE_H * LAUNCHER_SHOWCASE_ZOOM))
+#define SHELF_DIVIDER_W     (4)     /* Card standing before each group, its label on a tab at the top */
+#define SHELF_DIVIDER_STEP  (SHELF_DIVIDER_W + SHELF_GAP)
+#define SHELF_LABEL_INSET   (6)     /* Tab below the top of the spines */
+#define SHELF_MAX_DIVIDERS  (48)
 #define SHELF_GAP           (3)
 #define SHELF_OPEN_GAP      (10)    /* Space either side of the open box */
 #define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
 #define SHELF_DETAILS_Y     (SHELF_BASE_Y + 60)
 
 static float shelf_position = 0.0f;     /* Drawn selection, gliding toward it (fractional while moving) */
+
+/** @brief Whether a group begins at game i (a divider stands before it). */
+static bool shelf_group_starts (library_category_t *c, int i) {
+    return i == 0 || !same_group(&c->games[i - 1], &c->games[i]);
+}
+
+/** @brief Dividers standing between games a and b (a < b: those before a + 1 ... b). */
+static int shelf_dividers_between (library_category_t *c, int a, int b) {
+    int n = 0;
+    for (int k = a + 1; k <= b; k++) {
+        n += shelf_group_starts(c, k);
+    }
+    return n;
+}
+
+typedef struct {
+    int x;
+    int game;       /* First game of the group */
+    bool current;   /* The open box's group */
+} shelf_divider_t;
 
 static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;   // As drawn...
@@ -1305,10 +1329,16 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     }
     motion_snap = true;     // Back in the grid, it appears in place.
 
-    // The open box sits in the middle; the shelf glides to it.
+    // The open box sits in the middle; the shelf glides to it (dividers passed on the way count too).
     int lift = launcher_focus_lift(category_index * 100000 + sel);
     int step = SHELF_SPINE_W + SHELF_GAP;
-    int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step);
+    int from = (int)floorf(shelf_position);
+    float frac = shelf_position - from;
+    float dividers_moved = (sel >= from) ? shelf_dividers_between(c, from, sel) : -shelf_dividers_between(c, sel, from);
+    if (frac > 0.0f && from + 1 < c->shown) {
+        dividers_moved -= frac * shelf_group_starts(c, from + 1);
+    }
+    int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step + dividers_moved * SHELF_DIVIDER_STEP);
 
     // The open box's cover first; while scrolling fast it is the only cover read.
     surface_t *front = game_cover(menu, &c->games[sel], rw, rh, &lookups_left, &pending);
@@ -1320,14 +1350,76 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     rdpq_set_scissor(0, LAUNCHER_CONTENT_Y - LAUNCHER_RING - 2, display_get_width(), SHELF_BASE_Y);
 
     int spine_y = SHELF_BASE_Y - SHELF_SPINE_H;
-    // Spines to the left, then to the right, until they leave the screen.
-    for (int i = sel - 1, x = open_x - SHELF_OPEN_GAP - SHELF_SPINE_W; i >= 0 && x + SHELF_SPINE_W > 0; i--, x -= step) {
-        const char *path = library_game_cover(menu, &c->games[i]);
-        launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+    shelf_divider_t left[SHELF_MAX_DIVIDERS], right[SHELF_MAX_DIVIDERS];
+    int left_count = 0, right_count = 0;
+    color_t divider_color = theme_current()->line;
+
+    // Spines to the left, then to the right, until they leave the screen; a divider before each group.
+    int x = open_x - SHELF_OPEN_GAP;
+    int leftmost = sel;
+    for (int i = sel; i >= 0 && x > 0; i--) {
+        if (i < sel) {
+            leftmost = i;
+            x -= SHELF_SPINE_W;
+            const char *path = library_game_cover(menu, &c->games[i]);
+            launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+            x -= SHELF_GAP;
+        }
+        if (shelf_group_starts(c, i)) {
+            x -= SHELF_DIVIDER_W;
+            launcher_fill_rounded(x, spine_y, x + SHELF_DIVIDER_W, SHELF_BASE_Y, 1, divider_color);
+            if (left_count < SHELF_MAX_DIVIDERS) {
+                left[left_count] = (shelf_divider_t){ x, i, left_count == 0 };
+                left_count++;
+            }
+            x -= SHELF_GAP;
+        }
     }
-    for (int i = sel + 1, x = open_x + cw + SHELF_OPEN_GAP; i < c->shown && x < launcher_screen_width(); i++, x += step) {
+    if (!shelf_group_starts(c, leftmost) && left_count < SHELF_MAX_DIVIDERS) {
+        // The group at the left edge began off screen: its label still shows, held at the edge.
+        left[left_count] = (shelf_divider_t){ -launcher_screen_width(), leftmost, left_count == 0 };
+        left_count++;
+    }
+    x = open_x + cw + SHELF_OPEN_GAP;
+    for (int i = sel + 1; i < c->shown && x < launcher_screen_width(); i++) {
+        if (shelf_group_starts(c, i)) {
+            launcher_fill_rounded(x, spine_y, x + SHELF_DIVIDER_W, SHELF_BASE_Y, 1, divider_color);
+            if (right_count < SHELF_MAX_DIVIDERS) {
+                right[right_count] = (shelf_divider_t){ x, i, false };
+                right_count++;
+            }
+            x += SHELF_DIVIDER_STEP;
+        }
         const char *path = library_game_cover(menu, &c->games[i]);
         launcher_draw_spine(x, spine_y, SHELF_SPINE_W, SHELF_SPINE_H, launcher_spine_get(path, &pending));
+        x += step;
+    }
+
+    // Labels on tabs at the top, left to right. A tab that would run into the open box hangs to the
+    // left of its divider instead; one that would cover the previous tab (a short group) is left out.
+    int last_right = -1000;
+    for (int n = 0; n < left_count + right_count; n++) {
+        shelf_divider_t *d = (n < left_count) ? &left[left_count - 1 - n] : &right[n - left_count];
+        char label[48];
+        library_game_group(&c->games[d->game], current_sort, label, sizeof(label));
+        int w = launcher_pill_width(label);
+        int lx = d->x;
+        if (lx < SHELF_GAP) {
+            // A group running off the left edge keeps its label in view, while there's room before the next.
+            int next_x = (n + 1 < left_count + right_count) ? ((n + 1 < left_count) ? left[left_count - 2 - n].x : right[n + 1 - left_count].x) : launcher_screen_width();
+            lx = SHELF_GAP;
+            if (lx + w > next_x - SHELF_GAP || (lx + w > open_x - SHELF_GAP && lx < open_x + cw + SHELF_GAP)) {
+                continue;
+            }
+        }
+        if (lx + w > open_x - SHELF_GAP && lx < open_x + cw + SHELF_GAP) {
+            lx = d->x + SHELF_DIVIDER_W - w;
+        }
+        if (lx < last_right + SHELF_GAP * 2 || (lx + w > open_x - SHELF_GAP && lx < open_x + cw + SHELF_GAP)) {
+            continue;
+        }
+        launcher_draw_pill(lx, spine_y + SHELF_LABEL_INSET, label, d->current);
+        last_right = lx + w;
     }
 
     // The open box, lifted a little, with the selection ring.

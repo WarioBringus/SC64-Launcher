@@ -742,6 +742,12 @@ static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     }
 }
 
+int launcher_pill_width (const char *name) {
+    char escaped[128];
+    escape_text_codes(name, escaped, sizeof(escaped));
+    return text_width(strpbrk(name, "$^") ? escaped : name) + PILL_PADDING * 2;
+}
+
 int launcher_draw_pill (int x, int y, const char *name, bool active) {
     char escaped[128];
     escape_text_codes(name, escaped, sizeof(escaped));

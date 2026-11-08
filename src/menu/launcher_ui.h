@@ -292,6 +292,9 @@ int launcher_focus_lift(int key);
  */
 int launcher_draw_pill(int x, int y, const char *name, bool active);
 
+/** @brief Width launcher_draw_pill would take for a name. */
+int launcher_pill_width(const char *name);
+
 /**
  * @brief Draw a cover tile: the image (fitted and centered), or a placeholder with the title.
  *
