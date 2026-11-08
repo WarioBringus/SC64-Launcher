@@ -49,6 +49,7 @@ static uint64_t work_total_us = 0;
 static uint32_t work_max_us = 0;
 static uint64_t input_total_us = 0;     /* Of the work: reading the controller and acting on it */
 static uint64_t draw_total_us = 0;      /* Of the work: drawing (including waits for the RDP) */
+static uint64_t part_total_us[PERF_PARTS];
 static int reads = 0;
 static uint64_t read_total_us = 0;
 static uint32_t read_bytes = 0;
@@ -91,18 +92,23 @@ static void end_second (uint64_t now_us) {
         if (!header_written) {
             add_line("\n# launcher %s - one line per second\n"
                      "# time(s) screen frames frame_avg(ms) frame_max(ms) long_frames(>20ms) work_avg(ms) work_max(ms) "
-                     "card_reads read_ms read_kb steps input_avg(ms) draw_avg(ms)\n", LAUNCHER_BUILD);
+                     "card_reads read_ms read_kb steps input_avg(ms) draw_avg(ms) text_avg(ms) covers_avg(ms) polls_avg(ms) wait_avg(ms)\n", LAUNCHER_BUILD);
             header_written = true;
         }
-        add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d %5.1f %5.1f\n",
+        // Waiting: the rest of each frame, mostly for the RDP to finish or for the next vertical blank.
+        float wait = (frame_total_us - work_total_us - part_total_us[PERF_POLLS]) / 1000.0f / frames;
+        add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f\n",
                  (now_us - start_us) / 1e6, screen, frames, frame_total_us / 1000.0f / frames, frame_max_us / 1000.0f,
                  long_frames, work_total_us / 1000.0f / frames, work_max_us / 1000.0f, reads, read_total_us / 1000.0f,
                  (unsigned long)(read_bytes / 1024), steps, input_total_us / 1000.0f / frames,
-                 draw_total_us / 1000.0f / frames);
+                 draw_total_us / 1000.0f / frames, part_total_us[PERF_TEXT] / 1000.0f / frames,
+                 part_total_us[PERF_COVERS] / 1000.0f / frames, part_total_us[PERF_POLLS] / 1000.0f / frames,
+                 wait < 0 ? 0.0f : wait);
     }
     second_start_us = now_us;
     frames = long_frames = reads = steps = 0;
     frame_total_us = work_total_us = read_total_us = input_total_us = draw_total_us = 0;
+    memset(part_total_us, 0, sizeof(part_total_us));
     frame_max_us = work_max_us = 0;
     read_bytes = 0;
 }
@@ -158,6 +164,12 @@ void perf_log_frame_end (void) {
     } else if (used > sizeof(buffer) - 512) {
         flush("buffer full");
         last_frame_us = 0;
+    }
+}
+
+void perf_log_add (perf_part_t part, uint32_t us) {
+    if (enabled) {
+        part_total_us[part] += us;
     }
 }
 

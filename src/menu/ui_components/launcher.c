@@ -17,6 +17,7 @@
 #include <time.h>
 
 #include "../launcher_ui.h"
+#include "../perf_log.h"
 #include "../library.h"
 #include "../settings.h"
 #include "../sound.h"
@@ -214,7 +215,16 @@ static void layout_build (layout_entry_t *e, const char *text) {
  *
  * @return Logical width of the drawn text.
  */
+static int text_box_font_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text);
+
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
+    uint64_t started = get_ticks_us();
+    int width = text_box_font_untimed(font, x, y, w, h, align, valign, style, text);
+    perf_log_add(PERF_TEXT, (uint32_t)(get_ticks_us() - started));
+    return width;
+}
+
+static int text_box_font_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     int real_w = (w > 0) ? px(x + w) - px(x) : 0;
     layout_entry_t key = {
         .font = launcher_font(font), .style = style, .align = align, .valign = valign,
@@ -1133,6 +1143,7 @@ static void blit_cover_resized (surface_t *image, int x, int y, int w, int h) {
 }
 
 void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind, float zoom) {
+    uint64_t started = get_ticks_us();
     color_t edge = behind;
     if (selected) {
         launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
@@ -1177,6 +1188,7 @@ void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bo
             strlen(escaped)
         );
     }
+    perf_log_add(PERF_COVERS, (uint32_t)(get_ticks_us() - started));
 }
 
 void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind) {
@@ -1186,6 +1198,7 @@ void launcher_draw_tile (int x, int y, int w, int h, surface_t *image, bool pend
 #define SPINE_RADIUS        (2)
 
 void launcher_draw_spine (int x, int y, int w, int h, surface_t *image) {
+    uint64_t started = get_ticks_us();
     if (!image) {
         launcher_fill_rounded(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->panel);
         return;
@@ -1196,9 +1209,11 @@ void launcher_draw_spine (int x, int y, int w, int h, surface_t *image) {
         blit_cover_resized(image, x, y, w, h);
     }
     mask_corners(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->bg);
+    perf_log_add(PERF_COVERS, (uint32_t)(get_ticks_us() - started));
 }
 
 void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, color_t behind) {
+    uint64_t started = get_ticks_us();
     float scale = fminf((float)w / image->width, (float)h / image->height);
     int dw = (int)(image->width * scale);
     int dh = (int)(image->height * scale);
@@ -1216,6 +1231,7 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
         });
     rdpq_mode_pop();
     mask_corners(dx, dy, dx + dw, dy + dh, (int)(TILE_RADIUS * scale + 0.5f), behind);
+    perf_log_add(PERF_COVERS, (uint32_t)(get_ticks_us() - started));
 }
 
 static bool settings_save_pending = false;

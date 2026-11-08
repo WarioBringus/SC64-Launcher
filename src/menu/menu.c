@@ -356,11 +356,13 @@ void menu_run (boot_params_t *boot_params) {
             time(&menu->current_time);
         }
 
+        uint64_t polls_started = get_ticks_us();
         sound_poll();
 
         png_decoder_poll();
 
         usb_comm_poll(menu);
+        perf_log_add(PERF_POLLS, (uint32_t)(get_ticks_us() - polls_started));
     }
 
     menu_deinit(menu);

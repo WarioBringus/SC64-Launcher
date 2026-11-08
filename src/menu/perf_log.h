@@ -22,6 +22,17 @@ void perf_log_frame_end(void);
 /** @brief The screen's input handling is done and its drawing starts (splits the frame's work). */
 void perf_log_draw_begin(void);
 
+/** @brief Parts of a frame timed separately (perf_log_add). */
+typedef enum {
+    PERF_TEXT,      /**< Laying out and drawing text */
+    PERF_COVERS,    /**< Drawing covers, spines and tiles */
+    PERF_POLLS,     /**< Between frames: music, the PNG decoder, USB */
+    PERF_PARTS,
+} perf_part_t;
+
+/** @brief Add time to one part of this second's frames (cheap enough to call often). */
+void perf_log_add(perf_part_t part, uint32_t us);
+
 /** @brief A cover or spine read from the SD card. */
 void perf_log_read(uint32_t bytes, uint32_t us);
 
