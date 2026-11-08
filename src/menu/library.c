@@ -1598,7 +1598,19 @@ void library_rescan (menu_t *menu) {
     library_init(menu);
 }
 
+static bool searching_everywhere = false;
+
+void library_search_everywhere (bool enabled) {
+    searching_everywhere = enabled;
+}
+
 library_category_t *library_category (int index) {
+    if (searching_everywhere && categories_enabled && index >= 0 && index < visible_count) {
+        if (!all_games.loaded) {
+            load_all_games();
+        }
+        return &all_games;
+    }
     if (!categories_enabled) {
         if (index != 0 || visible_count == 0) {
             return NULL;

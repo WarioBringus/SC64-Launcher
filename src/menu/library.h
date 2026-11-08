@@ -106,6 +106,12 @@ path_t *library_game_path(library_game_t *game);
  */
 const char *library_game_cover(menu_t *menu, library_game_t *game);
 
+/**
+ * @brief While enabled, every folder's category is the whole library (every visible folder's games),
+ * for searching everywhere.
+ */
+void library_search_everywhere(bool enabled);
+
 /** @brief Width of a game's spine on the shelf: as thick as its box (covers.idx), else LAUNCHER_SPINE_W. */
 int library_game_spine_width(menu_t *menu, library_game_t *game);
 

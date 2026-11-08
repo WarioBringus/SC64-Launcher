@@ -411,6 +411,42 @@ static void search_apply (void) {
     }
 }
 
+static int search_saved_sel = 0;           /* The folder's place before a search, to come back to */
+static bool search_everywhere = false;
+
+/** @brief While a search shows, the list is the whole library; when it ends, back to the folder's place. */
+static void search_scope_update (void) {
+    bool want = (filter_field == LAUNCHER_FILTER_SEARCH);
+    if (want == search_everywhere) {
+        return;
+    }
+    if (want) {
+        search_saved_sel = *current_selection();
+    }
+    search_everywhere = want;
+    library_search_everywhere(want);
+    if (!want) {
+        library_category_t *c = library_category(category_index);
+        apply_sort(c, category_index);
+        *current_selection() = (c && search_saved_sel < c->shown) ? search_saved_sel : 0;
+    }
+    top_row = 0;
+    carousel_position = (float)(*current_selection());
+    motion_snap = true;
+    launcher_focus_reset();
+}
+
+/** @brief A game's details line; search results also say which folder they're in. */
+static void game_details_line (library_game_t *game, char *buffer, size_t size) {
+    char details[160];
+    library_game_details(game, details, sizeof(details));
+    if (search_everywhere && game->directory) {
+        snprintf(buffer, size, details[0] ? "%s   \xC2\xB7   %s" : "%s%s", path_last_get(game->directory), details);
+    } else {
+        snprintf(buffer, size, "%s", details);
+    }
+}
+
 static void search_show (void) {
     search_open = true;
     if (filter_field != LAUNCHER_FILTER_SEARCH) {
@@ -735,6 +771,7 @@ static surface_t *game_cover (menu_t *menu, library_game_t *game, int w, int h, 
 }
 
 static void process (menu_t *menu) {
+    search_scope_update();
     if (launcher_menu_process(menu)) {
         return;
     }
@@ -925,7 +962,7 @@ static void process (menu_t *menu) {
 
 /** @brief The folder being shown, small at the left of the line under the tabs (Start > Folder switches). */
 static void draw_category_name (void) {
-    const char *name = library_category_name(category_index);
+    const char *name = search_everywhere ? "All folders" : library_category_name(category_index);
     if (name) {
         launcher_name(LAUNCHER_X0, LAUNCHER_SUBHEADER_Y, LAUNCHER_WIDTH / 2, ALIGN_LEFT, STL_GRAY, name);
     }
@@ -946,7 +983,7 @@ static int grid_first_visible (grid_geometry_t *g, int sel) {
 static void preload_category_covers (menu_t *menu, int index, int *lookups_left);
 
 static void preload_category (menu_t *menu, int index, int *lookups_left) {
-    if (index == category_index || !library_category_is_quick(index)) {
+    if (index == category_index || search_everywhere || !library_category_is_quick(index)) {
         return;
     }
     preload_category_covers(menu, index, lookups_left);
@@ -1292,7 +1329,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     launcher_name(LAUNCHER_X0, CAROUSEL_TITLE_Y + 32, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, position);
 
     char details[160];
-    library_game_details(&c->games[sel], details, sizeof(details));
+    game_details_line(&c->games[sel], details, sizeof(details));
     if (details[0]) {
         launcher_game_details(LAUNCHER_X0, CAROUSEL_TITLE_Y + 58, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
@@ -1472,7 +1509,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 
     launcher_title(LAUNCHER_X0, SHELF_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
     char details[160];
-    library_game_details(&c->games[sel], details, sizeof(details));
+    game_details_line(&c->games[sel], details, sizeof(details));
     if (details[0]) {
         launcher_game_details(LAUNCHER_X0, SHELF_DETAILS_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, details);
     }
@@ -1507,6 +1544,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 }
 
 static void draw (menu_t *menu, surface_t *d) {
+    search_scope_update();
     rdpq_attach(d, NULL);
 
     launcher_covers_begin_frame();
@@ -1563,7 +1601,7 @@ static void draw (menu_t *menu, surface_t *d) {
                 draw_grid(menu, c, *sel);
 
                 char details[160];
-                library_game_details(&c->games[*sel], details, sizeof(details));
+                game_details_line(&c->games[*sel], details, sizeof(details));
                 if (details[0]) {
                     launcher_game_details(LAUNCHER_X0, INFO_LINE_Y, LAUNCHER_WIDTH, ALIGN_LEFT, STL_GRAY, details);
                 }
