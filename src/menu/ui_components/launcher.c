@@ -422,6 +422,7 @@ static void flat_end (void) {
  * @brief Rounded rectangle in real pixels; corner insets are multiplied by squeeze (1 or 3/4).
  */
 static void fill_rounded_real (int x0, int y0, int x1, int y1, int radius, float squeeze, color_t color) {
+    uint64_t perf_started = get_ticks_us();
     if (radius * 2 > y1 - y0) {
         radius = (y1 - y0) / 2;
     }
@@ -436,6 +437,7 @@ static void fill_rounded_real (int x0, int y0, int x1, int y1, int radius, float
         rdpq_fill_rectangle(x0 + inset, y1 - 1 - i, x1 - inset, y1 - i);
     }
     flat_end();
+    perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
 }
 
 void launcher_fill_rounded (int x0, int y0, int x1, int y1, int radius, color_t color) {
@@ -459,6 +461,7 @@ static int real_cover_width (int w) {
  * Coordinates are logical.
  */
 static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t behind) {
+    uint64_t perf_started = get_ticks_us();
     float squeeze = widescreen ? WIDE_SQUEEZE : 1.0f;
     int rx0 = px(x0);
     int rx1 = rx0 + real_cover_width(x1 - x0);
@@ -474,6 +477,7 @@ static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t be
         rdpq_fill_rectangle(rx1 - inset, y1 - 1 - i, rx1, y1 - i);
     }
     flat_end();
+    perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
 }
 
 void launcher_draw_page_title (const char *title) {
@@ -890,11 +894,14 @@ static bool is_c_button (launcher_button_t kind) {
 }
 
 void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
+    uint64_t perf_started = get_ticks_us();
     draw_header_parts(menu, active);
     launcher_transition_content_begin(HEADER_UNDERLINE_Y + 6);
+    perf_log_add(PERF_CHROME, (uint32_t)(get_ticks_us() - perf_started));
 }
 
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
+    uint64_t perf_started = get_ticks_us();
     transition_content_end();
     ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
 
@@ -948,6 +955,7 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
         text_box_font(FNT_SMALL, x, text_y, 0, HINT_TEXT_HEIGHT, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
         x += label_w[i] + HINT_GAP;
     }
+    perf_log_add(PERF_CHROME, (uint32_t)(get_ticks_us() - perf_started));
 }
 
 /**
@@ -984,6 +992,7 @@ void launcher_draw_favorite_star (int x, int y, int w) {
  * inner one (inset by thickness). Only the band is drawn, so whatever is inside shows through.
  */
 static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, int thickness, float squeeze, color_t color) {
+    uint64_t perf_started = get_ticks_us();
     int inner_radius = radius - thickness;
     int t = (int)(thickness * squeeze + 0.5f);
     flat_begin(color);
@@ -1002,6 +1011,7 @@ static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, in
         rdpq_fill_rectangle(x1 - t - inner, y, x1 - outer, y + 1);
     }
     flat_end();
+    perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
 }
 
 #define MOTION_TAU_MS       (20.0f) /* Glides close ~63% of the remaining distance every this many ms */

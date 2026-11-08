@@ -27,6 +27,8 @@ typedef enum {
     PERF_TEXT,      /**< Laying out and drawing text */
     PERF_COVERS,    /**< Drawing covers, spines and tiles */
     PERF_POLLS,     /**< Between frames: music, the PNG decoder, USB */
+    PERF_SHAPES,    /**< Rounded fills, rings and cover corner masks (partly inside PERF_COVERS) */
+    PERF_CHROME,    /**< The header and the hints bar (its text and shapes included) */
     PERF_PARTS,
 } perf_part_t;
 
