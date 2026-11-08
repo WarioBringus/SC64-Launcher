@@ -18,7 +18,10 @@
    so a screen full of new covers fills in over a few smooth frames instead of stalling one. */
 #define PACK_READ_BUDGET_US     (3500)
 #define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps */
-#define MAX_PACKS               (20)    /* 8 tile sizes, each as is and squeezed for 16:9 */
+#define MAX_PACKS               (24)    /* 10 cover sizes and the spines, each as is and squeezed for 16:9 */
+/* Memory for decoded covers: what the slots held when every cover was at most 158x112, so the
+   carousel's and shelf's larger covers never take more than covers did before. */
+#define COVER_BYTES_PER_SLOT    (LAUNCHER_COVER_W * LAUNCHER_COVER_H * 2)
 #define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d%s.pak"
 
 /* Pre-scaled covers built on the PC by pc-tools/coverpack (one file per tile size). */
@@ -43,6 +46,7 @@ typedef struct {
     bool failed;
     uint32_t failed_frame;      /**< When it failed; it is retried after FAILED_RETRY_FRAMES */
     uint32_t last_used;
+    size_t bytes;               /**< Pixel memory held */
 } cover_slot_t;
 
 static cover_slot_t slots[COVER_SLOTS];
@@ -53,6 +57,7 @@ static cover_pack_t packs[MAX_PACKS];
 static bool cartridge_art = false;
 static uint64_t pack_time_used_us = 0;
 static bool pack_read_this_frame = false;
+static size_t bytes_used = 0;
 
 
 /** @brief Whether another pack read fits in this frame's budget (time spent reading packs only). */
@@ -268,6 +273,13 @@ surface_t *launcher_cover_larger (surface_t *shown, int max_w, int max_h) {
     return NULL;
 }
 
+/** @brief Count a slot's pixels once its image is in. */
+static void slot_account (cover_slot_t *slot) {
+    surface_t *pixels = slot->wide ? slot->wide : slot->image;
+    slot->bytes = pixels ? (size_t)pixels->stride * pixels->height : 0;
+    bytes_used += slot->bytes;
+}
+
 static void decode_done (png_err_t err, surface_t *decoded_image, void *callback_data) {
     cover_slot_t *slot = (cover_slot_t *)(callback_data);
     slot->loading = false;
@@ -275,6 +287,7 @@ static void decode_done (png_err_t err, surface_t *decoded_image, void *callback
     if (err == PNG_OK && decoded_image) {
         even_size(decoded_image);
         slot->image = decoded_image;
+        slot_account(slot);
     } else {
         slot->failed = true;
         slot->failed_frame = frame;
@@ -298,6 +311,7 @@ static void slot_free (cover_slot_t *slot) {
         surface_free(slot->image);
         free(slot->image);
     }
+    bytes_used -= slot->bytes;
     free(slot->path);
     memset(slot, 0, sizeof(*slot));
 }
@@ -426,6 +440,23 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     }
 
     slot_free(victim);
+
+    // Free the covers unused longest until this one fits in memory.
+    size_t need = (size_t)max_w * max_h * 2 * (want_wide ? 3 : 4) / 4;
+    while (bytes_used + need > (size_t)slot_count * COVER_BYTES_PER_SLOT) {
+        cover_slot_t *oldest = NULL;
+        for (int i = 0; i < slot_count; i++) {
+            cover_slot_t *s = &slots[i];
+            if (s->path && s->bytes && s->last_used != frame && !s->loading && (!oldest || s->last_used < oldest->last_used)) {
+                oldest = s;
+            }
+        }
+        if (!oldest) {
+            return NULL;    // Everything held is on screen; try again next frame.
+        }
+        slot_free(oldest);
+    }
+
     victim->path = strdup(path);
     victim->max_w = max_w;
     victim->max_h = max_h;
@@ -456,6 +487,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
         pack_time_used_us += get_ticks_us() - started;
         pack_read_this_frame = true;
         if (victim->image) {
+            slot_account(victim);
             if (pending) {
                 *pending = false;
             }

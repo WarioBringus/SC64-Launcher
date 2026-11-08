@@ -10,6 +10,9 @@
  *   an upright spine); WxHs takes a slice from the middle of the image with the box's shape first
  *   (a stand-in spine from the front). Either can be combined with w.
  *
+ *   A box written WxHu enlarges a smaller image to fit the box (Catmull-Rom, sharper than the area
+ *   average); otherwise images are only ever made smaller.
+ *
  *   A box written WxHw is for the launcher's 16:9 screen: the cover is fitted as for WxH, trimmed
  *   to even sizes as the menu does, then squeezed to 3/4 width so the menu can copy it 1:1.
  *   <out-prefix>_<W>x<H>w.raw holds "CVW1", stored width, height, the 4:3 width it stands
@@ -31,6 +34,7 @@
  *       pc-tools/coverpack/coverimg.c src/libs/libspng/spng/spng.c src/libs/miniz/miniz*.c -o coverimg.exe
  */
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,6 +92,19 @@ static void fit (int src_w, int src_h, int max_w, int max_h, int *dst_w, int *ds
     *dst_h = (h < 1) ? 1 : h;
 }
 
+/* Enlarging fit: the largest size with the image's shape that fits the box. */
+static void fit_up (int src_w, int src_h, int max_w, int max_h, int *dst_w, int *dst_h) {
+    if (src_w * max_h > src_h * max_w) {
+        *dst_w = max_w;
+        *dst_h = (src_h * max_w) / src_w;
+    } else {
+        *dst_h = max_h;
+        *dst_w = (src_w * max_h) / src_h;
+    }
+    if (*dst_w < 1) *dst_w = 1;
+    if (*dst_h < 1) *dst_h = 1;
+}
+
 /* Box art: a cover this close to the box's size fills it (a stretch too small to see). */
 static void fill_near_fit (int bw, int bh, int *dw, int *dh) {
     if (*dw * 100 >= bw * 95 && *dh * 100 >= bh * 95) {
@@ -120,8 +137,102 @@ static image_t trim_clear_edges (const image_t *src) {
     return out;
 }
 
-/* Area-average resample to dst_w x dst_h (alpha-weighted colour). */
+static double catmull_rom (double x) {
+    x = fabs(x);
+    if (x < 1.0) {
+        return 1.5 * x * x * x - 2.5 * x * x + 1.0;
+    }
+    if (x < 2.0) {
+        return -0.5 * x * x * x + 2.5 * x * x - 4.0 * x + 2.0;
+    }
+    return 0.0;
+}
+
+/*
+ * One axis of a resize on premultiplied RGBA: n lines of in_len samples (step apart within a line,
+ * line_step between lines) to out_len. Larger uses Catmull-Rom, smaller an area average.
+ */
+static void resample_axis (const double *in, double *out, int n, int in_len, int out_len, int step, int line_step,
+                           int out_step, int out_line_step) {
+    double scale = (double)in_len / out_len;
+    for (int line = 0; line < n; line++) {
+        const double *src = in + (size_t)line * line_step;
+        double *dst = out + (size_t)line * out_line_step;
+        for (int i = 0; i < out_len; i++) {
+            double acc[4] = { 0, 0, 0, 0 };
+            double total = 0;
+            if (out_len >= in_len) {
+                double center = (i + 0.5) * scale - 0.5;
+                int first = (int)floor(center) - 1;
+                for (int k = first; k < first + 4; k++) {
+                    double w = catmull_rom(center - k);
+                    int at = (k < 0) ? 0 : (k >= in_len ? in_len - 1 : k);
+                    for (int c = 0; c < 4; c++) {
+                        acc[c] += src[(size_t)at * step + c] * w;
+                    }
+                    total += w;
+                }
+            } else {
+                double x0 = i * scale, x1 = (i + 1) * scale;
+                for (int k = (int)x0; k < in_len && k < x1; k++) {
+                    double w = ((k + 1 < x1) ? k + 1 : x1) - ((k > x0) ? k : x0);
+                    for (int c = 0; c < 4; c++) {
+                        acc[c] += src[(size_t)k * step + c] * w;
+                    }
+                    total += w;
+                }
+            }
+            for (int c = 0; c < 4; c++) {
+                dst[(size_t)i * out_step + c] = (total != 0) ? acc[c] / total : 0;
+            }
+        }
+    }
+}
+
+/* Resize that may enlarge: separable, on premultiplied alpha so see-through pixels don't bleed. */
+static image_t resample_sharp (const image_t *src, int dst_w, int dst_h) {
+    size_t in_n = (size_t)src->w * src->h;
+    double *pre = malloc(in_n * 4 * sizeof(double));
+    for (size_t i = 0; i < in_n; i++) {
+        double a = src->rgba[i * 4 + 3] / 255.0;
+        for (int c = 0; c < 3; c++) {
+            pre[i * 4 + c] = src->rgba[i * 4 + c] * a;
+        }
+        pre[i * 4 + 3] = a;
+    }
+    double *mid = malloc((size_t)dst_w * src->h * 4 * sizeof(double));
+    resample_axis(pre, mid, src->h, src->w, dst_w, 4, src->w * 4, 4, dst_w * 4);
+    double *fin = malloc((size_t)dst_w * dst_h * 4 * sizeof(double));
+    resample_axis(mid, fin, dst_w, src->h, dst_h, dst_w * 4, 4, dst_w * 4, 4);
+
+    image_t out = { dst_w, dst_h, malloc((size_t)dst_w * dst_h * 4) };
+    for (size_t i = 0; i < (size_t)dst_w * dst_h; i++) {
+        double a = fin[i * 4 + 3];
+        a = (a < 0) ? 0 : (a > 1 ? 1 : a);
+        for (int c = 0; c < 3; c++) {
+            double v = (a > 0) ? fin[i * 4 + c] / a : 0;
+            out.rgba[i * 4 + c] = (uint8_t)((v < 0) ? 0 : (v > 255 ? 255 : v + 0.5));
+        }
+        out.rgba[i * 4 + 3] = (uint8_t)(a * 255 + 0.5);
+    }
+    free(pre);
+    free(mid);
+    free(fin);
+    return out;
+}
+
+static image_t resample_area (const image_t *src, int dst_w, int dst_h);
+
+/* Resize to dst_w x dst_h: an area average when only shrinking, else resample_sharp. */
 static image_t resample (const image_t *src, int dst_w, int dst_h) {
+    if (dst_w <= src->w && dst_h <= src->h) {
+        return resample_area(src, dst_w, dst_h);
+    }
+    return resample_sharp(src, dst_w, dst_h);
+}
+
+/* Area-average resample to dst_w x dst_h (alpha-weighted colour). */
+static image_t resample_area (const image_t *src, int dst_w, int dst_h) {
     image_t out = { dst_w, dst_h, malloc((size_t)dst_w * dst_h * 4) };
     double sx = (double)src->w / dst_w;
     double sy = (double)src->h / dst_h;
@@ -287,12 +398,16 @@ int main (int argc, char **argv) {
                 shaped = middle_slice(&src, bw, bh);
             }
             const image_t *from = shaped.rgba ? &shaped : &src;
-            fit(from->w, from->h, bw, bh, &dw, &dh);
+            if (box_has(argv[i], 'u')) {
+                fit_up(from->w, from->h, bw, bh, &dw, &dh);
+            } else {
+                fit(from->w, from->h, bw, bh, &dw, &dh);
+            }
             if (shaped.rgba && box_has(argv[i], 's')) {
                 dw = bw;    // A stand-in spine fills the spine's size even from a small front.
                 dh = bh;
-            } else if (box_art && !shaped.rgba) {
-                fill_near_fit(bw, bh, &dw, &dh);
+            } else if ((box_art && !shaped.rgba) || box_has(argv[i], 'r')) {
+                fill_near_fit(bw, bh, &dw, &dh);    // Box art and spines fill their box when close.
             }
             char path[1024];
             if (box_is_wide(argv[i])) {

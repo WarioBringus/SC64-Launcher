@@ -35,11 +35,10 @@
 #define LAUNCHER_COVER_W        (158)
 #define LAUNCHER_COVER_H        (112)
 
-/* The carousel's cover and the shelf's open box and spines: full-size covers drawn a third larger
-   (cover art is no larger than 158x112, so this is as sharp as a bigger pack would be) */
-#define LAUNCHER_SHOWCASE_ZOOM  (4.0f / 3.0f)
-#define LAUNCHER_SHOWCASE_W     (210)   /**< LAUNCHER_COVER_W x zoom, as drawn */
-#define LAUNCHER_SHOWCASE_H     (149)
+/* The carousel's covers and the shelf's open box: a third larger than full size, from their own
+   pack (pc-tools/coverpack UP_BOXES, enlarged on the PC; no cover art is this large) */
+#define LAUNCHER_SHOWCASE_W     (210)
+#define LAUNCHER_SHOWCASE_H     (150)
 
 /** @brief Controller buttons shown in the hints bar (sets the icon color). */
 typedef enum {
@@ -115,8 +114,8 @@ surface_t *launcher_cover_get(const char *path, int max_w, int max_h, bool *pend
 void launcher_set_cartridge_art(bool enabled);
 
 /** @brief Spine size in the spine pack (pc-tools/coverpack SPINE_PACKS). */
-#define LAUNCHER_SPINE_W        (22)
-#define LAUNCHER_SPINE_H        (158)
+#define LAUNCHER_SPINE_W        (30)
+#define LAUNCHER_SPINE_H        (210)
 
 /**
  * @brief A game's box spine for the shelf layout, by its front cover's path. From the spine pack

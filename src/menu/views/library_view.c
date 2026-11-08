@@ -955,8 +955,8 @@ static void preload_category_covers (menu_t *menu, int index, int *lookups_left)
     }
     bool pending;
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
-        int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
-        int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+        int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;
+        int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
         for (int i = sel - 2; i <= sel + 2; i++) {
             if (i >= 0 && i < c->shown) {
                 game_cover(menu, &c->games[i], cw, ch, lookups_left, &pending);
@@ -997,8 +997,8 @@ static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, i
             continue;
         }
         if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL) {
-            int cw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;
-            int ch = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
+            int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;
+            int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
             for (int i = target - 2; i <= target + 2; i++) {
                 if (i >= 0 && i < c->shown) {
                     game_cover(menu, &c->games[i], cw, ch, lookups_left, &pending);
@@ -1180,6 +1180,17 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 }
 
 /**
+ * @brief How much to enlarge a carousel or shelf cover: covers from the showcase pack fill their tile
+ * as they are; a smaller one (decoded from its PNG when the pack is missing) is enlarged to fit.
+ */
+static float showcase_zoom (surface_t *image, int w, int h) {
+    if (!image || image->width >= w - 2 || image->height >= h - 2) {
+        return 1.0f;
+    }
+    return fminf((float)w / image->width, (float)h / image->height);
+}
+
+/**
  * @brief Horizontal center and scale of a carousel cover at offset t from the middle
  * (t may be fractional while sliding).
  */
@@ -1196,10 +1207,8 @@ static void carousel_slot (float t, int cw, int sw, float *center_x, float *scal
 }
 
 static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
-    int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;   // As drawn...
+    int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;
     int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
-    int rw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;         // ...from full-size covers
-    int rh = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
     int sw = (int)(cw * CAROUSEL_SIDE_SCALE);
     int lookups_left = 1;
     bool pending;
@@ -1213,7 +1222,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     }
 
     // Highlighted cover first so it loads before its neighbours (the only one read while scrolling fast).
-    game_cover(menu, &c->games[sel], rw, rh, &lookups_left, &pending);
+    game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
     launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
     // Far covers first so nearer ones draw on top.
@@ -1236,10 +1245,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
                 continue;
             }
 
-            surface_t *image = game_cover(menu, &c->games[i], rw, rh, &lookups_left, &pending);
+            surface_t *image = game_cover(menu, &c->games[i], cw, ch, &lookups_left, &pending);
             bool settled = (i == sel) && (carousel_position == (float)sel);
             if (settled) {
-                launcher_draw_tile_zoomed(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg, LAUNCHER_SHOWCASE_ZOOM);
+                launcher_draw_tile_zoomed(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg, showcase_zoom(image, w, h));
                 if (game_is_favorite(menu, &c->games[i])) {
                     launcher_draw_favorite_star(x, y, w);
                 }
@@ -1277,8 +1286,8 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 
 
 #define SHELF_BASE_Y        (314)   /* Top of the shelf plank: spines and the open box stand on it */
-#define SHELF_SPINE_W       ((int)(LAUNCHER_SPINE_W * LAUNCHER_SHOWCASE_ZOOM))
-#define SHELF_SPINE_H       ((int)(LAUNCHER_SPINE_H * LAUNCHER_SHOWCASE_ZOOM))
+#define SHELF_SPINE_W       (LAUNCHER_SPINE_W)
+#define SHELF_SPINE_H       (LAUNCHER_SPINE_H)
 #define SHELF_DIVIDER_W     (4)     /* Card standing before each group, its label on a tab at the top */
 #define SHELF_DIVIDER_STEP  (SHELF_DIVIDER_W + SHELF_GAP)
 #define SHELF_LABEL_INSET   (6)     /* Tab below the top of the spines */
@@ -1311,10 +1320,8 @@ typedef struct {
 } shelf_divider_t;
 
 static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
-    int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;   // As drawn...
+    int cw = c->portrait ? LAUNCHER_SHOWCASE_H : LAUNCHER_SHOWCASE_W;
     int ch = c->portrait ? LAUNCHER_SHOWCASE_W : LAUNCHER_SHOWCASE_H;
-    int rw = c->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W;         // ...from full-size covers
-    int rh = c->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H;
     int lookups_left = 1;
     bool pending;
 
@@ -1341,7 +1348,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     int open_x = LAUNCHER_CENTER_X - cw / 2 + (int)lroundf((sel - shelf_position) * step + dividers_moved * SHELF_DIVIDER_STEP);
 
     // The open box's cover first; while scrolling fast it is the only cover read.
-    surface_t *front = game_cover(menu, &c->games[sel], rw, rh, &lookups_left, &pending);
+    surface_t *front = game_cover(menu, &c->games[sel], cw, ch, &lookups_left, &pending);
     bool front_pending = pending;
     launcher_covers_hold(launcher_scrolling_fast(category_index * 100000 + sel));
 
@@ -1424,8 +1431,9 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 
     // The open box, lifted a little, with the selection ring.
     int open_y = SHELF_BASE_Y - ch - lift;
-    launcher_draw_tile_zoomed(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg, LAUNCHER_SHOWCASE_ZOOM);
-    launcher_note_focused_cover_zoomed(front, open_x, open_y, cw, ch, LAUNCHER_SHOWCASE_ZOOM);
+    float zoom = showcase_zoom(front, cw, ch);
+    launcher_draw_tile_zoomed(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg, zoom);
+    launcher_note_focused_cover_zoomed(front, open_x, open_y, cw, ch, zoom);
     if (game_is_favorite(menu, &c->games[sel])) {
         launcher_draw_favorite_star(open_x, open_y, cw);
     }

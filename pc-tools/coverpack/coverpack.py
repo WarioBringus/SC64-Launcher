@@ -7,7 +7,7 @@ Writes to <card>/menu/cache/launcher/:
   covers.idx              which cover each ROM uses (so the menu needn't read ROM headers)
   covers_<W>x<H>.pak      every cover pre-scaled to each tile size (so the menu needn't decode PNGs)
   covers_<W>x<H>_w.pak    the same squeezed to 3/4 width for the launcher's 16:9 screen
-  covers_22x158[_w].pak   box spines for the shelf layout, under each front cover's id: the box's
+  covers_30x210[_w].pak   box spines for the shelf layout, under each front cover's id: the box's
                           top-edge art (boxart_top.png) turned upright, or a slice of the front
 
 Cover matching mirrors the menu (src/menu/library.c): metadata/names/<file name>.png first (an
@@ -35,11 +35,17 @@ SKIPPED_FOLDERS = {'system volume information', 'menu'}
 FALLBACK_REGIONS = 'EPJUADFIS'
 # Must match the tile sizes in src/menu/views/library_view.c and home.c.
 BOXES = [(87, 61), (133, 94), (158, 112), (59, 84), (70, 100), (81, 115), (112, 158), (74, 52)]
+# The carousel's and shelf's covers (LAUNCHER_SHOWCASE_W/H in src/menu/launcher_ui.h): larger than
+# any cover art, so enlarged (the tool's u boxes).
+UP_BOXES = [(210, 150), (150, 210)]
+THUMB_VERSION = 'up1'   # See the thumbnail signature in main()
 # Each box twice: as is, and squeezed for 16:9 (the tool's WxHw boxes, packs covers_WxH_w.pak).
-PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' % b) for b in BOXES]
-# Spines for the shelf layout: from the top-edge art turned upright, or else a slice of the front.
-SPINE_PACKS = [('22x158r', '22x158'), ('22x158rw', '22x158_w')]
-SPINE_FALLBACK = ['22x158s', '22x158sw']
+PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' % b) for b in BOXES] + \
+    [('%dx%du' % b, '%dx%d' % b) for b in UP_BOXES] + [('%dx%dwu' % b, '%dx%d_w' % b) for b in UP_BOXES]
+# Spines for the shelf layout (LAUNCHER_SPINE_W/H): from the top-edge art turned upright, or else a
+# slice of the front, enlarged to the shelf's size.
+SPINE_PACKS = [('30x210ru', '30x210'), ('30x210rwu', '30x210_w')]
+SPINE_FALLBACK = ['30x210su', '30x210swu']
 
 
 def is_rom(name):
@@ -202,7 +208,8 @@ def main():
             full = os.path.join(menu_dir, cover)
             st = os.stat(full)
             box_art = not cover.endswith('/gamepak_front.png')    # Cartridge art keeps its see-through outline
-            signature = '%s|%d|%d' % (cover, st.st_size, int(st.st_mtime)) + ('|fill' if box_art else '')
+            # The tag changes whenever the boxes or how they are scaled change, so cached covers are scaled again.
+            signature = '%s|%d|%d|%s' % (cover, st.st_size, int(st.st_mtime), THUMB_VERSION) + ('|fill' if box_art else '')
             signatures.append(signature)
             cached = thumb_cache.get(signature)
             if cached is None:
@@ -244,7 +251,7 @@ def main():
             has_top = os.path.isfile(os.path.join(menu_dir, top))
             source = top if has_top else cover
             st = os.stat(os.path.join(menu_dir, source))
-            signature = 'spine|%s|%d|%d' % (source, st.st_size, int(st.st_mtime))
+            signature = 'spine30|%s|%d|%d' % (source, st.st_size, int(st.st_mtime))
             spine_signatures.append(signature)
             cached = thumb_cache.get(signature, len(SPINE_PACKS))
             if cached is None:

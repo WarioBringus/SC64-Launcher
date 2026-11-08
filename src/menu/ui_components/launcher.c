@@ -448,8 +448,8 @@ void launcher_draw_new_games_notice (void) {
 #define LAUNCH_COVER_MAX_W  (240)
 #define LAUNCH_COVER_MAX_H  (180)
 #define LAUNCH_COVER_ZOOM   (1.5f)  /* A tile-sized thumbnail (no Large cover in the pack) grows no more than this */
-#define LAUNCH_LARGE_W      (158)   /* The largest cover-pack size (pc-tools/coverpack BOXES) */
-#define LAUNCH_LARGE_H      (112)
+#define LAUNCH_LARGE_W      (LAUNCHER_SHOWCASE_W)   /* The largest cover-pack size (pc-tools/coverpack UP_BOXES) */
+#define LAUNCH_LARGE_H      (LAUNCHER_SHOWCASE_H)
 #define LAUNCH_GROW_MS      (300)
 
 static surface_t *focused_image = NULL;     /* Cover in the focused tile this frame (owned by the cover cache) */
@@ -1097,8 +1097,11 @@ void launcher_draw_spine (int x, int y, int w, int h, surface_t *image) {
         launcher_fill_rounded(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->panel);
         return;
     }
-    // Every spine in the pack has the pack's full size, so it is resized to fill.
-    blit_cover_resized(image, x, y, w, h);
+    if (image->width == w && image->height == h) {
+        blit_cover(image, x, y);
+    } else {
+        blit_cover_resized(image, x, y, w, h);
+    }
     mask_corners(x, y, x + w, y + h, SPINE_RADIUS, theme_current()->bg);
 }
 
