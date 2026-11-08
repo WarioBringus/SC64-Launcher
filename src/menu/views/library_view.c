@@ -1212,6 +1212,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
     // Preload the row below so scrolling down shows covers straight away. While the screen is
     // still sliding in, read-ahead waits: a cover read per frame would make the slide stutter.
+    launcher_covers_background(true);
     bool sliding = launcher_transition_running();
     bool any_pending = sliding;
     for (int i = first; !sliding && i < last + g.cols && i < c->shown; i++) {
@@ -1229,6 +1230,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         preload_group_jumps(menu, c, sel, &lookups_left);
         preload_neighbours(menu, &lookups_left);
     }
+    launcher_covers_background(false);
 }
 
 /**
@@ -1322,8 +1324,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
     }
     if (!pending && carousel_position == (float)sel) {
         library_check_new_games(NEW_GAMES_CHECK_US);
+        launcher_covers_background(true);
         preload_group_jumps(menu, c, sel, &lookups_left);
         preload_neighbours(menu, &lookups_left);
+        launcher_covers_background(false);
     }
 
     launcher_title(LAUNCHER_X0, CAROUSEL_TITLE_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_DEFAULT, c->games[sel].title);
@@ -1538,6 +1542,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
                 }
             }
         }
+        launcher_covers_background(true);
         for (int d = 1; !any_pending && d <= SHELF_READ_AHEAD; d++) {
             int ahead[2] = { leftmost - d, rightmost + d };
             for (int k = 0; k < 2; k++) {
@@ -1551,6 +1556,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
             library_check_new_games(NEW_GAMES_CHECK_US);
             preload_group_jumps(menu, c, sel, &lookups_left);
         }
+        launcher_covers_background(false);
     }
 }
 

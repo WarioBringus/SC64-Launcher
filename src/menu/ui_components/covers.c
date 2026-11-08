@@ -19,6 +19,7 @@
    so a screen full of new covers fills in over a few smooth frames instead of stalling one. */
 #define PACK_READ_BUDGET_US     (3500)
 #define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps */
+#define BACKGROUND_READ_FRAMES  (3)     /* Read-ahead reads at most one cover this many frames apart */
 #define MAX_PACKS               (24)    /* 10 cover sizes and the spines, each as is and squeezed for 16:9 */
 /* Memory for decoded covers: what the slots held when every cover was at most 158x112, so the
    carousel's and shelf's larger covers never take more than covers did before. */
@@ -366,9 +367,17 @@ void launcher_covers_hold (bool hold) {
     hold_new = hold;
 }
 
+static bool background_reads = false;
+static uint32_t last_background_read_frame = 0;
+
+void launcher_covers_background (bool background) {
+    background_reads = background;
+}
+
 void launcher_covers_begin_frame (void) {
     frame++;
     hold_new = false;
+    background_reads = false;
     launcher_clear_focused_cover();
     pack_time_used_us = 0;
     pack_read_this_frame = false;
@@ -445,6 +454,9 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     if (hold_new && (frame - last_read_frame) < 2) {
         return NULL;    // Scrolling fast: one read every other frame, so no two frames in a row run long.
     }
+    if (background_reads && (frame - last_background_read_frame) < BACKGROUND_READ_FRAMES) {
+        return NULL;    // Read-ahead: a cover read costs ~10 ms of a frame, so they're spread out.
+    }
 
     // Covers in a pack wait for read budget; only covers missing from the packs use the PNG decoder.
     // On the 16:9 screen the squeezed pack comes first (copied 1:1); the 4:3 one is resized as it is drawn.
@@ -506,6 +518,9 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     victim->last_used = frame;
 
     last_read_frame = frame;
+    if (background_reads) {
+        last_background_read_frame = frame;
+    }
     if (pack) {
         uint64_t started = get_ticks_us();
         if (wide_pack) {

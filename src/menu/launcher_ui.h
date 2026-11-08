@@ -153,6 +153,12 @@ void launcher_covers_reset(void);
  */
 void launcher_covers_hold(bool hold);
 
+/**
+ * @brief Covers asked for from now on are read ahead of need (rows off screen, other folders): they
+ * are read at most one every few frames, so reading ahead never slows the screen. Off each frame.
+ */
+void launcher_covers_background(bool background);
+
 /** @brief Whether the selection (key) is changing quickly, e.g. a direction held down. */
 bool launcher_scrolling_fast(int key);
 

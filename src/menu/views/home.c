@@ -442,7 +442,9 @@ static void draw (menu_t *menu, surface_t *d) {
         // Home's own covers come first, and the library's wait until the fade-in is over: their card
         // reads would make its frames uneven.
         if (lookups_left > 0 && reveal == REVEAL_SHOWN) {
+            launcher_covers_background(true);
             view_library_preload(menu, &lookups_left);
+            launcher_covers_background(false);
         }
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
