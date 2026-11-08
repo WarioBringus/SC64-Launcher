@@ -121,6 +121,94 @@ static const char *escape_text_codes (const char *text, char *buffer, size_t siz
     return buffer;
 }
 
+#define LAYOUT_CACHE_SIZE       (64)
+
+/*
+ * Text laid out once and drawn again each frame: building a layout (glyph lookup, kerning, wrapping)
+ * cost most of a frame's drawing when every label was rebuilt every frame. Keyed by the text and
+ * everything that shapes it; drawn at any position.
+ */
+typedef struct {
+    char *text;
+    uint32_t hash;
+    uint8_t font;
+    uint8_t style;
+    uint8_t align;
+    uint8_t valign;
+    int16_t real_w;
+    int16_t h;
+    int16_t dx;                 /* Offset from the box's left edge where the layout is drawn */
+    int16_t advance;
+    rdpq_paragraph_t *layout;
+    uint32_t last_used;
+} layout_entry_t;
+
+static layout_entry_t layout_cache[LAYOUT_CACHE_SIZE];
+static uint32_t layout_clock = 0;
+
+static uint32_t text_hash (const char *text) {
+    uint32_t hash = 2166136261u;    // FNV-1a
+    for (const char *p = text; *p; p++) {
+        hash = (hash ^ (uint8_t)*p) * 16777619u;
+    }
+    return hash;
+}
+
+/** @brief Lay text out in a box (real pixels wide, 0 for no limit) as text_box_font draws it. */
+static void layout_build (layout_entry_t *e, const char *text) {
+    int nbytes = (int)strlen(text);
+    if (e->real_w > 0) {
+        // libdragon cuts a line once its last glyph plus that glyph's advance passes the box, so text
+        // that fits (Dr. Mario 64) could still end in "...". Lay it out with room to spare and keep
+        // that layout when it really fits.
+        rdpq_paragraph_t *layout = rdpq_paragraph_build(
+            &(rdpq_textparms_t) {
+                .style_id = e->style,
+                .width = e->real_w + FIT_SLACK,
+                .height = e->h,
+                .valign = e->valign,
+                .wrap = WRAP_ELLIPSES,
+            },
+            e->font,
+            text,
+            &nbytes
+        );
+        float text_w = layout->bbox.x1 + 1 - layout->bbox.x0;
+        if (layout->nlines == 1 && text_w <= e->real_w) {
+            float dx = 0;
+            if (e->align == ALIGN_CENTER) {
+                dx = (e->real_w - text_w) * 0.5f;
+            } else if (e->align == ALIGN_RIGHT) {
+                dx = e->real_w - text_w;
+            }
+            if (e->align != ALIGN_LEFT) {
+                dx -= layout->bbox.x0;
+            }
+            e->layout = layout;
+            e->dx = (int16_t)dx;
+            e->advance = (int16_t)layout->advance_x;
+            return;
+        }
+        rdpq_paragraph_free(layout);
+        nbytes = (int)strlen(text);
+    }
+    e->layout = rdpq_paragraph_build(
+        &(rdpq_textparms_t) {
+            .style_id = e->style,
+            .width = e->real_w,
+            .height = e->h,
+            .align = e->align,
+            .valign = e->valign,
+            .wrap = (e->real_w > 0) ? WRAP_ELLIPSES : WRAP_NONE,
+        },
+        e->font,
+        text,
+        &nbytes
+    );
+    e->dx = 0;
+    e->advance = (int16_t)e->layout->advance_x;
+}
+
 /**
  * @brief Draw already-escaped text inside a box given in logical coordinates.
  *
@@ -128,57 +216,53 @@ static const char *escape_text_codes (const char *text, char *buffer, size_t siz
  */
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     int real_w = (w > 0) ? px(x + w) - px(x) : 0;
-    if (real_w > 0) {
-        // libdragon cuts a line once its last glyph plus that glyph's advance passes the box, so text
-        // that fits (Dr. Mario 64) could still end in "...". Lay it out with room to spare and keep
-        // that layout when it really fits.
-        int nbytes = (int)strlen(text);
-        rdpq_paragraph_t *layout = rdpq_paragraph_build(
-            &(rdpq_textparms_t) {
-                .style_id = style,
-                .width = real_w + FIT_SLACK,
-                .height = h,
-                .valign = valign,
-                .wrap = WRAP_ELLIPSES,
-            },
-            launcher_font(font),
-            text,
-            &nbytes
-        );
-        float text_w = layout->bbox.x1 + 1 - layout->bbox.x0;
-        if (layout->nlines == 1 && text_w <= real_w) {
-            float dx = 0;
-            if (align == ALIGN_CENTER) {
-                dx = (real_w - text_w) * 0.5f;
-            } else if (align == ALIGN_RIGHT) {
-                dx = real_w - text_w;
-            }
-            if (align != ALIGN_LEFT) {
-                dx -= layout->bbox.x0;
-            }
-            rdpq_paragraph_render(layout, px(x) + (int)dx, y);
-            int advance = (int)layout->advance_x;
-            rdpq_paragraph_free(layout);
-            return logical_width(advance);
-        }
-        rdpq_paragraph_free(layout);
+    layout_entry_t key = {
+        .font = launcher_font(font), .style = style, .align = align, .valign = valign,
+        .real_w = (int16_t)real_w, .h = (int16_t)h,
+    };
+
+    // The main font is swapped in after startup, so its layouts aren't kept.
+    if (key.font == FNT_DEFAULT) {
+        layout_build(&key, text);
+        rdpq_paragraph_render(key.layout, px(x) + key.dx, y);
+        rdpq_paragraph_free(key.layout);
+        return logical_width(key.advance);
     }
-    rdpq_textmetrics_t metrics = rdpq_text_printn(
-        &(rdpq_textparms_t) {
-            .style_id = style,
-            .width = real_w,
-            .height = h,
-            .align = align,
-            .valign = valign,
-            .wrap = (real_w > 0) ? WRAP_ELLIPSES : WRAP_NONE,
-        },
-        launcher_font(font),
-        px(x),
-        y,
-        text,
-        strlen(text)
-    );
-    return logical_width((int)(metrics.advance_x));
+
+    uint32_t hash = text_hash(text);
+    layout_entry_t *e = NULL;
+    layout_entry_t *spare = NULL;   // An empty entry, else the one unused longest
+    for (int i = 0; i < LAYOUT_CACHE_SIZE; i++) {
+        layout_entry_t *c = &layout_cache[i];
+        if (!c->layout) {
+            if (!spare || spare->layout) {
+                spare = c;
+            }
+            continue;
+        }
+        if (c->hash == hash && c->font == key.font && c->style == key.style && c->align == key.align &&
+            c->valign == key.valign && c->real_w == key.real_w && c->h == key.h && strcmp(c->text, text) == 0) {
+            e = c;
+            break;
+        }
+        if (!spare || (spare->layout && c->last_used < spare->last_used)) {
+            spare = c;
+        }
+    }
+    if (!e) {
+        e = spare;
+        if (e->layout) {
+            rdpq_paragraph_free(e->layout);
+        }
+        free(e->text);
+        *e = key;
+        e->text = strdup(text);
+        e->hash = hash;
+        layout_build(e, text);
+    }
+    e->last_used = ++layout_clock;
+    rdpq_paragraph_render(e->layout, px(x) + e->dx, y);
+    return logical_width(e->advance);
 }
 
 /**
