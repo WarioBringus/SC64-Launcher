@@ -376,19 +376,32 @@ def main():
     if os.path.isdir(args.metadata):
         by_crc, by_name = gamemeta.load_dats(args.metadata)
         cache = gamemeta.CrcCache(args.crc_cache)
-        matched = 0
+        details = {}
         for i, rom in enumerate(sorted(roms, key=lambda s: s.encode('utf-8'))):
             d = gamemeta.match(rom, cache.get(rom, card + rom), by_crc, by_name)
             if (i + 1) % 50 == 0:
                 print('  checked %d / %d ROMs for game details' % (i + 1, len(roms)))
                 cache.save()
             if d:
-                matched += 1
-                meta_lines.append('M\t%s\t%s\t%s\t%s\t%s\t%s' % (rom, gamemeta.clean(d.get('genre')), gamemeta.clean(d.get('developer')),
-                                                             gamemeta.clean(d.get('year')), gamemeta.clean(d.get('players')),
-                                                             gamemeta.clean(d.get('publisher'))))
+                details[rom] = d
         cache.save()
-        print('Game details found for %d / %d ROMs' % (matched, len(roms)))
+        matched = len(details)
+        # A ROM hack (or other unlisted ROM) that shares its cover with a listed game takes that game's details.
+        by_cover = {}
+        for rom, d in details.items():
+            if rom_cover[rom]:
+                by_cover.setdefault(rom_cover[rom], d)
+        borrowed = 0
+        for rom in roms:
+            if rom not in details and rom_cover[rom] in by_cover:
+                details[rom] = by_cover[rom_cover[rom]]
+                borrowed += 1
+        for rom in sorted(details, key=lambda s: s.encode('utf-8')):
+            d = details[rom]
+            meta_lines.append('M\t%s\t%s\t%s\t%s\t%s\t%s' % (rom, gamemeta.clean(d.get('genre')), gamemeta.clean(d.get('developer')),
+                                                         gamemeta.clean(d.get('year')), gamemeta.clean(d.get('players')),
+                                                         gamemeta.clean(d.get('publisher'))))
+        print('Game details found for %d / %d ROMs, and %d more from the game whose cover they share' % (matched, len(roms), borrowed))
     else:
         print('No game details at %s, so sorting by genre/developer/year/players will be empty.' % args.metadata)
 
