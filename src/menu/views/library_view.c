@@ -207,12 +207,24 @@ static void set_category (menu_t *menu, int index) {
     }
 }
 
+/** @brief A game's group for the current sort, as a hash of its label: worked out once per sort order. */
+static uint32_t group_key (library_game_t *game) {
+    if (game->group_sort != current_sort + 1) {
+        char label[48];
+        library_game_group(game, current_sort, label, sizeof(label));
+        uint32_t hash = 2166136261u;    // FNV-1a
+        for (const char *p = label; *p; p++) {
+            hash = (hash ^ (uint8_t)*p) * 16777619u;
+        }
+        game->group_key = hash;
+        game->group_sort = current_sort + 1;
+    }
+    return game->group_key;
+}
+
 /** @brief Whether two games fall in the same group for the current sort. */
 static bool same_group (library_game_t *a, library_game_t *b) {
-    char ga[48], gb[48];
-    library_game_group(a, current_sort, ga, sizeof(ga));
-    library_game_group(b, current_sort, gb, sizeof(gb));
-    return strcmp(ga, gb) == 0;
+    return group_key(a) == group_key(b);
 }
 
 /** @brief First game of the group containing sel. */

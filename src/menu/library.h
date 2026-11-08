@@ -31,6 +31,8 @@ typedef struct {
     const char *year;
     int players;                /**< Maximum players, 0 when unknown */
     uint8_t spine_width;        /**< Shelf spine width once worked out (library_game_spine_width), else 0 */
+    int8_t group_sort;          /**< Sort order group_key was worked out for, plus one (0 = not yet) */
+    uint32_t group_key;         /**< Hash of the game's group label (library_game_group) for that order */
     uint32_t favorite_generation; /**< launcher_favorites_generation() when favorite was worked out */
     bool favorite;              /**< In the favorites (valid when favorite_generation is current) */
     uint32_t hidden_generation; /**< Hidden list version when hidden was worked out */
