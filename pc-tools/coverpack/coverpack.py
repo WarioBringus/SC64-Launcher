@@ -176,7 +176,13 @@ def main():
     ap.add_argument('--crc-cache', default='C:/n64/cache/rom_crc.json')
     ap.add_argument('--thumb-cache', default='C:/n64/cache/thumbs',
                     help='folder for scaled covers kept between runs')
+    ap.add_argument('--wide-only', action='store_true',
+                    help='only the 16:9 packs (about half the space); in 4:3 the menu then decodes covers itself, slowly')
     args = ap.parse_args()
+    global PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK
+    if args.wide_only:
+        PACKS = [p for p in PACKS if p[1].endswith('_w')]
+        SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK = SPINE_PACKS[1:], SPINE_UPRIGHT[1:], SPINE_FALLBACK[1:]
     card = args.card.rstrip('/\\') + '/'
     menu_dir = card + 'menu'
     out_dir = menu_dir + '/cache/launcher'
@@ -293,7 +299,7 @@ def main():
             for (_, name), blob in zip(SPINE_PACKS, cached):
                 spine_blobs[name][i] = blob
             # The width it stands for on the 16:9 pack ("CVW1" header) is even, as the menu draws it.
-            wide = cached[1]
+            wide = cached[-1]
             spine_widths[i] = struct.unpack('>H', wide[8:10])[0] if wide[:4] == b'CVW1' else 0
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -353,6 +359,12 @@ def main():
             f.write(data)
         os.replace(path + '.tmp', path)
         total += os.path.getsize(path)
+    # Packs no longer built (an old size, or 4:3 packs after --wide-only) would be read as current.
+    written = {'covers_%s.pak' % name for name, _ in all_packs}
+    for old in sorted(os.listdir(out_dir)):
+        if old.startswith('covers_') and old.endswith('.pak') and old not in written:
+            os.remove(os.path.join(out_dir, old))
+            print('Removed %s (no longer built)' % old)
     if packs_current:
         print('Covers unchanged: packs left as they are.')
     else:

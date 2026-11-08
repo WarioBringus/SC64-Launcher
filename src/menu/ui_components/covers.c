@@ -267,6 +267,32 @@ surface_t *launcher_cover_larger (surface_t *shown, int max_w, int max_h) {
         int id = -1;
         cover_pack_t *pack = pack_lookup(s->path, max_w, max_h, &id);
         surface_t *image = pack ? pack_read(pack, id, max_w, max_h) : NULL;
+        if (!pack) {
+            // Packs built for 16:9 only (coverpack --wide-only): widen the squeezed cover back.
+            int logical_w = 0;
+            pack = pack_lookup_kind(s->path, max_w, max_h, true, &id);
+            surface_t *squeezed = pack ? pack_read_wide(pack, id, max_w, max_h, &logical_w) : NULL;
+            if (squeezed && logical_w > 0) {
+                image = calloc(1, sizeof(surface_t));
+                *image = surface_alloc(FMT_RGBA16, logical_w, squeezed->height);
+                if (image->buffer) {
+                    for (int y = 0; y < squeezed->height; y++) {
+                        uint16_t *from = (uint16_t *)((uint8_t *)squeezed->buffer + y * squeezed->stride);
+                        uint16_t *to = (uint16_t *)((uint8_t *)image->buffer + y * image->stride);
+                        for (int x = 0; x < logical_w; x++) {
+                            to[x] = from[(x * squeezed->width) / logical_w];
+                        }
+                    }
+                } else {
+                    free(image);
+                    image = NULL;
+                }
+            }
+            if (squeezed) {
+                surface_free(squeezed);
+                free(squeezed);
+            }
+        }
         even_size(image);
         return image;
     }
