@@ -1345,6 +1345,7 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
 #define SHELF_STAR_RISE     (12)    /* A favorite's star, this far above the foot of its spine */
 #define SHELF_READ_AHEAD    (12)    /* Spines read beyond each screen edge while the shelf rests */
 #define SHELF_BOX_AHEAD     (2)     /* Open-box covers read either side of the selection */
+#define SHELF_REST_MS       (200)   /* Read-ahead waits until the selection has rested this long */
 #define SHELF_GAP           (3)
 #define SHELF_OPEN_GAP      (10)    /* Space either side of the open box */
 #define SHELF_TITLE_Y       (SHELF_BASE_Y + 26)
@@ -1515,8 +1516,17 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     }
 
     // At rest, get ready what comes next, nearest first: the boxes either side, the spines just off
-    // screen, then the boxes a C jump lands on. Reads stay within each frame's budget.
-    if (!front_pending && shelf_position == (float)sel && !launcher_transition_running()) {
+    // screen, then the boxes a C jump lands on. Reads stay within each frame's budget. Holding the
+    // stick settles the shelf between steps, so it waits for a real rest: reading then cost frames.
+    static int rest_key = -1;
+    static uint64_t rest_since_ms = 0;
+    int key = category_index * 100000 + sel;
+    if (key != rest_key) {
+        rest_key = key;
+        rest_since_ms = get_ticks_ms();
+    }
+    bool resting = (get_ticks_ms() - rest_since_ms) >= SHELF_REST_MS;
+    if (resting && !front_pending && shelf_position == (float)sel && !launcher_transition_running()) {
         bool any_pending = false;
         for (int d = 1; d <= SHELF_BOX_AHEAD; d++) {
             for (int side = -1; side <= 1; side += 2) {
