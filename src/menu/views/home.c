@@ -49,6 +49,7 @@ static const launcher_hint_t hints_empty[] = {
 
 #define REVEAL_TIMEOUT_MS   (2500)  /* The first Home shows by then even if covers are still loading */
 #define REVEAL_LOOKUPS      (64)    /* Cover lookups per frame while it's hidden */
+#define REVEAL_FADE_MS      (450)   /* Then it fades in from black over this long */
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
@@ -203,6 +204,7 @@ static const char *item_cover (menu_t *menu, home_item_t *h, int *lookups_left, 
  */
 typedef enum {
     REVEAL_HIDDEN,
+    REVEAL_FADING,
     REVEAL_SHOWN,
 } reveal_t;
 
@@ -450,9 +452,20 @@ static void draw (menu_t *menu, surface_t *d) {
         reveal_frames++;
         bool timed_out = (get_ticks_ms() - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
         if ((reveal_frames > 2 && !covers_pending) || timed_out) {
+            reveal = REVEAL_FADING;
+            reveal_since_ms = get_ticks_ms();
+        }
+    }
+    if (reveal == REVEAL_HIDDEN) {
+        launcher_draw_screen_fade(255);
+    } else if (reveal == REVEAL_FADING) {
+        // Black to Home, easing out (quick at first, settling gently).
+        float t = (float)(get_ticks_ms() - reveal_since_ms) / REVEAL_FADE_MS;
+        if (t >= 1.0f) {
             reveal = REVEAL_SHOWN;
         } else {
-            launcher_draw_screen_fade(255);
+            float e = (1.0f - t) * (1.0f - t);
+            launcher_draw_screen_fade((int)(255 * e + 0.5f));
         }
     }
 
