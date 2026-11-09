@@ -277,10 +277,6 @@ void sound_bgm_next (void) {
     }
 }
 
-int sound_bgm_track_count (void) {
-    return bgm_track_count;
-}
-
 void sound_bgm_set_paused (bool paused) {
     if (!sound_initialized || !bgm_opened || !bgm_enabled || bgm_faded || paused == bgm_paused) {
         return;

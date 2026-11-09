@@ -123,11 +123,6 @@ void sound_bgm_set_volume(int level);
  */
 void sound_bgm_next(void);
 
-/**
- * @brief Number of playable tracks found in the music folder.
- */
-int sound_bgm_track_count(void);
-
 /** @brief Pause (hold silent where it is) or resume the background music. */
 void sound_bgm_set_paused(bool paused);
 
