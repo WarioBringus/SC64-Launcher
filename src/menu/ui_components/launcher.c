@@ -1680,11 +1680,18 @@ static void blit_filtered (surface_t *source, int rx, int y, int real_w, int h) 
  */
 static void blit_cover (surface_t *image, int x, int y) {
     // Covers keep a 1-bit alpha (e.g. the arch above a cartridge label); transparent pixels are skipped.
-    surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
+    surface_t *squeezed = launcher_cover_physical(image);
     rdpq_mode_push();
-    if (squeezed) {
+    if (squeezed && widescreen) {
         rdpq_set_mode_copy(true);
         rdpq_tex_blit(squeezed, px(x), y, NULL);
+    } else if (squeezed) {
+        // 4:3 with packs built for 16:9 only (coverpack --wide-only): the squeezed cover widened back as it is drawn,
+        // rather than every cover decoded from its PNG (which made covers very slow on a 4:3 screen).
+        rdpq_set_mode_standard();
+        rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
+        blit_filtered(squeezed, px(x), y, image->width, image->height);
     } else if (widescreen) {
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
@@ -1702,7 +1709,7 @@ static void blit_cover (surface_t *image, int x, int y) {
  * launcher_draw_ring's inner edge begins, as a copied cover does.
  */
 static void blit_cover_resized (surface_t *image, int x, int y, int w, int h) {
-    surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
+    surface_t *squeezed = launcher_cover_physical(image);   // In 4:3 too: resized to the 4:3 width.
     surface_t *source = squeezed ? squeezed : image;
     int real_w = real_cover_width(w);
     rdpq_mode_push();
@@ -1782,7 +1789,7 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
         rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
         // A cover from a 16:9 pack is squeezed already: resize it as is. Its width is the one the corner
         // masks below use, so they meet its edges.
-        surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
+        surface_t *squeezed = launcher_cover_physical(image);
         blit_filtered(squeezed ? squeezed : image, px(dx), dy, real_cover_width(dw), dh);
     rdpq_mode_pop();
     mask_corners(dx, dy, dx + dw, dy + dh, (int)(TILE_RADIUS * scale + 0.5f), behind);

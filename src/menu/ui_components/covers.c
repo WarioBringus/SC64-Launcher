@@ -23,7 +23,7 @@
 #define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps: a pack that didn't open */
 #define COVER_RETRY_FRAMES      (20)    /* A cover that didn't load is tried again this soon (a third of a second) */
 #define BACKGROUND_READ_FRAMES  (3)     /* Read-ahead reads at most one cover this many frames apart */
-#define MAX_PACKS               (24)    /* 10 cover sizes and the spines, each as is and squeezed for 16:9 */
+#define MAX_PACKS               (32)    /* 13 sizes, each as is and squeezed for 16:9 (a 4:3 screen looks both up) */
 /* Memory for decoded covers: what the slots held when every cover was at most 158x112, so the
    carousel's and shelf's larger covers never take more than covers did before. */
 #define COVER_BYTES_PER_SLOT    (LAUNCHER_COVER_W * LAUNCHER_COVER_H * 2)
@@ -244,10 +244,8 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
 }
 
 bool launcher_covers_have_pack (const char *storage_prefix, int w, int h) {
-    if (launcher_is_widescreen() && pack_for(storage_prefix, w, h, true)) {
-        return true;
-    }
-    return pack_for(storage_prefix, w, h, false) != NULL;
+    // Either kind: a 4:3 screen draws covers from the 16:9 packs when there are no others.
+    return pack_for(storage_prefix, w, h, true) || pack_for(storage_prefix, w, h, false);
 }
 
 /* Grid tile sizes by Look > Tile size (landscape, then portrait: library_view.c grid_geometry) */
@@ -898,6 +896,11 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     bool wide_pack = (pack != NULL);
     if (!pack) {
         pack = pack_lookup(path, max_w, max_h, &id);
+    }
+    if (!pack && !want_wide) {
+        // 4:3 with packs built for 16:9 only: the squeezed cover, widened as it is drawn, beats decoding the PNG.
+        pack = pack_lookup_kind(path, max_w, max_h, true, &id);
+        wide_pack = (pack != NULL);
     }
     if (!pack && spine) {
         if (pending) {
