@@ -955,8 +955,13 @@ void launcher_clock_text (menu_t *menu, char *buffer, size_t size) {
 
 void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t color) {
     int straight = (x_top < x_bottom) ? x_top : x_bottom;
-    flat_begin(color);
+    // The large straight part in fill mode, which the RDP draws about four times faster (Spotlight's panel is
+    // half the screen; in the performance log the blended fill cost ~2 ms a frame).
+    rdpq_mode_push();
+    rdpq_set_mode_fill(color);
     rdpq_fill_rectangle(0, y0, px(straight), y1);
+    rdpq_mode_pop();
+    flat_begin(color);
     // The slanted part: a triangle between the two right ends.
     float a[] = { px(straight), y0 }, b[] = { px(x_top), y0 }, c[] = { px(x_bottom), y1 }, d[] = { px(straight), y1 };
     if (x_top > x_bottom) {
