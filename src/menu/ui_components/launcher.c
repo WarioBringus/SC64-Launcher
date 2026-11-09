@@ -836,16 +836,28 @@ void launcher_transition_content_begin (int y0) {
         return;
     }
     static uint64_t last_frame_ms = 0;
+    static uint64_t began_ms = 0;
+    static int frames = 0;
+    static uint64_t slowest_ms = 0;
     uint64_t now = get_ticks_ms();
     if (transition_start_ms == 0) {
         transition_start_ms = now;
-    } else if (now - last_frame_ms > 50) {
-        transition_start_ms += (now - last_frame_ms) - 16;     // A slow frame pauses the slide rather than skipping it.
+        began_ms = now;
+        frames = 0;
+        slowest_ms = 0;
+    } else {
+        slowest_ms = (now - last_frame_ms > slowest_ms) ? now - last_frame_ms : slowest_ms;
+        if (now - last_frame_ms > 50) {
+            transition_start_ms += (now - last_frame_ms) - 16;     // A slow frame pauses the slide rather than skipping it.
+        }
     }
     last_frame_ms = now;
+    frames++;
     float t = fminf(1.0f, (float)(now - transition_start_ms) / TRANSITION_MS);
     if (t >= 1.0f) {
         transition_pending = false;
+        perf_log_event("screen transition (%s): %d frames over %lu ms, slowest frame %lu ms",
+            transition_dir == 0 ? "fade" : "slide", frames, (unsigned long)(now - began_ms), (unsigned long)slowest_ms);
         return;
     }
     float e = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);

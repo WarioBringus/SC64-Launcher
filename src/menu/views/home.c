@@ -217,6 +217,9 @@ static int reveal_frames = 0;
 static int reveal_steady = 0;           /* Quick frames in a row while hidden */
 static uint64_t reveal_last_ms = 0;     /* When the last frame was drawn */
 static float reveal_fade_ms = 0.0f;     /* How far the fade has got */
+static int fade_frames = 0;             /* For the performance log: the fade's frames... */
+static uint64_t fade_slowest_ms = 0;    /* ...its slowest... */
+static uint64_t fade_started_ms = 0;    /* ...and when it began */
 static bool covers_pending = false;     /* A cover drawn this frame is still loading */
 
 static surface_t *item_image (menu_t *menu, home_item_t *h, int w, int hgt, int *lookups_left, bool *pending) {
@@ -469,9 +472,14 @@ static void draw (menu_t *menu, surface_t *d) {
         if ((reveal_steady >= REVEAL_STEADY_FRAMES && !covers_pending) || timed_out) {
             reveal = REVEAL_FADING;
             reveal_fade_ms = 0.0f;
+            fade_started_ms = now_ms;
+            perf_log_event("startup Home hidden for %lu ms (%d frames, %s)", (unsigned long)(now_ms - reveal_since_ms),
+                reveal_frames, timed_out ? "timed out" : "covers in, frames steady");
         }
     } else if (reveal == REVEAL_FADING) {
         reveal_fade_ms += (frame_ms < REVEAL_STEP_MS) ? frame_ms : REVEAL_STEP_MS;
+        fade_frames++;
+        fade_slowest_ms = (frame_ms > fade_slowest_ms) ? frame_ms : fade_slowest_ms;
     }
     if (reveal == REVEAL_HIDDEN) {
         launcher_draw_screen_fade(255);
@@ -480,6 +488,8 @@ static void draw (menu_t *menu, surface_t *d) {
         float t = reveal_fade_ms / REVEAL_FADE_MS;
         if (t >= 1.0f) {
             reveal = REVEAL_SHOWN;
+            perf_log_event("startup fade-in: %d frames over %lu ms, slowest frame %lu ms", fade_frames,
+                (unsigned long)(now_ms - fade_started_ms), (unsigned long)fade_slowest_ms);
         } else {
             float e = (1.0f - t) * (1.0f - t);
             launcher_draw_screen_fade((int)(255 * e + 0.5f));
