@@ -933,6 +933,59 @@ static void draw_tiles (menu_t *menu, int *lookups_left) {
     }
 }
 
+/* Cartridge: the game to resume and the recently played as cartridges on a band, Favorites below. */
+#define CART_BAND_H         (150)
+#define CART_W              (LAUNCHER_COVER_W)
+#define CART_H              (LAUNCHER_COVER_H)
+#define CART_STEP           (LAUNCHER_COVER_W + 20)
+#define CART_ROW_W          (87)
+#define CART_ROW_H          (61)
+#define CART_ROW_STEP       (97)
+
+static strip_t cart_band_strip;
+static strip_t cart_row_strip;
+
+static void draw_cartridge (menu_t *menu, int *lookups_left) {
+    const theme_t *t = theme_current();
+    int y0 = CONTENT_TOP + 4;
+    int y1 = y0 + CART_BAND_H;
+    launcher_fill_rounded(LAUNCHER_X0, y0, LAUNCHER_X1, y1, CARD_RADIUS, t->panel);
+
+    game_ref_t band[MAX_ROW_ITEMS + 1];
+    int band_n = refs_add(band, 0, MAX_ROW_ITEMS + 1, row_of_kind(ROW_RESUME));
+    band_n = refs_add(band, band_n, MAX_ROW_ITEMS + 1, row_of_kind(ROW_RECENT));
+    // Cartridges are cut off at the band's right end (the left edge of a scissor must stay at 0: see draw).
+    rdpq_set_scissor(0, y0, launcher_px(LAUNCHER_X1 - 8), y1);
+    draw_strip(menu, band, band_n, LAUNCHER_X0 + 20, LAUNCHER_X1 - 20, y0 + (CART_BAND_H - CART_H) / 2, CART_W, CART_H,
+        CART_STEP, &cart_band_strip, t->panel, lookups_left);
+    clip_none();
+
+    // The focused game's name and where it's from, under the band.
+    home_item_t *f = focused_item();
+    if (f) {
+        int ty = y1 + 10;
+        launcher_title(LAUNCHER_X0 + 6, ty, LAUNCHER_WIDTH - 12, ALIGN_LEFT, STL_DEFAULT, f->title);
+        char line[200], details[160];
+        library_details_for_path(menu, item_path(f), details, sizeof(details));
+        const char *kind = (rows[row_selected].kind == ROW_RESUME) ? "Resume" :
+            ((rows[row_selected].kind == ROW_RECENT) ? "Recently played" : "Favorite");
+        snprintf(line, sizeof(line), "%s%s%s", kind, details[0] ? "  -  " : "", details);
+        launcher_game_details(LAUNCHER_X0 + 6, ty + 36, LAUNCHER_WIDTH - 12, ALIGN_LEFT, STL_GRAY, line);
+    }
+
+    int fav = row_of_kind(ROW_FAVORITES);
+    if (fav >= 0) {
+        int ly = y1 + 76;
+        game_ref_t refs[MAX_ROW_ITEMS];
+        int n = refs_add(refs, 0, MAX_ROW_ITEMS, fav);
+        launcher_text(LAUNCHER_X0, ly, 0, ALIGN_LEFT, refs_focus(refs, n) >= 0 ? STL_DEFAULT : STL_GRAY, "Favorites");
+        clip_content();
+        draw_strip(menu, refs, n, LAUNCHER_X0, LAUNCHER_X1, ly + 24, CART_ROW_W, CART_ROW_H, CART_ROW_STEP,
+            &cart_row_strip, t->bg, lookups_left);
+        clip_none();
+    }
+}
+
 /** @brief Draw Home in one of the new styles (not Classic). */
 static void draw_styled (menu_t *menu, int style, int *lookups_left) {
     slot_total = 0;
@@ -940,6 +993,9 @@ static void draw_styled (menu_t *menu, int style, int *lookups_left) {
         library_focused = false;
     }
     switch (style) {
+        case LAUNCHER_HOME_CARTRIDGE:
+            draw_cartridge(menu, lookups_left);
+            break;
         case LAUNCHER_HOME_TILES:
             draw_tiles(menu, lookups_left);
             break;
@@ -1111,7 +1167,8 @@ void view_home_init (menu_t *menu) {
 void view_home_display (menu_t *menu, surface_t *display) {
     launcher_set_widescreen(menu->settings.launcher_widescreen);
     launcher_set_large_text(menu->settings.launcher_large_text);
-    launcher_set_cartridge_art(menu->settings.launcher_cartridge_art);
+    launcher_set_cartridge_art(menu->settings.launcher_cartridge_art ||
+        menu->settings.launcher_home_style == LAUNCHER_HOME_CARTRIDGE);
     launcher_track_idle(menu);
     static int last_style = -1;
     if (menu->settings.launcher_home_style != last_style) {

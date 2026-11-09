@@ -1452,7 +1452,7 @@ static int get_layout_selection (menu_t *menu) {
 }
 
 /* Home style menu rows, in order (-1 ends): */
-static const int home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_MINIMAL, LAUNCHER_HOME_TILES, -1 };
+static const int home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_CARTRIDGE, LAUNCHER_HOME_MINIMAL, LAUNCHER_HOME_TILES, -1 };
 
 static void set_home_style (menu_t *menu, void *arg) {
     menu->settings.launcher_home_style = (int)(uintptr_t)(arg);
@@ -1474,6 +1474,7 @@ static component_context_menu_t home_style_menu = {
     .list = {
         { .text = "Classic", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CLASSIC) },
         { .text = "Spotlight", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_SPOTLIGHT) },
+        { .text = "Cartridge", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CARTRIDGE) },
         { .text = "Minimal", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_MINIMAL) },
         { .text = "Tiles", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_TILES) },
         COMPONENT_CONTEXT_MENU_LIST_END,
