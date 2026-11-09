@@ -202,6 +202,8 @@ static void draw (menu_t *menu, surface_t *d) {
         strftime(clock, sizeof(clock), "%I:%M %p", t);
         launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock[0] == '0' ? clock + 1 : clock);
     }
+    // The song, top left level with the clock: the covers reach under the clock's corner as they move.
+    launcher_draw_now_playing(LAUNCHER_X0, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH / 2, ALIGN_LEFT);
     launcher_small(LAUNCHER_X0, HINT_Y, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Press any button");
 
     rdpq_detach_show();

@@ -333,6 +333,9 @@ void launcher_set_header_style(launcher_header_style_t style);
  */
 void launcher_draw_notes(int x, int y, int width, rdpq_align_t align);
 
+/** @brief The "Now playing" note alone, for a few seconds after a track starts (wallpaper mode). */
+void launcher_draw_now_playing(int x, int y, int width, rdpq_align_t align);
+
 /** @brief Leave out the separator line above the hints in the next launcher_draw_footer. */
 void launcher_hide_footer_line(void);
 

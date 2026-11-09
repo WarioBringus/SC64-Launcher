@@ -1085,6 +1085,10 @@ static void draw_new_games_notice_at (int x, int y, int width, rdpq_align_t alig
     launcher_small(x, y, width, align, STL_ACCENT, text);
 }
 
+void launcher_draw_now_playing (int x, int y, int width, rdpq_align_t align) {
+    draw_now_playing_at(x, y, width, align);
+}
+
 void launcher_draw_notes (int x, int y, int width, rdpq_align_t align) {
     // The music note takes the spot for its few seconds; the new games notice comes back after.
     if (!draw_now_playing_at(x, y, width, align)) {
