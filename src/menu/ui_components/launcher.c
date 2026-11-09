@@ -943,22 +943,29 @@ void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t col
     flat_end();
 }
 
+#define CORNER_GAP          (22)    /* Between the corner header's words, with a dot in the middle */
+
 /** @brief Home  ·  Library  ·  clock, right-aligned at the top. */
 static void draw_header_corner (menu_t *menu, launcher_tab_t active) {
     char clock[16];
     launcher_clock_text(menu, clock, sizeof(clock));
-    const char *parts[5] = { "Home", "  -  ", "Library", clock[0] ? "  -  " : "", clock };
-    int widths[5], total = 0;
-    for (int i = 0; i < 5; i++) {
-        widths[i] = parts[i][0] ? text_width(parts[i]) + 2 : 0;
-        total += widths[i];
+    // Separate words and drawn dots: a separator string's spaces aren't measured, which overlapped the words.
+    const char *parts[3] = { "Home", "Library", clock };
+    int count = clock[0] ? 3 : 2;
+    int widths[3], total = 0;
+    for (int i = 0; i < count; i++) {
+        widths[i] = text_width(parts[i]) + 2;
+        total += widths[i] + (i > 0 ? CORNER_GAP : 0);
     }
     int x = LAUNCHER_X1 - total;
-    for (int i = 0; i < 5; i++) {
-        bool on = (i == 0 && active == LAUNCHER_TAB_HOME) || (i == 2 && active == LAUNCHER_TAB_LIBRARY);
-        if (widths[i]) {
-            launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, on ? STL_DEFAULT : STL_GRAY, "%s", parts[i]);
+    for (int i = 0; i < count; i++) {
+        if (i > 0) {
+            int cx = x + CORNER_GAP / 2;
+            launcher_fill_rounded(cx - 2, LAUNCHER_HEADER_Y + 8, cx + 2, LAUNCHER_HEADER_Y + 12, 2, theme_current()->text_muted);
+            x += CORNER_GAP;
         }
+        bool on = (i == 0 && active == LAUNCHER_TAB_HOME) || (i == 1 && active == LAUNCHER_TAB_LIBRARY);
+        launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, on ? STL_DEFAULT : STL_GRAY, "%s", parts[i]);
         x += widths[i];
     }
 }
