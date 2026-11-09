@@ -142,6 +142,17 @@ def save_fronts(args, menu, front_for):
         return local if size and 0.5 <= min(size) / max(size) <= 0.95 else None
 
     for cover, candidates in sorted(front_for.items()):
+        dest = os.path.join(args.hires, cover)
+        marker = dest + '.source'
+        # Decided on an earlier run (the marker names the front used, or is empty when none was the card's box): kept
+        # as is, so the downloaded originals needn't stay on the PC. Delete the markers to decide again.
+        if os.path.exists(marker):
+            used = open(marker).read()
+            if used and os.path.exists(dest) and used in candidates:
+                continue
+            if not used and not os.path.exists(dest):
+                different += 1
+                continue
         # The preferred front if it is the card's box; otherwise whichever of the others is closest.
         chosen, best = None, None
         for n, f in enumerate(candidates):
@@ -153,12 +164,11 @@ def save_fronts(args, menu, front_for):
                 chosen, best = (f, local, n), d
             if d <= SAME_BOX_DIFFERENCE:
                 break
-        dest = os.path.join(args.hires, cover)
-        marker = dest + '.source'
         if chosen is None or best > SAME_BOX_DIFFERENCE:
-            for path in (dest, marker):
-                if os.path.exists(path):
-                    os.remove(path)
+            if os.path.exists(dest):
+                os.remove(dest)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            open(marker, 'w').write('')     # None of them: not looked at again.
             different += 1
             continue
         f, local, n = chosen
