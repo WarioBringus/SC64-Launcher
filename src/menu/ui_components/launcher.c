@@ -1451,6 +1451,33 @@ static int get_layout_selection (menu_t *menu) {
     return menu->settings.launcher_layout;
 }
 
+/* Home style menu rows, in order (-1 ends): */
+static const int home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_MINIMAL, -1 };
+
+static void set_home_style (menu_t *menu, void *arg) {
+    menu->settings.launcher_home_style = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_home_style_selection (menu_t *menu) {
+    // The list's order isn't the setting's numbering: find the row.
+    for (int i = 0; home_style_values[i] >= 0; i++) {
+        if (home_style_values[i] == menu->settings.launcher_home_style) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+static component_context_menu_t home_style_menu = {
+    .get_default_selection = get_home_style_selection,
+    .list = {
+        { .text = "Classic", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CLASSIC) },
+        { .text = "Minimal", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_MINIMAL) },
+        COMPONENT_CONTEXT_MENU_LIST_END,
+    }
+};
+
 static component_context_menu_t layout_menu = {
     .get_default_selection = get_layout_selection,
     .list = {
@@ -1545,6 +1572,7 @@ static char rescan_label[40] = "Rescan folders";
 static char sort_label[40] = "Sort by";
 static char theme_label[48] = "Theme";
 static char layout_label[40] = "Layout";
+static char home_style_label[40] = "Home style";
 static char tile_size_label[40] = "Tile size";
 static char cover_style_label[40] = "Cover style";
 static char titles_label[48] = "Game titles";
@@ -1738,6 +1766,7 @@ static component_context_menu_t browse_menu = {
 static component_context_menu_t look_menu = {
     .list = {
         { .text = theme_label, .submenu = &theme_menu },
+        { .text = home_style_label, .submenu = &home_style_menu },
         { .text = layout_label, .submenu = &layout_menu },
         { .text = tile_size_label, .submenu = &tile_size_menu },
         { .text = cover_style_label, .submenu = &cover_style_menu },
@@ -1936,6 +1965,7 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     snprintf(sort_label, sizeof(sort_label), "Sort by: %s", current_choice(menu, &sort_menu));
     snprintf(theme_label, sizeof(theme_label), "Theme: %s", current_choice(menu, &theme_menu));
     snprintf(layout_label, sizeof(layout_label), "Layout: %s", current_choice(menu, &layout_menu));
+    snprintf(home_style_label, sizeof(home_style_label), "Home style: %s", current_choice(menu, &home_style_menu));
     snprintf(tile_size_label, sizeof(tile_size_label), "Tile size: %s", current_choice(menu, &tile_size_menu));
     snprintf(cover_style_label, sizeof(cover_style_label), "Cover style: %s", current_choice(menu, &cover_style_menu));
     snprintf(text_size_label, sizeof(text_size_label), "Text size: %s", current_choice(menu, &text_size_menu));

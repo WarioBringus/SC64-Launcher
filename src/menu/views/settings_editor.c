@@ -513,6 +513,30 @@ static component_context_menu_t set_launcher_home_favorites_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static const int launcher_home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_MINIMAL, -1 };
+
+static void set_launcher_home_style_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_home_style = (int)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_launcher_home_style_current_selection (menu_t *menu) {
+    for (int i = 0; launcher_home_style_values[i] >= 0; i++) {
+        if (launcher_home_style_values[i] == menu->settings.launcher_home_style) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+static component_context_menu_t set_launcher_home_style_context_menu = {
+    .get_default_selection = get_launcher_home_style_current_selection,
+    .list = {
+        {.text = "Classic", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CLASSIC) },
+        {.text = "Minimal", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_MINIMAL) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static int get_launcher_layout_current_selection (menu_t *menu) {
     return menu->settings.launcher_layout;
 }
@@ -698,6 +722,7 @@ static const settings_row_t settings_rows[] = {
     { .label = "Theme", .choices = &set_theme_context_menu },
     { .label = "Screen", .choices = &set_launcher_widescreen_context_menu,
       .note = "16:9 suits a TV set to stretch the picture; games are stretched too" },
+    { .label = "Home style", .choices = &set_launcher_home_style_context_menu },
     { .label = "Library layout", .choices = &set_launcher_layout_context_menu },
     { .label = "Tile size", .choices = &set_launcher_tile_size_context_menu },
     { .label = "Game titles", .choices = &set_launcher_titles_highlight_only_context_menu },

@@ -45,6 +45,7 @@ static settings_t init = {
     .launcher_category = "USA",
     .launcher_layout = LAUNCHER_LAYOUT_GRID,
     .launcher_tile_size = LAUNCHER_TILE_MEDIUM,
+    .launcher_home_style = LAUNCHER_HOME_CLASSIC,
     .launcher_sort = LAUNCHER_SORT_TITLE,
     .launcher_widescreen = false,
     .launcher_quick_launch = false,
@@ -124,6 +125,7 @@ void settings_load (settings_t *settings) {
     settings->launcher_category = strdup(ini_get_string(ini, "launcher", "category", init.launcher_category));
     settings->launcher_layout = ini_get_int(ini, "launcher", "layout", init.launcher_layout);
     settings->launcher_tile_size = ini_get_int(ini, "launcher", "tile_size", init.launcher_tile_size);
+    settings->launcher_home_style = ini_get_int(ini, "launcher", "home_style", init.launcher_home_style);
     settings->launcher_sort = ini_get_int(ini, "launcher", "sort", init.launcher_sort);
     settings->launcher_widescreen = ini_get_bool(ini, "launcher", "widescreen", init.launcher_widescreen);
     settings->launcher_quick_launch = ini_get_bool(ini, "launcher", "quick_launch", init.launcher_quick_launch);
@@ -148,6 +150,9 @@ void settings_load (settings_t *settings) {
     }
     if (settings->launcher_tile_size < LAUNCHER_TILE_SMALL || settings->launcher_tile_size > LAUNCHER_TILE_LARGE) {
         settings->launcher_tile_size = init.launcher_tile_size;
+    }
+    if (settings->launcher_home_style < LAUNCHER_HOME_CLASSIC || settings->launcher_home_style > LAUNCHER_HOME_TILES) {
+        settings->launcher_home_style = init.launcher_home_style;
     }
 
     ini_free(ini);
@@ -193,6 +198,7 @@ void settings_save (settings_t *settings) {
     ini_set_string(ini, "launcher", "category", settings->launcher_category);
     ini_set_int(ini, "launcher", "layout", settings->launcher_layout);
     ini_set_int(ini, "launcher", "tile_size", settings->launcher_tile_size);
+    ini_set_int(ini, "launcher", "home_style", settings->launcher_home_style);
     ini_set_int(ini, "launcher", "sort", settings->launcher_sort);
     ini_set_bool(ini, "launcher", "widescreen", settings->launcher_widescreen);
     ini_set_bool(ini, "launcher", "quick_launch", settings->launcher_quick_launch);
