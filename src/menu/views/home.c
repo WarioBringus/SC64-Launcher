@@ -47,13 +47,13 @@ static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
-#define REVEAL_TIMEOUT_MS   (2500)  /* The first Home shows by then even if covers are still loading */
+#define REVEAL_TIMEOUT_MS   (3000)  /* The first Home shows by then even if covers are still loading */
 #define REVEAL_LOOKUPS      (64)    /* Cover lookups per frame while it's hidden */
 #define REVEAL_FADE_MS      (250)   /* Then it fades in from black over this long */
 #define REVEAL_STEADY_FRAMES (6)    /* ...once this many frames in a row came quickly (startup has settled) */
 #define REVEAL_STEADY_MS    (25)
-#define REVEAL_STEP_MS      (40)
-#define REVEAL_CHECK_US     (40000) /* While hidden, the new-ROM check runs this long a frame (music fills ~140 ms ahead) */    /* A frame moves the fade on by at most this much, so a hitch pauses it */
+#define REVEAL_STEP_MS      (40)    /* A frame moves the fade on by at most this much, so a hitch pauses it */
+#define REVEAL_CHECK_US     (40000) /* While hidden, the new-ROM check runs this long a frame (music fills ~140 ms ahead) */
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
@@ -216,6 +216,7 @@ static reveal_t reveal = REVEAL_HIDDEN;
 static uint64_t reveal_since_ms = 0;
 static int reveal_frames = 0;
 static int reveal_steady = 0;           /* Quick frames in a row while hidden */
+static bool folders_ready = false;      /* The other folders are listed and sorted (view_library_prepare_folders) */
 static uint64_t reveal_last_ms = 0;     /* When the last frame was drawn */
 static float reveal_fade_ms = 0.0f;     /* How far the fade has got */
 static int fade_frames = 0;             /* For the performance log: the fade's frames... */
@@ -489,7 +490,11 @@ static void draw (menu_t *menu, surface_t *d) {
         if (reveal_frames > 1 && !checked) {
             library_check_new_games(REVEAL_CHECK_US);
             checked = library_new_games_checked();
+        } else if (reveal_frames > 1 && !folders_ready) {
+            // Then the other folders are listed and sorted, one a frame, so the grid needn't do it later.
+            folders_ready = view_library_prepare_folders(menu);
         }
+        checked = checked && folders_ready;
         reveal_steady = (frame_ms > 0 && frame_ms <= REVEAL_STEADY_MS && checked) ? reveal_steady + 1 : 0;
         bool timed_out = (now_ms - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
         if ((reveal_steady >= REVEAL_STEADY_FRAMES && !covers_pending) || timed_out) {

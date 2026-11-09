@@ -1791,6 +1791,28 @@ void view_library_warm (menu_t *menu) {
     }
 }
 
+bool view_library_prepare_folders (menu_t *menu) {
+    // One folder a call: listing one reads the card (~40 ms for the larger folders) and sorting it takes more.
+    static int next = 0;
+    if (!category_restored) {
+        return false;
+    }
+    current_sort = menu->settings.launcher_sort;
+    int count = library_category_count();
+    while (next < count) {
+        int index = next++;
+        if (index == category_index || search_everywhere) {
+            continue;
+        }
+        library_category_t *c = library_category(index);
+        if (c) {
+            apply_sort(c, index);
+        }
+        return next >= count;
+    }
+    return true;
+}
+
 void view_library_preload (menu_t *menu, int *lookups_left) {
     if (category_restored && category_index < library_category_count() && library_category_is_quick(category_index)) {
         preload_category_covers(menu, category_index, lookups_left);

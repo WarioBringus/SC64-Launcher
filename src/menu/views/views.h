@@ -372,6 +372,9 @@ void view_library_warm(menu_t *menu);
  */
 void view_library_preload(menu_t *menu, int *lookups_left);
 
+/** @brief List and sort one more of the other folders (behind the hidden startup Home); true once all are ready. */
+bool view_library_prepare_folders(menu_t *menu);
+
 /**
  * @brief Display the launcher library view.
  *
