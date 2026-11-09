@@ -16,9 +16,10 @@
 
 #define COVER_SLOTS             (96)    /* With an Expansion Pak */
 #define COVER_SLOTS_4MB         (24)    /* Without one */
-/* Pack reads stop for the frame once this much time has gone on them (at least one read per frame),
-   so a screen full of new covers fills in over a few smooth frames instead of stalling one. */
-#define PACK_READ_BUDGET_US     (3500)
+/* A cover is read from its pack a piece at a time, at the start of each frame, until this much time has
+   gone on it: one whole cover (~10 ms for a grid cover) in one frame made that frame long. */
+#define STREAM_BUDGET_US        (4000)
+#define STREAM_CHUNK            (4096)
 #define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps */
 #define BACKGROUND_READ_FRAMES  (3)     /* Read-ahead reads at most one cover this many frames apart */
 #define MAX_PACKS               (24)    /* 10 cover sizes and the spines, each as is and squeezed for 16:9 */
@@ -52,6 +53,14 @@ typedef struct {
     uint32_t failed_frame;      /**< When it failed; it is retried after FAILED_RETRY_FRAMES */
     uint32_t last_used;
     size_t bytes;               /**< Pixel memory held */
+    /* While its pixels are being read from a pack (loading, and it is the slot being streamed): */
+    cover_pack_t *stream_pack;
+    surface_t *stream_surface;  /**< Being filled, rows packed together until the last piece */
+    uint32_t stream_pos;        /**< File offset of the next byte */
+    uint32_t stream_done;       /**< Bytes read so far */
+    uint32_t stream_total;
+    int stream_logical_w;       /**< 16:9 pack: the width the squeezed cover stands for; 0 for 4:3 */
+    uint32_t stream_us;         /**< Time spent reading it */
 } cover_slot_t;
 
 static cover_slot_t slots[COVER_SLOTS];
@@ -60,15 +69,11 @@ static uint32_t frame = 0;
 static bool decoding = false;
 static cover_pack_t packs[MAX_PACKS];
 static bool cartridge_art = false;
-static uint64_t pack_time_used_us = 0;
-static bool pack_read_this_frame = false;
+static cover_slot_t *streaming = NULL;     /* The cover whose pixels are being read, if any */
 static size_t bytes_used = 0;
 
 
-/** @brief Whether another pack read fits in this frame's budget (time spent reading packs only). */
-static bool pack_budget_left (void) {
-    return !pack_read_this_frame || pack_time_used_us < PACK_READ_BUDGET_US;
-}
+
 
 
 static uint32_t read_u32_be (const uint8_t *p) {
@@ -177,6 +182,125 @@ static cover_pack_t *pack_lookup (const char *path, int w, int h, int *id) {
 /**
  * @brief Read a cover from a 16:9 pack: the squeezed image, and the 4:3 width it stands for.
  */
+static void even_size(surface_t *image);
+static void slot_account(cover_slot_t *slot);
+
+/**
+ * @brief Start reading a cover from a pack into a slot: its header now (a small read), its pixels a piece
+ * per frame (stream_step). False when it isn't there or doesn't fit.
+ */
+static bool stream_begin (cover_slot_t *slot, cover_pack_t *p, int id, int w, int h, bool wide) {
+    uint8_t head[12];
+    int head_size = wide ? 12 : 8;
+    if (fseek(p->f, p->offsets[id], SEEK_SET) != 0 || fread(head, 1, head_size, p->f) != (size_t)head_size ||
+        memcmp(head, wide ? "CVW1" : "CVR1", 4) != 0) {
+        return false;
+    }
+    int iw = (head[4] << 8) | head[5];
+    int ih = (head[6] << 8) | head[7];
+    int logical_w = wide ? ((head[8] << 8) | head[9]) : iw;
+    if (iw <= 0 || ih <= 0 || logical_w > w || ih > h) {
+        return false;
+    }
+    surface_t *image = calloc(1, sizeof(surface_t));
+    if (!image) {
+        return false;
+    }
+    *image = surface_alloc(FMT_RGBA16, iw, ih);
+    if (!image->buffer) {
+        free(image);
+        return false;
+    }
+    slot->stream_pack = p;
+    slot->stream_surface = image;
+    slot->stream_pos = p->offsets[id] + head_size;
+    slot->stream_done = 0;
+    slot->stream_total = (uint32_t)iw * 2 * ih;
+    slot->stream_logical_w = wide ? logical_w : 0;
+    slot->stream_us = 0;
+    slot->loading = true;
+    streaming = slot;
+    return true;
+}
+
+static void stream_drop (cover_slot_t *slot) {
+    if (slot->stream_surface) {
+        surface_free(slot->stream_surface);
+        free(slot->stream_surface);
+    }
+    slot->stream_surface = NULL;
+    slot->stream_pack = NULL;
+    if (streaming == slot) {
+        streaming = NULL;
+    }
+}
+
+/** @brief Read more of the cover being streamed, for up to STREAM_BUDGET_US; hand it over when complete. */
+static void stream_step (void) {
+    cover_slot_t *slot = streaming;
+    if (!slot) {
+        return;
+    }
+    uint64_t started = get_ticks_us();
+    surface_t *image = slot->stream_surface;
+    bool ok = true;
+    while (slot->stream_done < slot->stream_total && get_ticks_us() - started < STREAM_BUDGET_US) {
+        uint32_t n = slot->stream_total - slot->stream_done;
+        if (n > STREAM_CHUNK) {
+            n = STREAM_CHUNK;
+        }
+        if (fseek(slot->stream_pack->f, slot->stream_pos, SEEK_SET) != 0 ||
+            fread((uint8_t *)image->buffer + slot->stream_done, 1, n, slot->stream_pack->f) != n) {
+            ok = false;
+            break;
+        }
+        slot->stream_pos += n;
+        slot->stream_done += n;
+    }
+    slot->stream_us += (uint32_t)(get_ticks_us() - started);
+    if (ok && slot->stream_done < slot->stream_total) {
+        return;     // More next frame.
+    }
+
+    streaming = NULL;
+    slot->loading = false;
+    if (!ok) {
+        stream_drop(slot);
+        slot->failed = true;
+        slot->failed_frame = frame;
+        return;
+    }
+    // Pixels arrive with rows packed together; spread them out if the surface pads its rows.
+    size_t row = (size_t)image->width * 2;
+    if ((size_t)image->stride != row) {
+        uint8_t *buffer = image->buffer;
+        for (int y = image->height - 1; y > 0; y--) {
+            memmove(buffer + y * image->stride, buffer + y * row, row);
+        }
+    }
+    if (slot->stream_logical_w > 0) {
+        surface_t *header = calloc(1, sizeof(surface_t));
+        if (!header) {
+            stream_drop(slot);
+            slot->failed = true;
+            slot->failed_frame = frame;
+            return;
+        }
+        *header = *image;
+        header->width = slot->stream_logical_w;
+        header->flags &= ~SURFACE_FLAGS_OWNEDBUFFER;
+        slot->wide = image;
+        slot->image = header;
+    } else {
+        even_size(image);
+        slot->image = image;
+    }
+    slot->stream_surface = NULL;
+    slot->stream_pack = NULL;
+    slot_account(slot);
+    perf_log_read((uint32_t)slot->bytes, slot->stream_us);
+}
+
 static surface_t *pack_read_wide (cover_pack_t *p, int id, int w, int h, int *logical_w) {
     uint8_t head[12];
     if (fseek(p->f, p->offsets[id], SEEK_SET) != 0 || fread(head, 1, sizeof(head), p->f) != sizeof(head) ||
@@ -348,7 +472,9 @@ static void decode_done (png_err_t err, surface_t *decoded_image, void *callback
 }
 
 static void slot_free (cover_slot_t *slot) {
-    if (slot->loading) {
+    if (slot->stream_surface || streaming == slot) {
+        stream_drop(slot);
+    } else if (slot->loading) {
         png_decoder_abort();
         decoding = false;
     }
@@ -396,11 +522,10 @@ void launcher_covers_begin_frame (void) {
     hold_new = false;
     background_reads = false;
     launcher_clear_focused_cover();
-    pack_time_used_us = 0;
-    pack_read_this_frame = false;
     if (slot_count == 0) {
         slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
     }
+    stream_step();      // Before drawing, so a cover finished now shows this frame.
 }
 
 void launcher_set_cartridge_art (bool enabled) {
@@ -489,8 +614,8 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
         }
         return NULL;
     }
-    if (pack ? !pack_budget_left() : decoding) {
-        return NULL;
+    if (pack ? (streaming != NULL) : decoding) {
+        return NULL;    // One cover read at a time.
     }
 
     // Reuse an empty slot, or the one unused for longest (never one drawn this frame).
@@ -539,35 +664,8 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
         last_background_read_frame = frame;
     }
     if (pack) {
-        uint64_t started = get_ticks_us();
-        if (wide_pack) {
-            int logical_w = 0;
-            surface_t *squeezed = pack_read_wide(pack, id, max_w, max_h, &logical_w);
-            surface_t *header = squeezed ? calloc(1, sizeof(surface_t)) : NULL;
-            if (header) {
-                *header = *squeezed;
-                header->width = logical_w;
-                header->flags &= ~SURFACE_FLAGS_OWNEDBUFFER;
-                victim->wide = squeezed;
-                victim->image = header;
-            } else if (squeezed) {
-                surface_free(squeezed);
-                free(squeezed);
-            }
-        } else {
-            victim->image = pack_read(pack, id, max_w, max_h);
-            even_size(victim->image);
-        }
-        uint32_t read_us = (uint32_t)(get_ticks_us() - started);
-        pack_time_used_us += read_us;
-        pack_read_this_frame = true;
-        if (victim->image) {
-            slot_account(victim);
-            perf_log_read((uint32_t)victim->bytes, read_us);
-            if (pending) {
-                *pending = false;
-            }
-            return victim->image;
+        if (stream_begin(victim, pack, id, max_w, max_h, wide_pack)) {
+            return NULL;    // Pending: its pixels arrive over the next frames.
         }
         victim->failed = true;
         victim->failed_frame = frame;
