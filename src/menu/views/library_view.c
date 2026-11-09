@@ -45,7 +45,7 @@
 static const launcher_hint_t hints_grid[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
-    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Jump" },
+    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
     { LAUNCHER_BUTTON_OTHER, "R", "View" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
@@ -263,15 +263,6 @@ static int jump_group (library_category_t *c, int sel, int direction) {
         return start;
     }
     return group_start(c, start - 1);
-}
-
-/** @brief Note a C jump in the performance log (looking into jumps that went back and forth). */
-static void log_jump (library_category_t *c, int from, int direction, int to) {
-    char a[48], b[48];
-    library_game_group(&c->games[from], current_sort, a, sizeof(a));
-    library_game_group(&c->games[to], current_sort, b, sizeof(b));
-    perf_log_event("C jump in %s (sort %d): %d [%s] %s -> %d [%s] of %d", c->name ? c->name : "?", current_sort, from, a,
-        direction > 0 ? "on" : "back", to, b, c->shown);
 }
 
 static void show_group_badge (library_category_t *c, int sel) {
@@ -795,21 +786,7 @@ static surface_t *game_cover (menu_t *menu, library_game_t *game, int w, int h, 
     return launcher_cover_get(path, w, h, pending);
 }
 
-static int watched_category = -1;
-static int watched_sel = -1;
-
-/** @brief Note when the selection is not where the last frame's input left it. */
-static void watch_selection (const char *where) {
-    int sel = *current_selection();
-    if (watched_category == category_index && watched_sel >= 0 && sel != watched_sel) {
-        perf_log_event("selection moved %d -> %d without input (%s)", watched_sel, sel, where);
-    }
-    watched_category = category_index;
-    watched_sel = sel;
-}
-
 static void process (menu_t *menu) {
-    watch_selection("before input");
     search_scope_update();
     if (launcher_menu_process(menu)) {
         return;
@@ -937,10 +914,12 @@ static void process (menu_t *menu) {
 
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
         if (menu->actions.go_fast) {
-            int direction = (menu->actions.go_right || menu->actions.go_down) ? 1 : -1;
-            *sel = jump_group(c, *sel, direction);
-            log_jump(c, previous, direction, *sel);
-            show_group_badge(c, *sel);
+            // C left/right jump between groups, as in every view (C up/down do nothing). Holding C marks every
+            // frame as fast, including those between repeats that move nowhere: only the moving ones jump.
+            if (menu->actions.go_left || menu->actions.go_right) {
+                *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
+                show_group_badge(c, *sel);
+            }
         } else if (menu->actions.go_left && *sel > 0) {
             *sel -= 1;
         } else if (menu->actions.go_right && *sel < c->shown - 1) {
@@ -955,14 +934,15 @@ static void process (menu_t *menu) {
         return;
     }
 
-    // C jumps between groups in every view and any direction: left or up back, right or down on.
+    // C left/right jump between groups, as in every view; C up/down do nothing. Holding C marks every frame
+    // as fast, including those between repeats that move nowhere: only the moving ones jump.
     if (menu->actions.go_fast) {
-        int direction = (menu->actions.go_right || menu->actions.go_down) ? 1 : -1;
-        *sel = jump_group(c, *sel, direction);
-        log_jump(c, previous, direction, *sel);
-        show_group_badge(c, *sel);
-        if (*sel != previous) {
-            sound_play_effect(SFX_TICK);
+        if (menu->actions.go_left || menu->actions.go_right) {
+            *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
+            show_group_badge(c, *sel);
+            if (*sel != previous) {
+                sound_play_effect(SFX_TICK);
+            }
         }
         return;
     }
@@ -1622,8 +1602,6 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 }
 
 static void draw (menu_t *menu, surface_t *d) {
-    watched_category = category_index;
-    watched_sel = *current_selection();
     other_folder_sorted_this_frame = false;
     search_scope_update();
     rdpq_attach(d, NULL);
