@@ -463,12 +463,107 @@ int launcher_title_wrapped (int x, int y, int width, int max_lines, menu_font_st
     return last_layout_lines * TITLE_HEIGHT;
 }
 
+/* Separators between the fields of a details line (library.c details_text, and "Favorites  -  " on Home). */
+static const char *const detail_separators[] = { "   \xC2\xB7   ", "  -  " };
+
+#define BREAK_CACHE_SIZE    (8)
+#define MAX_DETAIL_LINES    (4)
+
+typedef struct {
+    uint32_t hash;
+    int width;
+    uint8_t font;
+    int lines;                              /**< 0: a field doesn't fit a line on its own (word wrap instead) */
+    int16_t start[MAX_DETAIL_LINES];        /**< Byte offsets where each line starts */
+    int16_t end[MAX_DETAIL_LINES];
+} break_entry_t;
+
+static break_entry_t break_cache[BREAK_CACHE_SIZE];
+static int break_cache_next = 0;
+
+/** @brief Real-pixel width of part of a text (laid out once per break computation, not every frame). */
+static int measure_span (uint8_t real_font, const char *text, int length) {
+    int nbytes = length;
+    rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, real_font, text, &nbytes);
+    int w = (int)(layout->bbox.x1 - layout->bbox.x0);
+    rdpq_paragraph_free(layout);
+    return w;
+}
+
+/** @brief Where a details line breaks: between fields only, as many on a line as fit. */
+static break_entry_t *detail_breaks (uint8_t font, const char *text, int width) {
+    uint8_t real_font = launcher_font(font);
+    uint32_t hash = text_hash(text);
+    for (int i = 0; i < BREAK_CACHE_SIZE; i++) {
+        break_entry_t *b = &break_cache[i];
+        if (b->hash == hash && b->width == width && b->font == real_font) {
+            return b;
+        }
+    }
+    break_entry_t *b = &break_cache[break_cache_next];
+    break_cache_next = (break_cache_next + 1) % BREAK_CACHE_SIZE;
+    memset(b, 0, sizeof(*b));
+    b->hash = hash;
+    b->width = width;
+    b->font = real_font;
+    int real_w = px(width) - px(0);
+    int len = (int)strlen(text);
+    int line_start = 0, line_end = 0, pos = 0;
+    while (pos <= len) {
+        // The next field ends at the next separator (or the end of the text).
+        int field_end = len, next = len + 1;
+        for (size_t s = 0; s < sizeof(detail_separators) / sizeof(detail_separators[0]); s++) {
+            const char *found = strstr(text + pos, detail_separators[s]);
+            if (found && found - text < field_end) {
+                field_end = (int)(found - text);
+                next = field_end + (int)strlen(detail_separators[s]);
+            }
+        }
+        if (measure_span(real_font, text + pos, field_end - pos) > real_w) {
+            b->lines = 0;       // One field alone is too wide: word wrap the whole line.
+            return b;
+        }
+        if (line_end > line_start && measure_span(real_font, text + line_start, field_end - line_start) > real_w) {
+            // Doesn't fit after what's on this line: the line ends before this field's separator.
+            if (b->lines == MAX_DETAIL_LINES) {
+                break;
+            }
+            b->start[b->lines] = (int16_t)line_start;
+            b->end[b->lines] = (int16_t)line_end;
+            b->lines++;
+            line_start = pos;
+        }
+        line_end = field_end;
+        pos = next;
+    }
+    if (b->lines < MAX_DETAIL_LINES && line_end > line_start) {
+        b->start[b->lines] = (int16_t)line_start;
+        b->end[b->lines] = (int16_t)line_end;
+        b->lines++;
+    }
+    return b;
+}
+
 int launcher_game_details_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *text) {
     char escaped[256];
     escape_text_codes(text, escaped, sizeof(escaped));
+    uint8_t font = font_for(escaped, large_text ? FNT_LAUNCHER : FNT_SMALL);
     int line_h = large_text ? TEXT_HEIGHT : HINT_TEXT_HEIGHT;
-    text_box_wrapped(font_for(escaped, large_text ? FNT_LAUNCHER : FNT_SMALL), x, y, width, line_h * max_lines, ALIGN_LEFT,
-        VALIGN_TOP, style, escaped);
+    // Whole fields stay together ("4 players", "HAL Laboratory"): lines break only between them.
+    break_entry_t *b = detail_breaks(font, escaped, width);
+    if (b->lines > 0) {
+        int lines = (b->lines < max_lines) ? b->lines : max_lines;
+        for (int i = 0; i < lines; i++) {
+            char line[256];
+            int n = b->end[i] - b->start[i];
+            snprintf(line, sizeof(line), "%.*s", n, escaped + b->start[i]);
+            // The last line allowed still ends in "..." if fields are left over.
+            text_box_font(font, x, y + i * line_h, width, line_h, ALIGN_LEFT, VALIGN_TOP, style,
+                (i == lines - 1 && lines < b->lines) ? escaped + b->start[i] : line);
+        }
+        return lines * line_h;
+    }
+    text_box_wrapped(font, x, y, width, line_h * max_lines, ALIGN_LEFT, VALIGN_TOP, style, escaped);
     return last_layout_lines * line_h;
 }
 
