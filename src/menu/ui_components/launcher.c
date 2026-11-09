@@ -370,10 +370,18 @@ static int text_width_font (uint8_t font, const char *text) {
 static void text_centered_ink (uint8_t font, int x, int y, int w, int h, menu_font_style_t style, const char *text) {
     // Across, by the ink; down, the font's own centering in the box (the measured ink is relative to the baseline,
     // which a box places by the font's ascent: centering on it put the letters below the icons).
+    // Worked out in real pixels: in 16:9, rounding the logical position on its own could leave a small letter a
+    // pixel off-centre in a 12-pixel circle (the hint bar's A).
     width_entry_t *e = text_measure(font, text);
-    int ink_w = logical_width(e->width);
-    int ink_x0 = widescreen ? (e->ink_x0 * 4) / 3 : e->ink_x0;
-    int left = x + (w - ink_w + 1) / 2 - ink_x0;
+    int rx0 = px(x), rx1 = px(x + w);
+    int pen = rx0 + (rx1 - rx0 - e->width + 1) / 2 - e->ink_x0;
+    int left = widescreen ? ((pen - slide_dx) * 4) / 3 : pen - slide_dx;
+    while (px(left) < pen) {
+        left++;
+    }
+    while (px(left) > pen) {
+        left--;
+    }
     text_box_font(font, left, y, 0, h, ALIGN_LEFT, VALIGN_CENTER, style, text);
 }
 
