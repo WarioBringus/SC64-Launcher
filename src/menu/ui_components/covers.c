@@ -641,11 +641,14 @@ surface_t *launcher_cover_larger (surface_t *shown, int max_w, int max_h) {
                 image = calloc(1, sizeof(surface_t));
                 *image = surface_alloc(FMT_RGBA16, logical_w, squeezed->height);
                 if (image->buffer) {
+                    // A fixed-point step rather than a division per pixel (on A, every millisecond is a hitch).
+                    uint32_t step = ((uint32_t)squeezed->width << 16) / (uint32_t)logical_w;
                     for (int y = 0; y < squeezed->height; y++) {
                         uint16_t *from = (uint16_t *)((uint8_t *)squeezed->buffer + y * squeezed->stride);
                         uint16_t *to = (uint16_t *)((uint8_t *)image->buffer + y * image->stride);
-                        for (int x = 0; x < logical_w; x++) {
-                            to[x] = from[(x * squeezed->width) / logical_w];
+                        uint32_t sx = 0;
+                        for (int x = 0; x < logical_w; x++, sx += step) {
+                            to[x] = from[sx >> 16];
                         }
                     }
                 } else {
