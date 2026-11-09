@@ -1143,6 +1143,7 @@ static void draw (menu_t *menu, surface_t *d) {
         bool timed_out = (now_ms - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
         if ((reveal_steady >= REVEAL_STEADY_FRAMES && !covers_pending) || timed_out) {
             reveal = REVEAL_FADING;
+            sound_bgm_end_load();   // Back to the short queue, so sound effects keep up.
             reveal_fade_ms = 0.0f;
             fade_started_ms = now_ms;
             perf_log_event("startup Home hidden for %lu ms (%d frames, %s)", (unsigned long)(now_ms - reveal_since_ms),
@@ -1174,6 +1175,11 @@ static void draw (menu_t *menu, surface_t *d) {
 
 void view_home_init (menu_t *menu) {
     packs_open = false;     // Leaving the launcher closes them.
+    if (reveal == REVEAL_HIDDEN) {
+        // The startup work behind black makes frames of up to ~440 ms, longer than the menu's usual ~140 ms of
+        // music queued ahead (the music stuttered): every buffer is kept full, as for a game load, until Home shows.
+        sound_bgm_begin_load();
+    }
     launcher_menu_init();
     build_rows(menu);
     motion_snap = true;
