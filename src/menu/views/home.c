@@ -651,55 +651,69 @@ static const char *row_label (row_kind_t kind) {
     return (kind == ROW_RESUME) ? "Resume" : ((kind == ROW_RECENT) ? "Recently played" : "Favorites");
 }
 
-/* Spotlight: the focused game large on a panel at the left; the other games in a column of tiles beside it. */
-#define SPOT_PANEL_SHARE    (55)    /* Percent of the width */
-#define SPOT_PAD            (18)
+/* Spotlight: the focused game on a bold slanted panel in the theme's accent color, filling the left half of the
+   screen; the other games in a column of tiles beside it. */
+#define SPOT_TOP_SHARE      (58)    /* The panel's width at the top and bottom, in percent of the screen */
+#define SPOT_BOTTOM_SHARE   (52)
+#define SPOT_COVER_Y        (74)
+#define SPOT_OUTLINE        (3)
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
+#define SPOT_PILL_W         (128)
 
 static int spot_scroll = 0;
 static float spot_scroll_pos = 0.0f;
 
 static void draw_spotlight (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
-    int px0 = LAUNCHER_X0, px1 = LAUNCHER_X0 + LAUNCHER_WIDTH * SPOT_PANEL_SHARE / 100;
-    int py0 = CONTENT_TOP + 2, py1 = CONTENT_BOTTOM - 2;
+    int top_x = LAUNCHER_SCREEN_W * SPOT_TOP_SHARE / 100;
+    int bottom_x = LAUNCHER_SCREEN_W * SPOT_BOTTOM_SHARE / 100;
+    launcher_fill_slanted(top_x, bottom_x, 0, display_get_height(), t->accent);
     int resume_row = row_of_kind(ROW_RESUME);
     bool on_panel = (resume_row >= 0 && is_focus(resume_row, 0));
-
-    // The panel: the Resume game's slot, and where the focused game is shown.
     if (resume_row >= 0) {
-        slot_add(px0, py0, px1 - px0, py1 - py0, resume_row, 0);
+        slot_add(0, 0, bottom_x, CONTENT_BOTTOM, resume_row, 0);
     }
-    if (on_panel) {
-        launcher_draw_focus_ring(px0, py0, px1, py1, CARD_RADIUS);
-    }
-    launcher_fill_rounded(px0, py0, px1, py1, CARD_RADIUS, t->panel);
+
     home_item_t *f = focused_item();
     if (f) {
-        int cx = px0 + SPOT_PAD, cy = py0 + SPOT_PAD;
-        int tw = px1 - SPOT_PAD - cx;
+        int cx = LAUNCHER_SCREEN_W * 6 / 100;
+        if (cx < LAUNCHER_X0) {
+            cx = LAUNCHER_X0;
+        }
+        int cy = SPOT_COVER_Y;
         bool pending;
         surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        launcher_draw_tile(cx, cy, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, image, pending, f->title, false, t->panel);
-        launcher_note_focused_cover(image, cx, cy, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H);
-        int y = cy + LAUNCHER_SHOWCASE_H + 12;
-        launcher_text(cx, y, tw, ALIGN_LEFT, STL_ACCENT, "%s", row_label(rows[row_selected].kind));
-        y += 24;
-        launcher_title(cx, y, tw, ALIGN_LEFT, STL_DEFAULT, f->title);
-        y += 34;
-        char details[160];
+        // The cover sits in an outline in the color text on the accent takes.
+        int iw = image ? image->width : LAUNCHER_SHOWCASE_W;
+        int ih = image ? image->height : LAUNCHER_SHOWCASE_H;
+        int ix = cx, iy = cy + (LAUNCHER_SHOWCASE_H - ih) / 2;
+        launcher_fill_rounded(ix - SPOT_OUTLINE, iy - SPOT_OUTLINE, ix + iw + SPOT_OUTLINE, iy + ih + SPOT_OUTLINE,
+            8, t->on_accent);
+        launcher_draw_tile(ix, iy, iw, ih, image, pending, f->title, false, t->on_accent);
+        launcher_note_focused_cover(image, ix, iy, iw, ih);
+
+        int tw = bottom_x - cx - 20;
+        int y = cy + LAUNCHER_SHOWCASE_H + 22;
+        launcher_title(cx, y, tw, ALIGN_LEFT, STL_ON_ACCENT, f->title);
+        y += 38;
+        char details[160], line[200];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
-        if (details[0]) {
-            launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_GRAY, details);
-        }
-        launcher_draw_pill(cx, py1 - SPOT_PAD - HOME_PILL_H, on_panel ? "A  Resume" : "A  Play", true);
+        snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
+        launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_ON_ACCENT, line);
+        y += 40;
+        // "A Resume" on a pill in the background color.
+        launcher_fill_rounded(cx, y, cx + SPOT_PILL_W, y + HOME_PILL_H, HOME_PILL_H / 2, t->bg);
+        launcher_text(cx, y + 3, SPOT_PILL_W, ALIGN_CENTER, STL_DEFAULT, "%s", on_panel ? "A  Resume" : "A  Play");
     }
 
-    // The column: Recently played and Favorites as tiles, as many across as fit.
-    int gx0 = px1 + 20;
-    int avail = LAUNCHER_X1 - gx0;
+    // The column: Recently played and Favorites as tiles, two across where they fit.
     int tw = 133, th = 94;
+    int gx0 = LAUNCHER_X1 - (2 * tw + SPOT_GAP);
+    if (gx0 < top_x + 16) {
+        gx0 = top_x + 16;
+    }
+    int avail = LAUNCHER_X1 - gx0;
     if (avail < 2 * tw + SPOT_GAP) {
         tw = 87;
         th = 61;
@@ -733,7 +747,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     int drawn = (int)lroundf(spot_scroll_pos);
 
     clip_content();
-    y = CONTENT_TOP + 2 - drawn;
+    y = CONTENT_TOP + 8 - drawn;
     for (int r = 0; r < row_count; r++) {
         if (rows[r].kind == ROW_RESUME) {
             continue;
@@ -1039,10 +1053,25 @@ static void process_styled (menu_t *menu, int style) {
     }
 }
 
+/** @brief The header and footer a style draws with (set before the header is drawn). */
+static void set_style_chrome (int style) {
+    switch (style) {
+        case LAUNCHER_HOME_SPOTLIGHT:
+            launcher_set_header_style(LAUNCHER_HEADER_CORNER);
+            launcher_hide_footer_line();
+            break;
+        default:
+            break;
+    }
+}
+
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
     launcher_covers_begin_frame();
+    if (row_count > 0) {
+        set_style_chrome(menu->settings.launcher_home_style);
+    }
     launcher_draw_header(menu, LAUNCHER_TAB_HOME);
 
     if (reveal == REVEAL_HIDDEN && reveal_frames == 0) {
