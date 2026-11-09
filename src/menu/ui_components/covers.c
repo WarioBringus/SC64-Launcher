@@ -20,7 +20,8 @@
    gone on it: one whole cover (~10 ms for a grid cover) in one frame made that frame long. */
 #define STREAM_BUDGET_US        (4000)
 #define STREAM_CHUNK            (4096)
-#define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps */
+#define FAILED_RETRY_FRAMES     (120)   /* About 2 seconds at 60 fps: a pack that didn't open */
+#define COVER_RETRY_FRAMES      (20)    /* A cover that didn't load is tried again this soon (a third of a second) */
 #define BACKGROUND_READ_FRAMES  (3)     /* Read-ahead reads at most one cover this many frames apart */
 #define MAX_PACKS               (24)    /* 10 cover sizes and the spines, each as is and squeezed for 16:9 */
 /* Memory for decoded covers: what the slots held when every cover was at most 158x112, so the
@@ -352,6 +353,52 @@ static cover_pack_t *pack_lookup (const char *path, int w, int h, int *id) {
 static void even_size(surface_t *image);
 static void slot_account(cover_slot_t *slot);
 
+static void slot_free(cover_slot_t *slot);
+
+/** @brief Free the cover unused longest (not drawn this frame, not loading, not keep); false when there is none. */
+static bool free_oldest_cover (cover_slot_t *keep) {
+    cover_slot_t *oldest = NULL;
+    for (int i = 0; i < slot_count; i++) {
+        cover_slot_t *s = &slots[i];
+        if (s != keep && s->path && s->bytes && s->last_used != frame && !s->loading &&
+            (!oldest || s->last_used < oldest->last_used)) {
+            oldest = s;
+        }
+    }
+    if (!oldest) {
+        return false;
+    }
+    slot_free(oldest);
+    return true;
+}
+
+/**
+ * @brief Pixels for a cover. When memory is short or broken up (the large 294x210 covers need ~92 KB in one
+ * piece), covers unused longest are freed until it fits, rather than leaving this one blank.
+ */
+static surface_t *cover_surface_alloc (cover_slot_t *keep, int w, int h) {
+    surface_t *image = calloc(1, sizeof(surface_t));
+    if (!image) {
+        return NULL;
+    }
+    int freed = 0;
+    while (true) {
+        *image = surface_alloc(FMT_RGBA16, w, h);
+        if (image->buffer) {
+            if (freed > 0) {
+                perf_log_event("memory short for a %dx%d cover: freed %d older covers", w, h, freed);
+            }
+            return image;
+        }
+        if (!free_oldest_cover(keep)) {
+            perf_log_event("no memory for a %dx%d cover (%u KB of covers held)", w, h, (unsigned)(bytes_used / 1024));
+            free(image);
+            return NULL;
+        }
+        freed++;
+    }
+}
+
 /**
  * @brief Start reading a cover from a pack into a slot: its header now (a small read), its pixels a piece
  * per frame (stream_step). False when it isn't there or doesn't fit.
@@ -361,21 +408,18 @@ static bool stream_begin (cover_slot_t *slot, cover_pack_t *p, int id, int w, in
     int head_size = wide ? 12 : 8;
     if (fseek(p->f, p->offsets[id], SEEK_SET) != 0 || fread(head, 1, head_size, p->f) != (size_t)head_size ||
         memcmp(head, wide ? "CVW1" : "CVR1", 4) != 0) {
+        perf_log_event("cover %d in the %dx%d%s pack: header unreadable (errno %d)", id, w, h, wide ? "_w" : "", errno);
         return false;
     }
     int iw = (head[4] << 8) | head[5];
     int ih = (head[6] << 8) | head[7];
     int logical_w = wide ? ((head[8] << 8) | head[9]) : iw;
     if (iw <= 0 || ih <= 0 || logical_w > w || ih > h) {
+        perf_log_event("cover %d in the %dx%d%s pack is %dx%d", id, w, h, wide ? "_w" : "", logical_w, ih);
         return false;
     }
-    surface_t *image = calloc(1, sizeof(surface_t));
+    surface_t *image = cover_surface_alloc(slot, iw, ih);
     if (!image) {
-        return false;
-    }
-    *image = surface_alloc(FMT_RGBA16, iw, ih);
-    if (!image->buffer) {
-        free(image);
         return false;
     }
     slot->stream_pack = p;
@@ -432,6 +476,7 @@ static void stream_step (void) {
     streaming = NULL;
     slot->loading = false;
     if (!ok) {
+        perf_log_event("reading a cover from its pack failed (errno %d): tried again shortly", errno);
         stream_drop(slot);
         slot->failed = true;
         slot->failed_frame = frame;
@@ -749,7 +794,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
         cover_slot_t *s = &slots[i];
         if (s->path && s->path_hash == hash && s->max_w == max_w && s->max_h == max_h && s->for_wide == want_wide &&
             strcmp(s->path, path) == 0) {
-            if (s->failed && (frame - s->failed_frame) > FAILED_RETRY_FRAMES) {
+            if (s->failed && (frame - s->failed_frame) > COVER_RETRY_FRAMES) {
                 // Give a failed cover another try rather than leaving it blank.
                 slot_free(s);
                 break;
