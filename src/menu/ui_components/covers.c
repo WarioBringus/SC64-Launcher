@@ -324,7 +324,8 @@ static uint32_t evict_key(const cover_slot_t *s);
  * log). Inside the block only covers come and go, and freeing the ones unused longest always makes room.
  */
 #define ARENA_MAX           (3200 * 1024)
-#define ARENA_RESERVE       (1600 * 1024)   /* Left in the heap: fonts, the library and everything else */
+#define ARENA_RESERVE       (1600 * 1024)   /* Left in the heap the first time: fonts and the library load after */
+#define ARENA_RESERVE_LATER (700 * 1024)    /* Later (back from another screen): they're loaded; startup left ~660 KB */
 #define ARENA_MIN           (1024 * 1024)
 #define ARENA_ALIGN         (64)
 #define ARENA_BLOCKS        (256)
@@ -338,6 +339,7 @@ typedef struct {
 static uint8_t *arena = NULL;
 static uint32_t arena_size = 0;
 static bool arena_tried = false;
+static bool arena_reserved_once = false;    /* The fonts and library have loaded since the first one */
 static arena_block_t arena_blocks[ARENA_BLOCKS];     /* In address order, covering the whole block */
 static int arena_count = 0;
 
@@ -351,7 +353,7 @@ static void arena_init (void) {
     }
     heap_stats_t stats;
     sys_get_heap_stats(&stats);
-    int size = stats.free - ARENA_RESERVE;
+    int size = stats.free - (arena_reserved_once ? ARENA_RESERVE_LATER : ARENA_RESERVE);
     size = (size > ARENA_MAX) ? ARENA_MAX : size;
     size &= ~(ARENA_ALIGN - 1);
     if (size < ARENA_MIN) {
@@ -363,6 +365,7 @@ static void arena_init (void) {
         return;
     }
     arena_size = (uint32_t)size;
+    arena_reserved_once = true;
     arena_blocks[0] = (arena_block_t) { 0, arena_size, false };
     arena_count = 1;
     perf_log_event("cover memory: %d KB reserved for covers (heap %d KB free before)", size / 1024, stats.free / 1024);
