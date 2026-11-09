@@ -50,6 +50,11 @@ static uint32_t work_max_us = 0;
 static uint64_t input_total_us = 0;     /* Of the work: reading the controller and acting on it */
 static uint64_t draw_total_us = 0;      /* Of the work: drawing (including waits for the RDP) */
 static uint64_t part_total_us[PERF_PARTS];
+static uint32_t frame_part_us[PERF_PARTS];  /* This frame's parts, for a slow frame's breakdown */
+static uint32_t frame_read_us = 0;
+static int frame_reads = 0;
+
+#define SLOW_FRAME_US       (60000)     /* A frame whose work takes longer is noted with its breakdown */
 static int reads = 0;
 static uint64_t read_total_us = 0;
 static uint32_t read_bytes = 0;
@@ -144,11 +149,16 @@ void perf_log_frame_begin (const char *screen_name, bool input, bool step) {
     last_frame_us = now;
     work_start_us = now;
     draw_start_us = 0;
+    memset(frame_part_us, 0, sizeof(frame_part_us));
+    frame_read_us = 0;
+    frame_reads = 0;
     steps += step;
     if (input) {
         last_input_ms = now / 1000;
     }
 }
+
+void perf_log_event(const char *fmt, ...);
 
 void perf_log_frame_end (void) {
     if (!enabled) {
@@ -162,6 +172,14 @@ void perf_log_frame_end (void) {
     }
     work_total_us += work_us;
     work_max_us = (work_us > work_max_us) ? work_us : work_max_us;
+    if (work_us > SLOW_FRAME_US) {
+        uint32_t input_us = draw_start_us ? (uint32_t)(draw_start_us - work_start_us) : 0;
+        perf_log_event("slow frame on %s: %.1f ms (input %.1f, drawing %.1f: text %.1f, covers %.1f, shapes %.1f, "
+            "header+hints %.1f, %lu layouts built, %d card reads %.1f ms)", screen, work_us / 1000.0f, input_us / 1000.0f,
+            draw_start_us ? (now - draw_start_us) / 1000.0f : 0.0f, frame_part_us[PERF_TEXT] / 1000.0f,
+            frame_part_us[PERF_COVERS] / 1000.0f, frame_part_us[PERF_SHAPES] / 1000.0f, frame_part_us[PERF_CHROME] / 1000.0f,
+            (unsigned long)frame_part_us[PERF_LAYOUTS], frame_reads, frame_read_us / 1000.0f);
+    }
     if (used > 0 && (now / 1000 - last_input_ms) >= FLUSH_IDLE_MS) {
         flush("controller idle");
         last_frame_us = 0;      // The write's own time isn't a frame.
@@ -174,6 +192,7 @@ void perf_log_frame_end (void) {
 void perf_log_add (perf_part_t part, uint32_t us) {
     if (enabled) {
         part_total_us[part] += us;
+        frame_part_us[part] += us;
     }
 }
 
@@ -190,6 +209,8 @@ void perf_log_read (uint32_t bytes, uint32_t us) {
     reads++;
     read_bytes += bytes;
     read_total_us += us;
+    frame_reads++;
+    frame_read_us += us;
 }
 
 #define MAX_EVENTS          (80)
