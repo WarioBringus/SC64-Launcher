@@ -65,6 +65,16 @@ static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
+/* Background work that takes a frame over 20 ms is noted in the performance log. */
+#define TIMED(what, statement) do { \
+    uint64_t timed_started_ = get_ticks_us(); \
+    statement; \
+    uint32_t timed_us_ = (uint32_t)(get_ticks_us() - timed_started_); \
+    if (timed_us_ > 20000) { \
+        perf_log_event("%s took %.1f ms", what, timed_us_ / 1000.0f); \
+    } \
+} while (0)
+
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
 static int category_index = 0;
@@ -253,6 +263,15 @@ static int jump_group (library_category_t *c, int sel, int direction) {
         return start;
     }
     return group_start(c, start - 1);
+}
+
+/** @brief Note a C jump in the performance log (looking into jumps that went back and forth). */
+static void log_jump (library_category_t *c, int from, int direction, int to) {
+    char a[48], b[48];
+    library_game_group(&c->games[from], current_sort, a, sizeof(a));
+    library_game_group(&c->games[to], current_sort, b, sizeof(b));
+    perf_log_event("C jump in %s (sort %d): %d [%s] %s -> %d [%s] of %d", c->name ? c->name : "?", current_sort, from, a,
+        direction > 0 ? "on" : "back", to, b, c->shown);
 }
 
 static void show_group_badge (library_category_t *c, int sel) {
@@ -776,7 +795,21 @@ static surface_t *game_cover (menu_t *menu, library_game_t *game, int w, int h, 
     return launcher_cover_get(path, w, h, pending);
 }
 
+static int watched_category = -1;
+static int watched_sel = -1;
+
+/** @brief Note when the selection is not where the last frame's input left it. */
+static void watch_selection (const char *where) {
+    int sel = *current_selection();
+    if (watched_category == category_index && watched_sel >= 0 && sel != watched_sel) {
+        perf_log_event("selection moved %d -> %d without input (%s)", watched_sel, sel, where);
+    }
+    watched_category = category_index;
+    watched_sel = sel;
+}
+
 static void process (menu_t *menu) {
+    watch_selection("before input");
     search_scope_update();
     if (launcher_menu_process(menu)) {
         return;
@@ -904,7 +937,9 @@ static void process (menu_t *menu) {
 
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
         if (menu->actions.go_fast) {
-            *sel = jump_group(c, *sel, (menu->actions.go_right || menu->actions.go_down) ? 1 : -1);
+            int direction = (menu->actions.go_right || menu->actions.go_down) ? 1 : -1;
+            *sel = jump_group(c, *sel, direction);
+            log_jump(c, previous, direction, *sel);
             show_group_badge(c, *sel);
         } else if (menu->actions.go_left && *sel > 0) {
             *sel -= 1;
@@ -922,7 +957,9 @@ static void process (menu_t *menu) {
 
     // C jumps between groups in every view and any direction: left or up back, right or down on.
     if (menu->actions.go_fast) {
-        *sel = jump_group(c, *sel, (menu->actions.go_right || menu->actions.go_down) ? 1 : -1);
+        int direction = (menu->actions.go_right || menu->actions.go_down) ? 1 : -1;
+        *sel = jump_group(c, *sel, direction);
+        log_jump(c, previous, direction, *sel);
         show_group_badge(c, *sel);
         if (*sel != previous) {
             sound_play_effect(SFX_TICK);
@@ -1247,12 +1284,12 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     // Once this screen is complete, get group jumps and then the categories either side ready,
     // and look for ROMs added since the cover index was built.
     if (!any_pending) {
-        any_pending = preload_rows_around(menu, c, &g, first, last, &lookups_left);
+        TIMED("reading ahead rows", any_pending = preload_rows_around(menu, c, &g, first, last, &lookups_left));
     }
     if (!any_pending) {
-        library_check_new_games(NEW_GAMES_CHECK_US);
-        preload_group_jumps(menu, c, sel, &lookups_left);
-        preload_neighbours(menu, &lookups_left);
+        TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+        TIMED("getting jump targets ready", preload_group_jumps(menu, c, sel, &lookups_left));
+        TIMED("getting other folders ready", preload_neighbours(menu, &lookups_left));
     }
     launcher_covers_background(false);
 }
@@ -1347,10 +1384,10 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
         snprintf(position, sizeof(position), "%s  -  %s  -  %d of %d", c->name, group, sel + 1, c->shown);
     }
     if (!pending && carousel_position == (float)sel) {
-        library_check_new_games(NEW_GAMES_CHECK_US);
+        TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
         launcher_covers_background(true);
-        preload_group_jumps(menu, c, sel, &lookups_left);
-        preload_neighbours(menu, &lookups_left);
+        TIMED("getting jump targets ready", preload_group_jumps(menu, c, sel, &lookups_left));
+        TIMED("getting other folders ready", preload_neighbours(menu, &lookups_left));
         launcher_covers_background(false);
     }
 
@@ -1577,14 +1614,16 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
             }
         }
         if (!any_pending) {
-            library_check_new_games(NEW_GAMES_CHECK_US);
-            preload_group_jumps(menu, c, sel, &lookups_left);
+            TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+            TIMED("getting jump targets ready", preload_group_jumps(menu, c, sel, &lookups_left));
         }
         launcher_covers_background(false);
     }
 }
 
 static void draw (menu_t *menu, surface_t *d) {
+    watched_category = category_index;
+    watched_sel = *current_selection();
     other_folder_sorted_this_frame = false;
     search_scope_update();
     rdpq_attach(d, NULL);

@@ -748,7 +748,18 @@ static void load_index_games (library_category_t *c) {
     c->loaded = true;
 }
 
+static void load_folder_games_untimed (library_category_t *c);
+
 static void load_folder_games (library_category_t *c) {
+    uint64_t started = get_ticks_us();
+    load_folder_games_untimed(c);
+    uint32_t us = (uint32_t)(get_ticks_us() - started);
+    if (us > 20000) {
+        perf_log_event("listing folder %s took %.1f ms", c->name ? c->name : "?", us / 1000.0f);
+    }
+}
+
+static void load_folder_games_untimed (library_category_t *c) {
     if (c->from_index) {
         load_index_games(c);
         return;
