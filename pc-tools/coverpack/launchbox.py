@@ -9,6 +9,11 @@ With --download, each spine is fetched from images.launchbox-app.com into --spin
 PNG or JPEG, converted to PNG with ffmpeg (long side at most 420) and saved beside its front cover as
 boxart_spine.png (an existing file is never replaced). Run coverpack.py afterwards.
 
+With --fronts, the hi-res box front of every box cover (its own region first) is fetched into --fronts-dir
+(about 1.2 MB each; the card's art is only 158x112) and saved, long side at most 600, as a PNG under --hires
+at the cover's own path (metadata/.../boxart_front.png). coverpack.py --hires builds Home's large covers from
+those; the card is not changed.
+
 Genre disagreements are only listed: put the ones to change in menu/game-fixes.txt.
 ROM hacks are not in the database; they take their original's cover, spine and details anyway.
 """
@@ -33,6 +38,7 @@ def norm(s):
 
 def load_launchbox(path):
     games, alt, spines = {}, collections.defaultdict(list), collections.defaultdict(list)
+    fronts = collections.defaultdict(list)
     for _, el in ET.iterparse(path, events=('end',)):
         if el.tag == 'Game':
             if el.findtext('Platform') == 'Nintendo 64':
@@ -42,8 +48,10 @@ def load_launchbox(path):
             alt[el.findtext('DatabaseID')].append(el.findtext('AlternateName') or '')
             el.clear()
         elif el.tag == 'GameImage':
-            if el.findtext('Type') == 'Box - Spine':
-                spines[el.findtext('DatabaseID')].append((el.findtext('FileName') or '', el.findtext('Region') or ''))
+            kind = el.findtext('Type')
+            if kind in ('Box - Spine', 'Box - Front'):
+                (spines if kind == 'Box - Spine' else fronts)[el.findtext('DatabaseID')].append(
+                    (el.findtext('FileName') or '', el.findtext('Region') or ''))
             el.clear()
     by_name = {}
     for gid, (name, _) in games.items():
@@ -52,7 +60,7 @@ def load_launchbox(path):
         for n in names:
             if gid in games:
                 by_name.setdefault(norm(n), gid)
-    return games, spines, by_name
+    return games, spines, fronts, by_name
 
 
 def image_size(data):
@@ -72,6 +80,60 @@ def image_size(data):
     return None
 
 
+def fetch(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'coverpack/1.0'})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read()
+
+
+SAME_BOX_DIFFERENCE = 25    # Mean difference (0-255) of the two shrunk to 32x24; above it, another box or edition
+
+
+def tiny(ffmpeg, path):
+    """An image shrunk to 32x24 RGB, for comparing."""
+    r = subprocess.run([ffmpeg, '-loglevel', 'error', '-i', path, '-vf', 'scale=32:24:flags=area', '-f', 'rawvideo',
+                        '-pix_fmt', 'rgb24', '-'], capture_output=True)
+    return r.stdout if len(r.stdout) == 32 * 24 * 3 else None
+
+
+def save_fronts(args, menu, front_for):
+    """Fetch each hi-res front (kept in --fronts-dir) and save it, long side at most 600, under --hires, when it is
+    the same box as the card's art (LaunchBox often has another region or edition: the large cover would then differ
+    from the small ones)."""
+    os.makedirs(args.fronts_dir, exist_ok=True)
+    saved = skipped = different = 0
+    for cover, f in sorted(front_for.items()):
+        local = os.path.join(args.fronts_dir, f)
+        if not os.path.exists(local):
+            data = fetch(IMAGE_HOST + f)
+            if not (data[:8] == b'\x89PNG\r\n\x1a\n' or data[:3] == b'\xff\xd8\xff'):
+                print('  skipped %s: not a PNG or JPEG' % cover)
+                skipped += 1
+                continue
+            open(local, 'wb').write(data)
+        size = image_size(open(local, 'rb').read(300000))
+        if not size or not (0.5 <= min(size) / max(size) <= 0.95):
+            print('  skipped %s: not box-shaped %s' % (cover, size))
+            skipped += 1
+            continue
+        dest = os.path.join(args.hires, cover)
+        if not (os.path.exists(dest) and os.path.getmtime(dest) >= os.path.getmtime(local)):
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            vf = "scale='if(gt(iw,ih),min(iw,600),-2)':'if(gt(iw,ih),-2,min(ih,600))':flags=lanczos"
+            r = subprocess.run([args.ffmpeg, '-loglevel', 'error', '-y', '-i', local, '-vf', vf, '-pix_fmt', 'rgb24', dest])
+            if r.returncode != 0:
+                skipped += 1
+                continue
+            saved += 1
+        a, b = tiny(args.ffmpeg, dest), tiny(args.ffmpeg, menu + cover)
+        if not a or not b or sum(abs(x - y) for x, y in zip(a, b)) / len(a) > SAME_BOX_DIFFERENCE:
+            os.remove(dest)
+            different += 1
+    kept = len(front_for) - skipped - different
+    print('Hi-res fronts under %s: %d kept (%d new), %d another box or edition than the card\'s (not used), %d skipped.'
+          % (args.hires, kept, saved, different, skipped))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--card', default='I:')
@@ -79,10 +141,13 @@ def main():
     ap.add_argument('--download', action='store_true', help='fetch the spines found and place them on the card')
     ap.add_argument('--spines', default='C:/n64/downloads/launchbox-spines', help='folder for the downloaded images')
     ap.add_argument('--ffmpeg', default='ffmpeg')
+    ap.add_argument('--fronts', action='store_true', help='fetch hi-res box fronts for the large covers (see above)')
+    ap.add_argument('--fronts-dir', default='C:/n64/downloads/launchbox-fronts', help='folder for the downloaded fronts')
+    ap.add_argument('--hires', default='C:/n64/covers-hires', help='where the fronts are saved for coverpack --hires')
     args = ap.parse_args()
     menu = args.card.rstrip('/\\') + '/menu/'
 
-    games, spines, by_name = load_launchbox(args.metadata)
+    games, spines, fronts, by_name = load_launchbox(args.metadata)
     covers, roms, genre = [], [], {}
     for line in open(menu + 'cache/launcher/covers.idx', encoding='utf-8'):
         p = line.rstrip('\n').split('\t')
@@ -108,7 +173,7 @@ def main():
         if name in fixed:
             genre[rom] = fixed[name]
 
-    wanted, disagree, unmatched = {}, [], []
+    wanted, disagree, unmatched, front_for = {}, [], [], {}
     for rom, cid in roms:
         stem = os.path.splitext(rom.rsplit('/', 1)[-1])[0]
         latin = re.sub(r'[^\x00-\x7f]+', ' ', stem).strip()
@@ -121,6 +186,14 @@ def main():
                 not (ours == 'Simulation' and any('Simulat' in g for g in theirs)):
             disagree.append((stem, ours or '-', games[gid][1]))
         cover = covers[cid] if cid >= 0 else ''
+        if cover.endswith('/boxart_front.png') and cover not in front_for:
+            parts = cover.split('/')
+            region = parts[4] if len(parts) == 6 else ''
+            options = fronts.get(gid, [])
+            best = ([s for s in options if s[1] in SAME_REGION.get(region, ())] or
+                    [s for s in options if s[1] in ('North America', 'United States')] or options)
+            if best and re.fullmatch(r'(r2_)?[0-9a-f-]{36}\.(jpg|jpeg|png)', best[0][0], re.I):
+                front_for[cover] = best[0][0]
         if not cover.endswith('/boxart_front.png') or cover in wanted:
             continue
         folder = cover[:-len('boxart_front.png')]
@@ -141,8 +214,11 @@ def main():
     print('\nReal spines LaunchBox has for games without one: %d' % len(wanted))
     for cover, (f, region, stem) in sorted(wanted.items(), key=lambda kv: kv[1][2].lower()):
         print('  %-50s %s' % (stem[:50], region))
+    print('\nHi-res box fronts LaunchBox has for your box covers: %d' % len(front_for))
+    if args.fronts:
+        save_fronts(args, menu, front_for)
     if not args.download:
-        print('\nNothing downloaded. Run again with --download to fetch these %d images.' % len(wanted))
+        print('\nNo spines downloaded. Run again with --download to fetch these %d images.' % len(wanted))
         return
 
     os.makedirs(args.spines, exist_ok=True)

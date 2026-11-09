@@ -53,6 +53,9 @@ PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' 
 # Spines for the shelf layout (LAUNCHER_SPINE_MAX_W x LAUNCHER_SPINE_H): 210 tall, as thick as the box.
 # The top-edge art and wide spine scans are turned upright; without either, a slice of the front.
 SPINE_PACKS = [('64x210ru', '64x210'), ('64x210rwu', '64x210_w')]
+# Home's large covers (LAUNCHER_HIRES_W/H in src/menu/launcher_ui.h): from the hi-res front under --hires
+# (launchbox.py --fronts) when there is one, else the card's art enlarged.
+HIRES_PACKS = [('294x210', '294x210'), ('294x210w', '294x210_w')]
 SPINE_UPRIGHT = ['64x210u', '64x210wu']
 SPINE_FALLBACK = ['30x210su', '30x210swu']
 
@@ -177,12 +180,15 @@ def main():
     ap.add_argument('--crc-cache', default='C:/n64/cache/rom_crc.json')
     ap.add_argument('--thumb-cache', default='C:/n64/cache/thumbs',
                     help='folder for scaled covers kept between runs')
+    ap.add_argument('--hires', default='C:/n64/covers-hires',
+                    help='hi-res box fronts by cover path, from launchbox.py --fronts (optional)')
     ap.add_argument('--wide-only', action='store_true',
                     help='only the 16:9 packs (about half the space); in 4:3 the menu then decodes covers itself, slowly')
     args = ap.parse_args()
-    global PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK
+    global PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK, HIRES_PACKS
     if args.wide_only:
         PACKS = [p for p in PACKS if p[1].endswith('_w')]
+        HIRES_PACKS = [p for p in HIRES_PACKS if p[1].endswith('_w')]
         SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK = SPINE_PACKS[1:], SPINE_UPRIGHT[1:], SPINE_FALLBACK[1:]
     card = args.card.rstrip('/\\') + '/'
     menu_dir = card + 'menu'
@@ -216,7 +222,7 @@ def main():
     # of the image tool and every box it is asked for, so a new tool or size scales everything again.
     thumb_cache = ThumbCache(args.thumb_cache)
     tool_print = hashlib.sha1(open(args.tool, 'rb').read() +
-                              repr((PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK)).encode('utf-8')).hexdigest()[:12]
+                              repr((PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK, HIRES_PACKS)).encode('utf-8')).hexdigest()[:12]
     blobs = {pack: [None] * len(covers) for pack in PACKS}
     signatures = []
     work = tempfile.mkdtemp(prefix='coverpack-')
@@ -304,16 +310,54 @@ def main():
             spine_widths[i] = struct.unpack('>H', wide[8:10])[0] if wide[:4] == b'CVW1' else 0
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    # Home's large covers: the hi-res front when there is one (scaled down), else the card's art enlarged.
+    hires_blobs = {name: [None] * len(covers) for _, name in HIRES_PACKS}
+    hires_signatures = []
+    from_hires = 0
+    work = tempfile.mkdtemp(prefix='coverpack-')
+    try:
+        for i, cover in enumerate(covers):
+            box_art = not cover.endswith('/gamepak_front.png')
+            hi = os.path.join(args.hires, cover) if args.hires else ''
+            use_hires = box_art and hi and os.path.isfile(hi)
+            source = hi if use_hires else os.path.join(menu_dir, cover)
+            boxes = [arg if use_hires else arg + 'u' for arg, _ in HIRES_PACKS]
+            st = os.stat(source)
+            signature = 'hires|%s|%s|%d|%d|%s' % (cover, 'hi' if use_hires else 'card', st.st_size, int(st.st_mtime), tool_print)
+            hires_signatures.append(signature)
+            cached = thumb_cache.get(signature, len(HIRES_PACKS))
+            if cached is None:
+                src = os.path.join(work, 'in.png')
+                shutil.copyfile(source, src)
+                prefix = os.path.join(work, 'h')
+                r = subprocess.run([args.tool, 'box' if box_art else 'raw', src, prefix] + boxes, capture_output=True, text=True)
+                if r.returncode != 0:
+                    print('  no large cover for %s: %s' % (cover, r.stderr.strip()))
+                    continue
+                cached = []
+                for arg in boxes:
+                    p = '%s_%s.raw' % (prefix, arg)
+                    with open(p, 'rb') as f:
+                        cached.append(f.read())
+                    os.remove(p)
+                thumb_cache.put(signature, cached)
+            from_hires += bool(use_hires)
+            for (_, name), blob in zip(HIRES_PACKS, cached):
+                hires_blobs[name][i] = blob
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     thumb_cache.save()
     print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
+    print('%d large covers from hi-res art, %d enlarged from the card\'s' % (from_hires, len(hires_signatures) - from_hires))
     print('%d spines from the box top, %d from spine scans, %d made from a slice of the front' %
           (real_spines, scanned_spines, len(spine_signatures) - real_spines - scanned_spines))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
-    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown', 'align:8', 'combined'] + spine_signatures).encode('utf-8')).hexdigest()
+    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown', 'align:8', 'combined'] + spine_signatures + hires_signatures).encode('utf-8')).hexdigest()
     manifest_path = out_dir + '/covers.manifest'
     all_packs = [(name, blobs[pack]) for pack in PACKS for name in [pack[1]]] + \
-        [(name, spine_blobs[name]) for _, name in SPINE_PACKS]
+        [(name, spine_blobs[name]) for _, name in SPINE_PACKS] + \
+        [(name, hires_blobs[name]) for _, name in HIRES_PACKS]
     combined_path = out_dir + '/covers.pak'
     packs_present = os.path.exists(combined_path)
     old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
