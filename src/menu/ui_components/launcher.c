@@ -729,6 +729,7 @@ static int focused_x, focused_y, focused_w, focused_h;
 static surface_t launch_cover;              /* Our own copy: the cover cache is freed when the launcher is left */
 static bool launch_cover_valid = false;
 static bool launch_cover_large = false;     /* The copy is the Large pack cover: shown at its own size */
+static int launch_cover_logical_w = 0;      /* 16:9: the copy holds squeezed pixels standing for this width; else 0 */
 static int launch_from_x, launch_from_y, launch_from_w, launch_from_h;
 static uint64_t launch_grow_start_ms = 0;
 
@@ -755,6 +756,7 @@ void launcher_launch_cover_free (void) {
     if (launch_cover_valid) {
         surface_free(&launch_cover);
         launch_cover_valid = false;
+        launch_cover_logical_w = 0;
     }
 }
 
@@ -770,23 +772,20 @@ static void launch_cover_take (void) {
     launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
 
     // A cover already shown at least at the Large size from a 16:9 pack (Home's hi-res covers) is in memory at that
-    // size: widen its squeezed pixels here rather than read it from the card again (a 140 ms stall on A).
+    // size: its squeezed pixels are copied as they are (no read from the card, a 140 ms stall on A), and the loading
+    // card shows them 1:1 at that size, as sharp as on Home. Widening them first and squeezing them again for the
+    // screen had softened the cover.
     surface_t *squeezed = launcher_cover_physical(focused_image);
     if (squeezed && focused_image->width > LAUNCH_LARGE_W + 2 && surface_get_format(squeezed) == FMT_RGBA16) {
-        int lw = focused_image->width, lh = squeezed->height;
-        launch_cover = surface_alloc(FMT_RGBA16, lw, lh);
+        launch_cover = surface_alloc(FMT_RGBA16, squeezed->width, squeezed->height);
         if (launch_cover.buffer) {
-            uint32_t step = ((uint32_t)squeezed->width << 16) / (uint32_t)lw;
-            for (int y = 0; y < lh; y++) {
-                const uint16_t *from = (const uint16_t *)((uint8_t *)squeezed->buffer + y * squeezed->stride);
-                uint16_t *to = (uint16_t *)((uint8_t *)launch_cover.buffer + y * launch_cover.stride);
-                uint32_t sx = 0;
-                for (int x = 0; x < lw; x++, sx += step) {
-                    to[x] = from[sx >> 16];
-                }
+            for (int y = 0; y < squeezed->height; y++) {
+                memcpy((uint8_t *)launch_cover.buffer + y * launch_cover.stride,
+                       (uint8_t *)squeezed->buffer + y * squeezed->stride, (size_t)squeezed->width * 2);
             }
             launch_cover_valid = true;
             launch_cover_large = true;
+            launch_cover_logical_w = focused_image->width;
             return;
         }
     }
@@ -836,6 +835,25 @@ static void launch_cover_take (void) {
     launch_cover_large = false;
 }
 
+static void blit_filtered(surface_t *source, int rx, int y, int real_w, int h);
+
+/** @brief The loading card's squeezed cover at logical (x, y, w, h): copied 1:1 at its own size, else resized. */
+static void draw_launch_squeezed (int x, int y, int w, int h) {
+    rdpq_mode_push();
+    if (w == launch_cover_logical_w && h == launch_cover.height) {
+        rdpq_set_mode_copy(true);
+        rdpq_tex_blit(&launch_cover, px(x), y, NULL);
+    } else {
+        rdpq_set_mode_standard();
+        rdpq_mode_filter(FILTER_BILINEAR);
+        rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
+        blit_filtered(&launch_cover, px(x), y, real_cover_width(w), h);
+    }
+    rdpq_mode_pop();
+    float scale = (float)h / launch_cover.height;
+    mask_corners(x, y, x + w, y + h, (int)(TILE_RADIUS * scale + 0.5f), theme_current()->bg);
+}
+
 void launcher_draw_loading (const char *title, const char *details, float progress, const char *status) {
     launcher_draw_background();
 
@@ -846,9 +864,10 @@ void launcher_draw_loading (const char *title, const char *details, float progre
     int status_y = title_y + (LOADING_STATUS_Y - LOADING_TITLE_Y) + details_gap;
     if (launch_cover_valid) {
         // The cover sits above the name, and the whole block stays centered on screen.
-        float scale = fminf(launch_cover_large ? LAUNCH_LARGE_ZOOM : LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
+        int cover_w = launch_cover_logical_w ? launch_cover_logical_w : launch_cover.width;
+        float scale = fminf(launch_cover_large ? LAUNCH_LARGE_ZOOM : LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / cover_w,
                                                      (float)LAUNCH_COVER_MAX_H / launch_cover.height));
-        int dw = (int)(launch_cover.width * scale);
+        int dw = (int)(cover_w * scale);
         int dh = (int)(launch_cover.height * scale);
         int block_h = dh + (LOADING_STATUS_Y - LOADING_TITLE_Y) + 44 + details_gap;
         int dy = (DISPLAY_HEIGHT - block_h) / 2;
@@ -868,7 +887,11 @@ void launcher_draw_loading (const char *title, const char *details, float progre
         int y = launch_from_y + (int)((dy - launch_from_y) * e);
         int w = launch_from_w + (int)((dw - launch_from_w) * e);
         int h = launch_from_h + (int)((dh - launch_from_h) * e);
-        launcher_draw_cover_scaled(&launch_cover, x, y, w, h, theme_current()->bg);
+        if (launch_cover_logical_w) {
+            draw_launch_squeezed(x, y, w, h);
+        } else {
+            launcher_draw_cover_scaled(&launch_cover, x, y, w, h, theme_current()->bg);
+        }
     }
 
     if (title && title[0]) {
