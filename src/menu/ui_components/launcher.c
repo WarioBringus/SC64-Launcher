@@ -656,6 +656,28 @@ static void launch_cover_take (void) {
     launch_from_h = focused_h;
     launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
 
+    // A cover already shown at least at the Large size from a 16:9 pack (Home's hi-res covers) is in memory at that
+    // size: widen its squeezed pixels here rather than read it from the card again (a 140 ms stall on A).
+    surface_t *squeezed = launcher_cover_physical(focused_image);
+    if (squeezed && focused_image->width > LAUNCH_LARGE_W + 2 && surface_get_format(squeezed) == FMT_RGBA16) {
+        int lw = focused_image->width, lh = squeezed->height;
+        launch_cover = surface_alloc(FMT_RGBA16, lw, lh);
+        if (launch_cover.buffer) {
+            uint32_t step = ((uint32_t)squeezed->width << 16) / (uint32_t)lw;
+            for (int y = 0; y < lh; y++) {
+                const uint16_t *from = (const uint16_t *)((uint8_t *)squeezed->buffer + y * squeezed->stride);
+                uint16_t *to = (uint16_t *)((uint8_t *)launch_cover.buffer + y * launch_cover.stride);
+                uint32_t sx = 0;
+                for (int x = 0; x < lw; x++, sx += step) {
+                    to[x] = from[sx >> 16];
+                }
+            }
+            launch_cover_valid = true;
+            launch_cover_large = true;
+            return;
+        }
+    }
+
     // The Large cover from the pack ends the animation sharp; a thumbnail would have to be enlarged.
     // A cover already shown at that size (carousel, shelf) is read again too: in 16:9 the one on
     // screen is squeezed and can't be copied.
