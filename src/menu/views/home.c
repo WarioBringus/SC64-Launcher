@@ -474,6 +474,11 @@ static int range_gap (int a0, int a1, int b0, int b1) {
     return (b1 < a0) ? a0 - b1 : ((b0 > a1) ? b0 - a1 : 0);
 }
 
+/** @brief A color pct percent of the way from a to b (styles derive their shades from the theme). */
+static color_t color_mix (color_t a, color_t b, int pct) {
+    return RGBA32(a.r + (b.r - a.r) * pct / 100, a.g + (b.g - a.g) * pct / 100, a.b + (b.b - a.b) * pct / 100, 0xFF);
+}
+
 /** @brief Move the focus to the nearest slot in a direction; false when there is none. */
 static bool slot_move (int dx, int dy) {
     const slot_t *c = NULL;
@@ -967,49 +972,99 @@ static void draw_tiles (menu_t *menu, int *lookups_left) {
     launcher_small(side_x, ry + TILES_SMALL_H - 16, TILES_SIDE_W, ALIGN_LEFT, STL_GRAY, clock);
 }
 
-/* Cartridge: the game to resume and the recently played as cartridges on a band, Favorites below. */
-#define CART_BAND_H         (150)
-#define CART_W              (LAUNCHER_COVER_W)
-#define CART_H              (LAUNCHER_COVER_H)
-#define CART_STEP           (LAUNCHER_COVER_W + 20)
+/* Cartridge: a header bar; the game to resume and the recently played stand as cartridges in a band (the first one
+   larger), the focused game's title under it, Favorites below. Every shade comes from the theme. */
+#define CART_BAND_TOP       (LAUNCHER_HEADER_BAR_H + 14)
+#define CART_BAND_H         (160)
+#define CART_PAD_X          (12)    /* Cartridge body around its label */
+#define CART_PAD_TOP        (12)
+#define CART_PAD_BOTTOM     (16)
+#define CART_GAP            (18)
+#define CART_LIFT           (8)     /* The focused cartridge stands this much higher */
 #define CART_ROW_W          (87)
 #define CART_ROW_H          (61)
 #define CART_ROW_STEP       (97)
 
-static strip_t cart_band_strip;
+static int cart_scroll = 0;
+static float cart_scroll_pos = 0.0f;
 static strip_t cart_row_strip;
 
 static void draw_cartridge (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
-    int y0 = CONTENT_TOP + 4;
-    int y1 = y0 + CART_BAND_H;
-    launcher_fill_rounded(LAUNCHER_X0, y0, LAUNCHER_X1, y1, CARD_RADIUS, t->panel);
+    color_t band_color = color_mix(t->bg, t->panel, 60);
+    color_t body_color = color_mix(t->panel, t->text_muted, 35);
+    int y0 = CART_BAND_TOP, y1 = CART_BAND_TOP + CART_BAND_H;
+    launcher_fill_rounded(LAUNCHER_X0, y0, LAUNCHER_X1, y1, 6, band_color);
 
     game_ref_t band[MAX_ROW_ITEMS + 1];
     int band_n = refs_add(band, 0, MAX_ROW_ITEMS + 1, row_of_kind(ROW_RESUME));
+    bool has_resume = band_n > 0;
     band_n = refs_add(band, band_n, MAX_ROW_ITEMS + 1, row_of_kind(ROW_RECENT));
-    // Cartridges are cut off at the band's right end (the left edge of a scissor must stay at 0: see draw).
-    rdpq_set_scissor(0, y0, launcher_px(LAUNCHER_X1 - 8), y1);
-    draw_strip(menu, band, band_n, LAUNCHER_X0 + 20, LAUNCHER_X1 - 20, y0 + (CART_BAND_H - CART_H) / 2, CART_W, CART_H,
-        CART_STEP, &cart_band_strip, t->panel, lookups_left);
+
+    // Where each cartridge goes along the band (the one to resume is larger), and the scroll that keeps the
+    // focused one in view.
+    int xs[MAX_ROW_ITEMS + 1], ws[MAX_ROW_ITEMS + 1];
+    int x = 0, focus = refs_focus(band, band_n);
+    for (int i = 0; i < band_n; i++) {
+        bool big = has_resume && i == 0;
+        ws[i] = (big ? LAUNCHER_COVER_W : 133) + 2 * CART_PAD_X;
+        xs[i] = x;
+        x += ws[i] + CART_GAP;
+    }
+    int view_x0 = LAUNCHER_X0 + 24, view_w = LAUNCHER_WIDTH - 48;
+    if (focus >= 0) {
+        if (xs[focus] < cart_scroll) {
+            cart_scroll = xs[focus];
+        }
+        if (xs[focus] + ws[focus] - cart_scroll > view_w) {
+            cart_scroll = xs[focus] + ws[focus] - view_w;
+        }
+    }
+    cart_scroll_pos = motion_snap ? (float)cart_scroll : launcher_ease(cart_scroll_pos, (float)cart_scroll);
+    int drawn = (int)lroundf(cart_scroll_pos);
+
+    int clip_x1 = launcher_px(LAUNCHER_X1 - 8);
+    rdpq_set_scissor(0, y0 - CART_LIFT, clip_x1 < 1 ? 1 : clip_x1, y1);
+    for (int i = 0; i < band_n; i++) {
+        bool big = has_resume && i == 0;
+        int lw = big ? LAUNCHER_COVER_W : 133, lh = big ? LAUNCHER_COVER_H : 94;
+        int bh = lh + CART_PAD_TOP + CART_PAD_BOTTOM;
+        int lift = (i == focus) ? CART_LIFT : 0;
+        int bx = view_x0 + xs[i] - drawn;
+        int target_bx = view_x0 + xs[i] - cart_scroll;
+        int by = y1 - bh - lift;
+        slot_add(target_bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh, band[i].row, band[i].index);
+        if (bx < LAUNCHER_X0 + 8 || bx > LAUNCHER_X1) {
+            continue;   // Past the band's ends: not drawn, and its cover not read.
+        }
+        // The cartridge's body: rounded at the top, standing on the band's floor.
+        launcher_fill_rounded(bx, by, bx + ws[i], by + 16, 8, body_color);
+        launcher_fill_rounded(bx, by + 8, bx + ws[i], y1, 0, body_color);
+        home_item_t *h = &rows[band[i].row].items[band[i].index];
+        bool pending;
+        surface_t *image = item_image(menu, h, lw, lh, lookups_left, &pending);
+        launcher_draw_tile(bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh, image, pending, h->title, false, body_color);
+        if (i == focus) {
+            launcher_note_focused_cover(image, bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh);
+            launcher_draw_focus_ring_tile(target_bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh);
+        }
+    }
     clip_none();
 
     // The focused game's name and where it's from, under the band.
     home_item_t *f = focused_item();
     if (f) {
-        int ty = y1 + 10;
-        launcher_title(LAUNCHER_X0 + 6, ty, LAUNCHER_WIDTH - 12, ALIGN_LEFT, STL_DEFAULT, f->title);
+        int ty = y1 + 12;
+        launcher_title(LAUNCHER_X0 + 24, ty, LAUNCHER_WIDTH - 48, ALIGN_LEFT, STL_DEFAULT, f->title);
         char line[200], details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
-        const char *kind = (rows[row_selected].kind == ROW_RESUME) ? "Resume" :
-            ((rows[row_selected].kind == ROW_RECENT) ? "Recently played" : "Favorite");
-        snprintf(line, sizeof(line), "%s%s%s", kind, details[0] ? "  -  " : "", details);
-        launcher_game_details(LAUNCHER_X0 + 6, ty + 36, LAUNCHER_WIDTH - 12, ALIGN_LEFT, STL_GRAY, line);
+        snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
+        launcher_game_details(LAUNCHER_X0 + 24, ty + 38, LAUNCHER_WIDTH - 48, ALIGN_LEFT, STL_GRAY, line);
     }
 
     int fav = row_of_kind(ROW_FAVORITES);
     if (fav >= 0) {
-        int ly = y1 + 76;
+        int ly = y1 + 80;
         game_ref_t refs[MAX_ROW_ITEMS];
         int n = refs_add(refs, 0, MAX_ROW_ITEMS, fav);
         launcher_text(LAUNCHER_X0, ly, 0, ALIGN_LEFT, refs_focus(refs, n) >= 0 ? STL_DEFAULT : STL_GRAY, "Favorites");
@@ -1076,6 +1131,10 @@ static void process_styled (menu_t *menu, int style) {
 /** @brief The header and footer a style draws with (set before the header is drawn). */
 static void set_style_chrome (int style) {
     switch (style) {
+        case LAUNCHER_HOME_CARTRIDGE:
+            launcher_set_header_style(LAUNCHER_HEADER_BAR);
+            launcher_hide_footer_line();
+            break;
         case LAUNCHER_HOME_TILES:
             launcher_set_header_style(LAUNCHER_HEADER_NONE);
             launcher_hide_footer_line();
