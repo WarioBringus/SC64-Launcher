@@ -27,7 +27,6 @@
 /* Memory for decoded covers: what the slots held when every cover was at most 158x112, so the
    carousel's and shelf's larger covers never take more than covers did before. */
 #define COVER_BYTES_PER_SLOT    (LAUNCHER_COVER_W * LAUNCHER_COVER_H * 2)
-#define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d%s.pak"
 #define COMBINED_FILE_FORMAT    "%.*s/menu/cache/launcher/covers.pak"
 #define COMBINED_MAX            (32)    /* Packs listed in covers.pak's directory */
 
@@ -35,11 +34,10 @@
 typedef struct {
     int w;
     int h;
-    bool wide;                  /**< Squeezed for 16:9 (covers_WxH_w.pak) */
+    bool wide;                  /**< Squeezed for 16:9 (the _w packs) */
     bool tried;
     uint32_t tried_frame;       /**< When it was last opened; one that failed is tried again later */
     FILE *f;
-    bool shared;                /**< f is covers.pak's, closed once for all its packs */
     uint32_t count;
     uint32_t *offsets;
 } cover_pack_t;
@@ -56,7 +54,7 @@ typedef struct {
 typedef enum {
     COMBINED_UNTRIED,
     COMBINED_OPEN,
-    COMBINED_MISSING,           /* Not on the card: the per-size packs are used */
+    COMBINED_MISSING,           /* Not on the card: covers are decoded from their PNGs (slowly) */
     COMBINED_FAILED,            /* Didn't open or read; tried again after FAILED_RETRY_FRAMES */
 } combined_state_t;
 
@@ -132,7 +130,8 @@ static bool combined_open (const char *path) {
         }
         return false;
     }
-    // Unbuffered, as the per-size packs: a cover is one large read straight into its surface.
+    // Unbuffered: a cover is one large read straight into its surface, rather than many small ones through
+    // stdio's buffer (the performance log measured those at about 1 MB/s).
     setvbuf(combined_f, NULL, _IONBF, 0);
     uint8_t head[8];
     uint8_t dir[16 * COMBINED_MAX];
@@ -222,13 +221,11 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
             if (e->w != w || e->h != h || e->wide != wide) {
                 continue;
             }
-            p->f = combined_f;
-            p->shared = true;
+            p->f = combined_f;      // Every pack reads covers.pak; it is closed once, in packs_close.
             p->count = e->count;
             if (fseek(p->f, e->table_offset, SEEK_SET) != 0 || !pack_read_table(p)) {
                 perf_log_event("covers.pak %dx%d%s: table unreadable (errno %d)", w, h, wide ? "_w" : "", errno);
                 p->f = NULL;
-                p->shared = false;
                 return NULL;
             }
             uint32_t open_us = (uint32_t)(get_ticks_us() - open_started);
@@ -239,45 +236,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
         }
         return NULL;    // covers.pak has every size there is; this one isn't built.
     }
-    if (combined_state == COMBINED_FAILED) {
-        return NULL;    // It's there but didn't read: wait for its retry rather than look for the old files.
-    }
-
-    const char *colon = strchr(path, ':');
-    if (!colon) {
-        return NULL;
-    }
-    char file[96];
-    snprintf(file, sizeof(file), PACK_FILE_FORMAT, (int)(colon - path + 1), path, w, h, wide ? "_w" : "");
-    p->f = fopen(file, "rb");
-    if (!p->f) {
-        if (errno != ENOENT) {
-            perf_log_event("cover pack %dx%d%s did not open (errno %d)", w, h, wide ? "_w" : "", errno);
-        }
-        return NULL;
-    }
-    // Unbuffered: a cover is then one large read straight into its surface, rather than many small
-    // ones through stdio's buffer (the performance log measured those at about 1 MB/s).
-    setvbuf(p->f, NULL, _IONBF, 0);
-    uint8_t head[8];
-    if (fread(head, 1, sizeof(head), p->f) != sizeof(head) || memcmp(head, "CVP1", 4) != 0) {
-        perf_log_event("cover pack %dx%d%s: bad header", w, h, wide ? "_w" : "");
-        fclose(p->f);
-        p->f = NULL;
-        return NULL;
-    }
-    p->count = read_u32_be(head + 4);
-    if (!pack_read_table(p)) {
-        perf_log_event("cover pack %dx%d%s: table unreadable (errno %d)", w, h, wide ? "_w" : "", errno);
-        fclose(p->f);
-        p->f = NULL;
-        return NULL;
-    }
-    uint32_t open_us = (uint32_t)(get_ticks_us() - open_started);
-    if (open_us > 20000) {
-        perf_log_event("opening cover pack %dx%d%s took %.1f ms", w, h, wide ? "_w" : "", open_us / 1000.0f);
-    }
-    return p;
+    return NULL;    // No covers.pak (or it didn't read yet): covers are decoded from their PNGs.
 }
 
 bool launcher_covers_have_pack (const char *storage_prefix, int w, int h) {
@@ -594,9 +553,6 @@ static surface_t *pack_read (cover_pack_t *p, int id, int w, int h) {
 
 static void packs_close (void) {
     for (int i = 0; i < MAX_PACKS; i++) {
-        if (packs[i].f && !packs[i].shared) {
-            fclose(packs[i].f);
-        }
         free(packs[i].offsets);
         memset(&packs[i], 0, sizeof(packs[i]));
     }
