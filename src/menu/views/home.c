@@ -50,6 +50,9 @@ static const launcher_hint_t hints_empty[] = {
 #define REVEAL_TIMEOUT_MS   (2500)  /* The first Home shows by then even if covers are still loading */
 #define REVEAL_LOOKUPS      (64)    /* Cover lookups per frame while it's hidden */
 #define REVEAL_FADE_MS      (250)   /* Then it fades in from black over this long */
+#define REVEAL_STEADY_FRAMES (6)    /* ...once this many frames in a row came quickly (startup has settled) */
+#define REVEAL_STEADY_MS    (25)
+#define REVEAL_STEP_MS      (20)    /* A frame moves the fade on by at most this much, so a slow one pauses it */
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
@@ -211,6 +214,9 @@ typedef enum {
 static reveal_t reveal = REVEAL_HIDDEN;
 static uint64_t reveal_since_ms = 0;
 static int reveal_frames = 0;
+static int reveal_steady = 0;           /* Quick frames in a row while hidden */
+static uint64_t reveal_last_ms = 0;     /* When the last frame was drawn */
+static float reveal_fade_ms = 0.0f;     /* How far the fade has got */
 static bool covers_pending = false;     /* A cover drawn this frame is still loading */
 
 static surface_t *item_image (menu_t *menu, home_item_t *h, int w, int hgt, int *lookups_left, bool *pending) {
@@ -451,20 +457,27 @@ static void draw (menu_t *menu, surface_t *d) {
 
     launcher_menu_draw();
 
+    uint64_t now_ms = get_ticks_ms();
+    uint64_t frame_ms = reveal_last_ms ? now_ms - reveal_last_ms : 0;
+    reveal_last_ms = now_ms;
     if (reveal == REVEAL_HIDDEN) {
-        // Shown once a frame (after the first two, so startup's one-off work has run) draws every cover.
+        // Shown once every cover is drawn and frames have come quickly for a while: right after the
+        // startup work, frames are still uneven (music refilling and so on) and the fade would stutter.
         reveal_frames++;
-        bool timed_out = (get_ticks_ms() - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
-        if ((reveal_frames > 2 && !covers_pending) || timed_out) {
+        reveal_steady = (frame_ms > 0 && frame_ms <= REVEAL_STEADY_MS) ? reveal_steady + 1 : 0;
+        bool timed_out = (now_ms - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
+        if ((reveal_steady >= REVEAL_STEADY_FRAMES && !covers_pending) || timed_out) {
             reveal = REVEAL_FADING;
-            reveal_since_ms = get_ticks_ms();
+            reveal_fade_ms = 0.0f;
         }
+    } else if (reveal == REVEAL_FADING) {
+        reveal_fade_ms += (frame_ms < REVEAL_STEP_MS) ? frame_ms : REVEAL_STEP_MS;
     }
     if (reveal == REVEAL_HIDDEN) {
         launcher_draw_screen_fade(255);
     } else if (reveal == REVEAL_FADING) {
         // Black to Home, easing out (quick at first, settling gently).
-        float t = (float)(get_ticks_ms() - reveal_since_ms) / REVEAL_FADE_MS;
+        float t = reveal_fade_ms / REVEAL_FADE_MS;
         if (t >= 1.0f) {
             reveal = REVEAL_SHOWN;
         } else {
