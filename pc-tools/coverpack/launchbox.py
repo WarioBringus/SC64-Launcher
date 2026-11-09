@@ -128,36 +128,53 @@ def save_fronts(args, menu, front_for):
     the same box as the card's art (LaunchBox often has another region or edition: the large cover would then differ
     from the small ones)."""
     os.makedirs(args.fronts_dir, exist_ok=True)
-    saved = skipped = different = 0
-    for cover, f in sorted(front_for.items()):
+    saved = different = from_other = 0
+
+    def local_front(f):
+        """The front's file, fetched if need be; None when it isn't a box-shaped PNG or JPEG."""
         local = os.path.join(args.fronts_dir, f)
         if not os.path.exists(local):
             data = fetch(IMAGE_HOST + f)
             if not (data[:8] == b'\x89PNG\r\n\x1a\n' or data[:3] == b'\xff\xd8\xff'):
-                print('  skipped %s: not a PNG or JPEG' % cover)
-                skipped += 1
-                continue
+                return None
             open(local, 'wb').write(data)
         size = image_size(open(local, 'rb').read(300000))
-        if not size or not (0.5 <= min(size) / max(size) <= 0.95):
-            print('  skipped %s: not box-shaped %s' % (cover, size))
-            skipped += 1
-            continue
+        return local if size and 0.5 <= min(size) / max(size) <= 0.95 else None
+
+    for cover, candidates in sorted(front_for.items()):
+        # The preferred front if it is the card's box; otherwise whichever of the others is closest.
+        chosen, best = None, None
+        for n, f in enumerate(candidates):
+            local = local_front(f)
+            if not local:
+                continue
+            d = box_difference(args.ffmpeg, menu + cover, local)
+            if best is None or d < best:
+                chosen, best = (f, local, n), d
+            if d <= SAME_BOX_DIFFERENCE:
+                break
         dest = os.path.join(args.hires, cover)
-        if not (os.path.exists(dest) and os.path.getmtime(dest) >= os.path.getmtime(local)):
+        marker = dest + '.source'
+        if chosen is None or best > SAME_BOX_DIFFERENCE:
+            for path in (dest, marker):
+                if os.path.exists(path):
+                    os.remove(path)
+            different += 1
+            continue
+        f, local, n = chosen
+        from_other += (n > 0)
+        if not (os.path.exists(dest) and os.path.exists(marker) and open(marker).read() == f):
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             vf = "scale='if(gt(iw,ih),min(iw,600),-2)':'if(gt(iw,ih),-2,min(ih,600))':flags=lanczos"
             r = subprocess.run([args.ffmpeg, '-loglevel', 'error', '-y', '-i', local, '-vf', vf, '-pix_fmt', 'rgb24', dest])
             if r.returncode != 0:
-                skipped += 1
+                different += 1
                 continue
+            open(marker, 'w').write(f)
             saved += 1
-        if box_difference(args.ffmpeg, menu + cover, dest) > SAME_BOX_DIFFERENCE:
-            os.remove(dest)
-            different += 1
-    kept = len(front_for) - skipped - different
-    print('Hi-res fronts under %s: %d kept (%d new), %d another box or edition than the card\'s (not used), %d skipped.'
-          % (args.hires, kept, saved, different, skipped))
+    kept = len(front_for) - different
+    print('Hi-res fronts under %s: %d kept (%d new, %d from another LaunchBox image of the game), %d with no image of '
+          'the card\'s box (not used).' % (args.hires, kept, saved, from_other, different))
 
 
 def main():
@@ -218,11 +235,11 @@ def main():
         if cover.endswith('/boxart_front.png') and cover not in front_for:
             parts = cover.split('/')
             region = parts[4] if len(parts) == 6 else ''
-            options = fronts.get(gid, [])
-            best = ([s for s in options if s[1] in SAME_REGION.get(region, ())] or
-                    [s for s in options if s[1] in ('North America', 'United States')] or options)
-            if best and re.fullmatch(r'(r2_)?[0-9a-f-]{36}\.(jpg|jpeg|png)', best[0][0], re.I):
-                front_for[cover] = best[0][0]
+            # Every front LaunchBox has for the game, the cover's own region first, then North America.
+            options = [s for s in fronts.get(gid, []) if re.fullmatch(r'(r2_)?[0-9a-f-]{36}\.(jpg|jpeg|png)', s[0], re.I)]
+            rank = lambda s: (s[1] not in SAME_REGION.get(region, ()), s[1] not in ('North America', 'United States'))
+            if options:
+                front_for[cover] = [s[0] for s in sorted(options, key=rank)]
         if not cover.endswith('/boxart_front.png') or cover in wanted:
             continue
         folder = cover[:-len('boxart_front.png')]
