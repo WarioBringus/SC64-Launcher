@@ -1173,6 +1173,9 @@ static void draw (menu_t *menu, surface_t *d) {
             fade_started_ms = now_ms;
             perf_log_event("startup Home hidden for %lu ms (%d frames, %s)", (unsigned long)(now_ms - reveal_since_ms),
                 reveal_frames, timed_out ? "timed out" : "covers in, frames steady");
+            heap_stats_t heap;
+            sys_get_heap_stats(&heap);
+            perf_log_event("after startup: heap %d KB free (%d KB of it in gaps between allocations)", heap.free / 1024, heap.fragmented / 1024);
         }
     } else if (reveal == REVEAL_FADING) {
         reveal_fade_ms += (frame_ms < REVEAL_STEP_MS) ? frame_ms : REVEAL_STEP_MS;

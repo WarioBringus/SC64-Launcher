@@ -317,6 +317,113 @@ static void slot_account(cover_slot_t *slot);
 static void slot_free(cover_slot_t *slot);
 static uint32_t evict_key(const cover_slot_t *s);
 
+/*
+ * Cover memory: one block reserved the first time a cover is read (with an Expansion Pak), from which every cover's
+ * pixels are taken. Taken from the general heap, the covers were broken up by the small allocations between them:
+ * after a while no ~190 KB piece was left for a wallpaper cover, and covers were freed and read again (performance
+ * log). Inside the block only covers come and go, and freeing the ones unused longest always makes room.
+ */
+#define ARENA_MAX           (3200 * 1024)
+#define ARENA_RESERVE       (1600 * 1024)   /* Left in the heap: fonts, the library and everything else */
+#define ARENA_MIN           (1024 * 1024)
+#define ARENA_ALIGN         (64)
+#define ARENA_BLOCKS        (256)
+
+typedef struct {
+    uint32_t offset;
+    uint32_t size;
+    bool used;
+} arena_block_t;
+
+static uint8_t *arena = NULL;
+static uint32_t arena_size = 0;
+static bool arena_tried = false;
+static arena_block_t arena_blocks[ARENA_BLOCKS];     /* In address order, covering the whole block */
+static int arena_count = 0;
+
+static void arena_init (void) {
+    if (arena_tried) {
+        return;
+    }
+    arena_tried = true;
+    if (!is_memory_expanded()) {
+        return;
+    }
+    heap_stats_t stats;
+    sys_get_heap_stats(&stats);
+    int size = stats.free - ARENA_RESERVE;
+    size = (size > ARENA_MAX) ? ARENA_MAX : size;
+    size &= ~(ARENA_ALIGN - 1);
+    if (size < ARENA_MIN) {
+        perf_log_event("cover memory: no block reserved (heap %d KB free); covers use the heap", stats.free / 1024);
+        return;
+    }
+    arena = malloc_uncached_aligned(ARENA_ALIGN, size);
+    if (!arena) {
+        return;
+    }
+    arena_size = (uint32_t)size;
+    arena_blocks[0] = (arena_block_t) { 0, arena_size, false };
+    arena_count = 1;
+    perf_log_event("cover memory: %d KB reserved for covers (heap %d KB free before)", size / 1024, stats.free / 1024);
+}
+
+static bool in_arena (const void *p) {
+    return arena && (const uint8_t *)p >= arena && (const uint8_t *)p < arena + arena_size;
+}
+
+static void *arena_alloc (uint32_t bytes) {
+    bytes = (bytes + ARENA_ALIGN - 1) & ~(uint32_t)(ARENA_ALIGN - 1);
+    for (int i = 0; i < arena_count; i++) {
+        arena_block_t *b = &arena_blocks[i];
+        if (b->used || b->size < bytes) {
+            continue;
+        }
+        if (b->size > bytes && arena_count < ARENA_BLOCKS) {
+            // Split: the rest stays free right after.
+            memmove(&arena_blocks[i + 2], &arena_blocks[i + 1], (arena_count - i - 1) * sizeof(arena_block_t));
+            arena_blocks[i + 1] = (arena_block_t) { b->offset + bytes, b->size - bytes, false };
+            arena_count++;
+            b->size = bytes;
+        }
+        b->used = true;
+        return arena + b->offset;
+    }
+    return NULL;
+}
+
+static void arena_free (void *p) {
+    uint32_t offset = (uint32_t)((uint8_t *)p - arena);
+    for (int i = 0; i < arena_count; i++) {
+        if (arena_blocks[i].offset != offset) {
+            continue;
+        }
+        arena_blocks[i].used = false;
+        // Merge with the free neighbours.
+        if (i + 1 < arena_count && !arena_blocks[i + 1].used) {
+            arena_blocks[i].size += arena_blocks[i + 1].size;
+            memmove(&arena_blocks[i + 1], &arena_blocks[i + 2], (arena_count - i - 2) * sizeof(arena_block_t));
+            arena_count--;
+        }
+        if (i > 0 && !arena_blocks[i - 1].used) {
+            arena_blocks[i - 1].size += arena_blocks[i].size;
+            memmove(&arena_blocks[i], &arena_blocks[i + 1], (arena_count - i - 1) * sizeof(arena_block_t));
+            arena_count--;
+        }
+        return;
+    }
+}
+
+/** @brief Free a cover's pixels, whether in the reserved block or the heap (PNG-decoded covers). */
+static void cover_surface_free (surface_t *image) {
+    if (image && in_arena(image->buffer)) {
+        arena_free(image->buffer);
+        image->buffer = NULL;
+    } else if (image) {
+        surface_free(image);
+    }
+}
+
 /** @brief Free the cover unused longest (not drawn this frame, not loading, not keep); false when there is none. */
 static bool free_oldest_cover (cover_slot_t *keep) {
     cover_slot_t *oldest = NULL;
@@ -345,8 +452,14 @@ static surface_t *cover_surface_alloc (cover_slot_t *keep, int w, int h) {
     }
     int freed = 0;
     size_t freed_bytes = 0, need = (size_t)w * h * 2;
+    arena_init();
     while (true) {
-        *image = surface_alloc(FMT_RGBA16, w, h);
+        if (arena) {
+            void *buffer = arena_alloc((uint32_t)need);
+            *image = buffer ? surface_make_linear(buffer, FMT_RGBA16, w, h) : (surface_t) { 0 };
+        } else {
+            *image = surface_alloc(FMT_RGBA16, w, h);
+        }
         if (image->buffer) {
             if (freed > 0) {
                 perf_log_event("memory short for a %dx%d cover: freed %d older covers", w, h, freed);
@@ -356,7 +469,8 @@ static surface_t *cover_surface_alloc (cover_slot_t *keep, int w, int h) {
         // Freeing a few covers' worth helps when memory is short; when it is broken into small pieces, freeing
         // the rest of the cache would only lose covers for nothing.
         size_t before = bytes_used;
-        if (freed_bytes > need * 3 || !free_oldest_cover(keep)) {
+        // In the reserved block, freeing always makes room in the end (only covers live there).
+        if ((!arena && freed_bytes > need * 3) || !free_oldest_cover(keep)) {
             perf_log_event("no memory for a %dx%d cover (%u KB of covers held)", w, h, (unsigned)(bytes_used / 1024));
             free(image);
             return NULL;
@@ -403,7 +517,7 @@ static bool stream_begin (cover_slot_t *slot, cover_pack_t *p, int id, int w, in
 
 static void stream_drop (cover_slot_t *slot) {
     if (slot->stream_surface) {
-        surface_free(slot->stream_surface);
+        cover_surface_free(slot->stream_surface);
         free(slot->stream_surface);
     }
     slot->stream_surface = NULL;
@@ -720,11 +834,11 @@ static void slot_free (cover_slot_t *slot) {
         decoding = false;
     }
     if (slot->wide) {
-        surface_free(slot->wide);
+        cover_surface_free(slot->wide);
         free(slot->wide);
         free(slot->image);      // Only a header over wide's pixels.
     } else if (slot->image) {
-        surface_free(slot->image);
+        cover_surface_free(slot->image);
         free(slot->image);
     }
     bytes_used -= slot->bytes;
@@ -740,6 +854,10 @@ static void slot_free (cover_slot_t *slot) {
 static size_t cover_budget (void) {
     if (!is_memory_expanded()) {
         return (size_t)COVER_SLOTS_4MB * COVER_BYTES_PER_SLOT;
+    }
+    arena_init();
+    if (arena) {
+        return arena_size;
     }
     heap_stats_t stats;
     sys_get_heap_stats(&stats);
@@ -1006,4 +1124,13 @@ void launcher_covers_reset (void) {
     }
     decoding = false;
     packs_close();
+    // The reserved block goes back to the heap (the original menu's screens need the memory); it is reserved again
+    // with the next cover.
+    if (arena) {
+        free_uncached(arena);
+        arena = NULL;
+        arena_size = 0;
+        arena_count = 0;
+    }
+    arena_tried = false;
 }
