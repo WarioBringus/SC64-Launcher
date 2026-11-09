@@ -136,6 +136,7 @@ typedef struct {
     uint8_t style;
     uint8_t align;
     uint8_t valign;
+    uint8_t wrap;               /* WRAP_ELLIPSES: one line, fitted as below; WRAP_WORD: as many lines as fit */
     int16_t real_w;
     int16_t h;
     int16_t dx;                 /* Offset from the box's left edge where the layout is drawn */
@@ -158,6 +159,24 @@ static uint32_t text_hash (const char *text) {
 /** @brief Lay text out in a box (real pixels wide, 0 for no limit) as text_box_font draws it. */
 static void layout_build (layout_entry_t *e, const char *text) {
     int nbytes = (int)strlen(text);
+    if (e->wrap == WRAP_WORD) {
+        e->layout = rdpq_paragraph_build(
+            &(rdpq_textparms_t) {
+                .style_id = e->style,
+                .width = e->real_w,
+                .height = e->h,
+                .align = e->align,
+                .valign = e->valign,
+                .wrap = WRAP_WORD,
+            },
+            e->font,
+            text,
+            &nbytes
+        );
+        e->dx = 0;
+        e->advance = (int16_t)e->layout->advance_x;
+        return;
+    }
     if (e->real_w > 0) {
         // libdragon cuts a line once its last glyph plus that glyph's advance passes the box, so text
         // that fits (Dr. Mario 64) could still end in "...". Lay it out with room to spare and keep
@@ -215,19 +234,27 @@ static void layout_build (layout_entry_t *e, const char *text) {
  *
  * @return Logical width of the drawn text.
  */
-static int text_box_font_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text);
+static int text_box_wrap_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, rdpq_textwrap_t wrap, const char *text);
 
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     uint64_t started = get_ticks_us();
-    int width = text_box_font_untimed(font, x, y, w, h, align, valign, style, text);
+    int width = text_box_wrap_untimed(font, x, y, w, h, align, valign, style, WRAP_ELLIPSES, text);
     perf_log_add(PERF_TEXT, (uint32_t)(get_ticks_us() - started));
     return width;
 }
 
-static int text_box_font_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
+/** @brief As text_box_font, with text wrapped onto as many lines as the box holds. */
+static int text_box_wrapped (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
+    uint64_t started = get_ticks_us();
+    int width = text_box_wrap_untimed(font, x, y, w, h, align, valign, style, WRAP_WORD, text);
+    perf_log_add(PERF_TEXT, (uint32_t)(get_ticks_us() - started));
+    return width;
+}
+
+static int text_box_wrap_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, rdpq_textwrap_t wrap, const char *text) {
     int real_w = (w > 0) ? px(x + w) - px(x) : 0;
     layout_entry_t key = {
-        .font = launcher_font(font), .style = style, .align = align, .valign = valign,
+        .font = launcher_font(font), .style = style, .align = align, .valign = valign, .wrap = wrap,
         .real_w = (int16_t)real_w, .h = (int16_t)h,
     };
 
@@ -251,7 +278,8 @@ static int text_box_font_untimed (uint8_t font, int x, int y, int w, int h, rdpq
             continue;
         }
         if (c->hash == hash && c->font == key.font && c->style == key.style && c->align == key.align &&
-            c->valign == key.valign && c->real_w == key.real_w && c->h == key.h && strcmp(c->text, text) == 0) {
+            c->valign == key.valign && c->wrap == key.wrap && c->real_w == key.real_w && c->h == key.h &&
+            strcmp(c->text, text) == 0) {
             e = c;
             break;
         }
@@ -1225,21 +1253,7 @@ void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bo
     } else if (!pending && title) {
         char escaped[256];
         escape_text_codes(title, escaped, sizeof(escaped));
-        rdpq_text_printn(
-            &(rdpq_textparms_t) {
-                .style_id = STL_GRAY,
-                .width = px(x + w - 4) - px(x + 4),
-                .height = h - 8,
-                .align = ALIGN_CENTER,
-                .valign = VALIGN_CENTER,
-                .wrap = WRAP_WORD,
-            },
-            launcher_font(font_for(escaped, FNT_LAUNCHER)),
-            px(x + 4),
-            y + 4,
-            escaped,
-            strlen(escaped)
-        );
+        text_box_wrapped(font_for(escaped, FNT_LAUNCHER), x + 4, y + 4, w - 8, h - 8, ALIGN_CENTER, VALIGN_CENTER, STL_GRAY, escaped);
     }
     perf_log_add(PERF_COVERS, (uint32_t)(get_ticks_us() - started));
 }
