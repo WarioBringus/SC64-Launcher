@@ -148,6 +148,16 @@ typedef struct {
 static layout_entry_t layout_cache[LAYOUT_CACHE_SIZE];
 static uint32_t layout_clock = 0;
 
+void launcher_text_cache_clear (void) {
+    for (int i = 0; i < LAYOUT_CACHE_SIZE; i++) {
+        if (layout_cache[i].layout) {
+            rdpq_paragraph_free(layout_cache[i].layout);
+        }
+        free(layout_cache[i].text);
+        memset(&layout_cache[i], 0, sizeof(layout_cache[i]));
+    }
+}
+
 static uint32_t text_hash (const char *text) {
     uint32_t hash = 2166136261u;    // FNV-1a
     for (const char *p = text; *p; p++) {
@@ -258,14 +268,6 @@ static int text_box_wrap_untimed (uint8_t font, int x, int y, int w, int h, rdpq
         .real_w = (int16_t)real_w, .h = (int16_t)h,
     };
 
-    // The main font is swapped in after startup, so its layouts aren't kept.
-    if (key.font == FNT_DEFAULT) {
-        layout_build(&key, text);
-        rdpq_paragraph_render(key.layout, px(x) + key.dx, y);
-        rdpq_paragraph_free(key.layout);
-        return logical_width(key.advance);
-    }
-
     uint32_t hash = text_hash(text);
     layout_entry_t *e = NULL;
     layout_entry_t *spare = NULL;   // An empty entry, else the one unused longest
@@ -297,6 +299,7 @@ static int text_box_wrap_untimed (uint8_t font, int x, int y, int w, int h, rdpq
         e->text = strdup(text);
         e->hash = hash;
         layout_build(e, text);
+        perf_log_add(PERF_LAYOUTS, 1);
     }
     e->last_used = ++layout_clock;
     rdpq_paragraph_render(e->layout, px(x) + e->dx, y);

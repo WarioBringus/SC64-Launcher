@@ -406,6 +406,9 @@ bool launcher_is_favorite(menu_t *menu, path_t *rom);
 /** @brief Draw the favorite star in the top-right corner of a tile. */
 void launcher_draw_favorite_star(int x, int y, int w);
 
+/** @brief Forget every laid-out text (a font registered under an id it used has changed). */
+void launcher_text_cache_clear(void);
+
 /** @brief Cover the whole screen in black, alpha 255 (opaque) to 0 (nothing drawn). */
 void launcher_draw_screen_fade(int alpha);
 

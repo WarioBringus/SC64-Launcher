@@ -117,7 +117,9 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     snprintf(file, sizeof(file), PACK_FILE_FORMAT, (int)(colon - path + 1), path, w, h, wide ? "_w" : "");
     p->f = fopen(file, "rb");
     if (!p->f) {
-        perf_log_event("cover pack %dx%d%s did not open (errno %d)", w, h, wide ? "_w" : "", errno);
+        if (errno != ENOENT) {
+            perf_log_event("cover pack %dx%d%s did not open (errno %d)", w, h, wide ? "_w" : "", errno);
+        }
         return NULL;
     }
     // Unbuffered: a cover is then one large read straight into its surface, rather than many small

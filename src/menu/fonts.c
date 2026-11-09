@@ -56,6 +56,9 @@ static void apply_font_styles (void) {
     }
 }
 
+/* From ui_components/launcher.c (its header clashes with this file's launcher_font). */
+void launcher_text_cache_clear(void);
+
 void fonts_load_default (void) {
     if (default_font_loaded) {
         return;
@@ -74,6 +77,7 @@ void fonts_load_default (void) {
     apply_styles(font);
     rdpq_text_unregister_font(FNT_DEFAULT);     // The launcher font stood in until now.
     rdpq_text_register_font(FNT_DEFAULT, font);
+    launcher_text_cache_clear();                // Layouts made with the stand-in no longer match.
     default_font = font;
 }
 

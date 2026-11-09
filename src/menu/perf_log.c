@@ -92,7 +92,7 @@ static void end_second (uint64_t now_us) {
         if (!header_written) {
             add_line("\n# launcher %s - one line per second\n"
                      "# time(s) screen frames frame_avg(ms) frame_max(ms) long_frames(>20ms) work_avg(ms) work_max(ms) "
-                     "card_reads read_ms read_kb steps input_avg(ms) draw_avg(ms) text_avg(ms) covers_avg(ms) polls_avg(ms) wait_avg(ms) shapes_avg(ms) header_hints_avg(ms)\n", LAUNCHER_BUILD);
+                     "card_reads read_ms read_kb steps input_avg(ms) draw_avg(ms) text_avg(ms) covers_avg(ms) polls_avg(ms) wait_avg(ms) shapes_avg(ms) header_hints_avg(ms) layouts_per_frame\n", LAUNCHER_BUILD);
             header_written = true;
         }
         // Waiting: the rest of each frame, mostly for the RDP to finish or for the next vertical blank.
@@ -100,13 +100,14 @@ static void end_second (uint64_t now_us) {
         // wrapped-around unsigned value is too large for the FPU to convert (an unimplemented-operation exception).
         int64_t wait_us = (int64_t)frame_total_us - (int64_t)work_total_us - (int64_t)part_total_us[PERF_POLLS];
         float wait = (wait_us > 0 ? (int32_t)(wait_us / frames) : 0) / 1000.0f;
-        add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f\n",
+        add_line("%7.1f %-14s %3d %5.1f %5.1f %3d %5.1f %5.1f %3d %5.1f %4lu %3d %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f %5.1f %5.2f\n",
                  (now_us - start_us) / 1e6, screen, frames, frame_total_us / 1000.0f / frames, frame_max_us / 1000.0f,
                  long_frames, work_total_us / 1000.0f / frames, work_max_us / 1000.0f, reads, read_total_us / 1000.0f,
                  (unsigned long)(read_bytes / 1024), steps, input_total_us / 1000.0f / frames,
                  draw_total_us / 1000.0f / frames, part_total_us[PERF_TEXT] / 1000.0f / frames,
                  part_total_us[PERF_COVERS] / 1000.0f / frames, part_total_us[PERF_POLLS] / 1000.0f / frames,
-                 wait, part_total_us[PERF_SHAPES] / 1000.0f / frames, part_total_us[PERF_CHROME] / 1000.0f / frames);
+                 wait, part_total_us[PERF_SHAPES] / 1000.0f / frames, part_total_us[PERF_CHROME] / 1000.0f / frames,
+                 (float)part_total_us[PERF_LAYOUTS] / frames);
     }
     second_start_us = now_us;
     frames = long_frames = reads = steps = 0;
