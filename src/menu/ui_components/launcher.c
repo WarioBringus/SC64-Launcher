@@ -559,30 +559,43 @@ static void fill_smooth_rounded (int x0, int y0, int x1, int y1, int radius, col
     if (rx * 2 > rx1 - rx0) {
         rx = (rx1 - rx0) / 2;
     }
+    bool pill = (y1 - y0 == 2 * ry);           // Round ends, no straight sides (a circle when also as wide)
     flat_begin(color);
-    if (y1 - y0 > 2 * ry) {
+    if (!pill) {
         rdpq_fill_rectangle(rx0, y0 + ry, rx1, y1 - ry);
     }
     if (rx1 - rx0 > 2 * rx) {
-        rdpq_fill_rectangle(rx0 + rx, y0, rx1 - rx, y0 + ry);
-        rdpq_fill_rectangle(rx0 + rx, y1 - ry, rx1 - rx, y1);
+        if (pill) {
+            rdpq_fill_rectangle(rx0 + rx, y0, rx1 - rx, y1);
+        } else {
+            rdpq_fill_rectangle(rx0 + rx, y0, rx1 - rx, y0 + ry);
+            rdpq_fill_rectangle(rx0 + rx, y1 - ry, rx1 - rx, y1);
+        }
     }
     flat_end();
     if (rx <= 0 || ry <= 0) {
         return;
     }
+    // The circle (1 KB) is loaded once for the shape and its parts drawn from it: a load per corner cost ~2 ms a
+    // frame across the hints and pills (performance log).
     rdpq_mode_push();
     rdpq_set_mode_standard();
     rdpq_mode_combiner(RDPQ_COMBINER1((0, 0, 0, PRIM), (TEX0, 0, PRIM, 0)));
     rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
     rdpq_mode_filter(FILTER_BILINEAR);
     rdpq_set_prim_color(color);
-    int half = SMOOTH_TEX / 2;
-    float sx = (float)rx / half, sy = (float)ry / half;
-    rdpq_tex_blit(&smooth_circle, rx0, y0, &(rdpq_blitparms_t) { .s0 = 0, .t0 = 0, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
-    rdpq_tex_blit(&smooth_circle, rx1 - rx, y0, &(rdpq_blitparms_t) { .s0 = half, .t0 = 0, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
-    rdpq_tex_blit(&smooth_circle, rx0, y1 - ry, &(rdpq_blitparms_t) { .s0 = 0, .t0 = half, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
-    rdpq_tex_blit(&smooth_circle, rx1 - rx, y1 - ry, &(rdpq_blitparms_t) { .s0 = half, .t0 = half, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
+    rdpq_tex_upload(TILE0, &smooth_circle, NULL);
+    int half = SMOOTH_TEX / 2, full = SMOOTH_TEX;
+    if (pill) {
+        // Left and right halves of the circle (one piece each; a circle is the two side by side).
+        rdpq_texture_rectangle_scaled(TILE0, rx0, y0, rx0 + rx, y1, 0, 0, half, full);
+        rdpq_texture_rectangle_scaled(TILE0, rx1 - rx, y0, rx1, y1, half, 0, full, full);
+    } else {
+        rdpq_texture_rectangle_scaled(TILE0, rx0, y0, rx0 + rx, y0 + ry, 0, 0, half, half);
+        rdpq_texture_rectangle_scaled(TILE0, rx1 - rx, y0, rx1, y0 + ry, half, 0, full, half);
+        rdpq_texture_rectangle_scaled(TILE0, rx0, y1 - ry, rx0 + rx, y1, 0, half, half, full);
+        rdpq_texture_rectangle_scaled(TILE0, rx1 - rx, y1 - ry, rx1, y1, half, half, full, full);
+    }
     rdpq_mode_pop();
     perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
 }
