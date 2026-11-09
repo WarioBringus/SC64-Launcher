@@ -230,6 +230,9 @@ void library_folders_save(void);
  */
 void library_check_new_games(int budget_us);
 
+/** @brief Whether the check for ROMs added since the cover index was built has finished (or has nothing to do). */
+bool library_new_games_checked(void);
+
 /** @brief ROMs found that aren't in the cover index (0 until the check has finished, or without an index). */
 int library_new_game_count(void);
 

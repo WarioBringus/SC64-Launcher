@@ -52,7 +52,8 @@ static const launcher_hint_t hints_empty[] = {
 #define REVEAL_FADE_MS      (250)   /* Then it fades in from black over this long */
 #define REVEAL_STEADY_FRAMES (6)    /* ...once this many frames in a row came quickly (startup has settled) */
 #define REVEAL_STEADY_MS    (25)
-#define REVEAL_STEP_MS      (40)    /* A frame moves the fade on by at most this much, so a hitch pauses it */
+#define REVEAL_STEP_MS      (40)
+#define REVEAL_CHECK_US     (40000) /* While hidden, the new-ROM check runs this long a frame (music fills ~140 ms ahead) */    /* A frame moves the fade on by at most this much, so a hitch pauses it */
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
@@ -482,7 +483,14 @@ static void draw (menu_t *menu, surface_t *d) {
         // Shown once every cover is drawn and frames have come quickly for a while: right after the
         // startup work, frames are still uneven (music refilling and so on) and the fade would stutter.
         reveal_frames++;
-        reveal_steady = (frame_ms > 0 && frame_ms <= REVEAL_STEADY_MS) ? reveal_steady + 1 : 0;
+        // The check for newly added ROMs reads folder listings, ~80-130 ms at a time: done now, behind black,
+        // it can't make a visible frame long later (the library warms after the first frame, hence > 1).
+        bool checked = library_new_games_checked();
+        if (reveal_frames > 1 && !checked) {
+            library_check_new_games(REVEAL_CHECK_US);
+            checked = library_new_games_checked();
+        }
+        reveal_steady = (frame_ms > 0 && frame_ms <= REVEAL_STEADY_MS && checked) ? reveal_steady + 1 : 0;
         bool timed_out = (now_ms - reveal_since_ms) >= REVEAL_TIMEOUT_MS;
         if ((reveal_steady >= REVEAL_STEADY_FRAMES && !covers_pending) || timed_out) {
             reveal = REVEAL_FADING;

@@ -1614,6 +1614,11 @@ static bool index_has_rom (const char *rel) {
     return bsearch(rel, index_roms, index_rom_count, sizeof(index_rom_t), compare_index_rom) != NULL;
 }
 
+bool library_new_games_checked (void) {
+    // Nothing to check when the lists don't come from the index.
+    return new_check_done || !index_roms || index_lists_disabled || folder_count == 0 || !folders[0].from_index;
+}
+
 void library_check_new_games (int budget_us) {
     // Only meaningful when the game lists come from the index.
     if (new_check_done || !index_roms || index_lists_disabled || folder_count == 0 || !folders[0].from_index) {
