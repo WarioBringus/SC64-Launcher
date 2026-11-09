@@ -46,7 +46,6 @@ static const launcher_hint_t hints_grid[] = {
     { LAUNCHER_BUTTON_A, "A", "Open" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Jump" },
-    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Size" },
     { LAUNCHER_BUTTON_OTHER, "R", "View" },
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
@@ -904,8 +903,8 @@ static void process (menu_t *menu) {
     int previous = *sel;
 
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
-        if (menu->actions.go_fast && (menu->actions.go_left || menu->actions.go_right)) {
-            *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
+        if (menu->actions.go_fast) {
+            *sel = jump_group(c, *sel, (menu->actions.go_right || menu->actions.go_down) ? 1 : -1);
             show_group_badge(c, *sel);
         } else if (menu->actions.go_left && *sel > 0) {
             *sel -= 1;
@@ -921,16 +920,9 @@ static void process (menu_t *menu) {
         return;
     }
 
-    if (menu->actions.go_fast && (menu->actions.go_left || menu->actions.go_right)) {
-        int size = menu->settings.launcher_tile_size + (menu->actions.go_right ? 1 : -1);
-        if (size >= LAUNCHER_TILE_SMALL && size <= LAUNCHER_TILE_LARGE) {
-            menu->settings.launcher_tile_size = size;
-            sound_play_effect(SFX_SETTING);
-        }
-        return;
-    }
-    if (menu->actions.go_fast && (menu->actions.go_up || menu->actions.go_down)) {
-        *sel = jump_group(c, *sel, menu->actions.go_down ? 1 : -1);
+    // C jumps between groups in every view and any direction: left or up back, right or down on.
+    if (menu->actions.go_fast) {
+        *sel = jump_group(c, *sel, (menu->actions.go_right || menu->actions.go_down) ? 1 : -1);
         show_group_badge(c, *sel);
         if (*sel != previous) {
             sound_play_effect(SFX_TICK);
