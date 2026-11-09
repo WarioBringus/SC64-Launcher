@@ -30,7 +30,6 @@ typedef enum {
     LAUNCHER_HOME_SPOTLIGHT = 1,    /**< The selected game large on a panel, the rest in a column beside it */
     LAUNCHER_HOME_CARTRIDGE = 2,    /**< Recent games as cartridges on a band, favorites below */
     LAUNCHER_HOME_MINIMAL = 3,      /**< Text lists and one large cover */
-    LAUNCHER_HOME_TILES = 4,        /**< One large tile, smaller ones around it, and a Library tile */
 } launcher_home_style_t;
 
 /** @brief Launcher grid tile size */

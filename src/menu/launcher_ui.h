@@ -40,7 +40,7 @@
 #define LAUNCHER_SHOWCASE_W     (210)
 #define LAUNCHER_SHOWCASE_H     (150)
 
-/* Home's large covers (Spotlight, Minimal, Tiles): a pack built from hi-res art (pc-tools/coverpack HIRES_BOXES,
+/* Home's large covers (Spotlight, Minimal): a pack built from hi-res art (pc-tools/coverpack HIRES_PACKS,
    --hires), drawn at or below its size. Without it, the showcase pack is enlarged. */
 #define LAUNCHER_HIRES_W        (294)
 #define LAUNCHER_HIRES_H        (210)

@@ -513,7 +513,7 @@ static component_context_menu_t set_launcher_home_favorites_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
-static const int launcher_home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_CARTRIDGE, LAUNCHER_HOME_MINIMAL, LAUNCHER_HOME_TILES, -1 };
+static const int launcher_home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_CARTRIDGE, LAUNCHER_HOME_MINIMAL, -1 };
 
 static void set_launcher_home_style_type (menu_t *menu, void *arg) {
     menu->settings.launcher_home_style = (int)(uintptr_t)(arg);
@@ -536,7 +536,6 @@ static component_context_menu_t set_launcher_home_style_context_menu = {
         {.text = "Spotlight", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_SPOTLIGHT) },
         {.text = "Cartridge", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CARTRIDGE) },
         {.text = "Minimal", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_MINIMAL) },
-        {.text = "Tiles", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_TILES) },
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 

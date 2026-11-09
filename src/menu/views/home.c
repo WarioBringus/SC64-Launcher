@@ -98,7 +98,6 @@ static int scroll_y = 0;
 static float scroll_y_pos = 0.0f;       /* Drawn page scroll, gliding toward scroll_y */
 static int scroll_y_ahead = 0;          /* Drawn minus target scroll: where things are headed is this much lower */
 static bool motion_snap = true;
-static bool library_focused = false;    /* Tiles: the Library tile has the focus */
 static cover_lookup_t cover_lookups[COVER_CACHE_SIZE];
 static int cover_lookup_next = 0;
 
@@ -266,7 +265,7 @@ static void process (menu_t *menu) {
 
     if (menu->actions.settings) {
         path_t *rom = NULL;
-        if (row_count > 0 && rows[row_selected].count > 0 && !library_focused) {
+        if (row_count > 0 && rows[row_selected].count > 0) {
             rom = path_clone(item_path(&rows[row_selected].items[rows[row_selected].selected]));
         }
         launcher_menu_show(menu, rom);
@@ -435,12 +434,11 @@ static void home_background_work (menu_t *menu, int *lookups_left) {
  * Each style lays its games out as slots (rectangles on screen, games off screen included) as it draws,
  * and the d-pad moves to the nearest slot in that direction: one way of moving for every layout.
  */
-#define MAX_SLOTS           (ROW_KINDS * MAX_ROW_ITEMS + 1)
-#define SLOT_LIBRARY        (-1)    /* Tiles: the Library tile */
+#define MAX_SLOTS           (ROW_KINDS * MAX_ROW_ITEMS)
 
 typedef struct {
     int x, y, w, h;
-    int row;                    /**< Index into rows, or SLOT_LIBRARY */
+    int row;                    /**< Index into rows */
     int index;                  /**< Game in that row */
 } slot_t;
 
@@ -454,15 +452,12 @@ static void slot_add (int x, int y, int w, int h, int row, int index) {
 }
 
 static bool is_focus (int row, int index) {
-    if (row == SLOT_LIBRARY) {
-        return library_focused;
-    }
-    return !library_focused && row == row_selected && index == rows[row].selected;
+    return row == row_selected && index == rows[row].selected;
 }
 
-/** @brief The focused game, or NULL (no games, or the Library tile). */
+/** @brief The focused game, or NULL when there are no games. */
 static home_item_t *focused_item (void) {
-    if (library_focused || row_count == 0 || rows[row_selected].count == 0) {
+    if (row_count == 0 || rows[row_selected].count == 0) {
         return NULL;
     }
     return &rows[row_selected].items[rows[row_selected].selected];
@@ -520,13 +515,8 @@ static bool slot_move (int dx, int dy) {
     if (!best) {
         return false;
     }
-    if (best->row == SLOT_LIBRARY) {
-        library_focused = true;
-    } else {
-        library_focused = false;
-        row_selected = best->row;
-        rows[row_selected].selected = best->index;
-    }
+    row_selected = best->row;
+    rows[row_selected].selected = best->index;
     return true;
 }
 
@@ -777,7 +767,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         if (rows[r].kind == ROW_RESUME) {
             continue;
         }
-        if (!library_focused && r == row_selected) {
+        if (r == row_selected) {
             int line = rows[r].selected / cols;
             int top = y + (line == 0 ? 0 : SPOT_LABEL_H + line * line_h);
             int bottom = y + SPOT_LABEL_H + (line + 1) * line_h;
@@ -801,7 +791,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         if (rows[r].kind == ROW_RESUME) {
             continue;
         }
-        bool row_focus = !library_focused && r == row_selected;
+        bool row_focus = (r == row_selected);
         if (y + SPOT_LABEL_H > grid_top - 4 && y < CONTENT_BOTTOM) {
             launcher_text(gx0, y, avail, ALIGN_LEFT, row_focus ? STL_DEFAULT : STL_GRAY, "%s", row_label(rows[r].kind));
         }
@@ -830,7 +820,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     clip_none();
 }
 
-/* A row of games that scrolls sideways (Tiles' and Cartridge's lower rows, Cartridge's band). */
+/* A row of games that scrolls sideways (Cartridge's Favorites). */
 typedef struct {
     int row;
     int index;
@@ -896,116 +886,6 @@ static void draw_strip (menu_t *menu, const game_ref_t *refs, int n, int x0, int
             launcher_draw_favorite_star(x, y, tw);
         }
     }
-}
-
-/* Tiles: no tabs; one large tile for the game to resume, three smaller ones and a Library tile beside it,
-   Favorites along the bottom with their label and the clock at the right. */
-#define TILES_TOP           (34)
-#define TILES_BIG_SHARE     (48)    /* Percent of the width */
-#define TILES_TOP_H         (256)
-#define TILES_GAP           (12)
-#define TILES_SMALL_W       (133)
-#define TILES_SMALL_H       (94)
-#define TILES_STEP          (TILES_SMALL_W + TILES_GAP)
-#define TILES_SIDE_W        (160)   /* Favorites' label and the clock, right of the bottom row */
-#define TILES_BIG_ZOOM      (1.2f)
-
-static strip_t tiles_strip;
-
-static void draw_tiles (menu_t *menu, int *lookups_left) {
-    const theme_t *t = theme_current();
-    // The games across the top: the one to resume, then the recently played.
-    game_ref_t top[4];
-    int top_n = refs_add(top, 0, 4, row_of_kind(ROW_RESUME));
-    top_n = refs_add(top, top_n, 4, row_of_kind(ROW_RECENT));
-
-    int y0 = TILES_TOP;
-    int bx0 = LAUNCHER_X0, bx1 = LAUNCHER_X0 + LAUNCHER_WIDTH * TILES_BIG_SHARE / 100;
-    int by1 = y0 + TILES_TOP_H;
-    if (top_n > 0) {
-        bool focus = is_focus(top[0].row, top[0].index);
-        home_item_t *h = &rows[top[0].row].items[top[0].index];
-        slot_add(bx0, y0, bx1 - bx0, TILES_TOP_H, top[0].row, top[0].index);
-        if (focus) {
-            launcher_draw_focus_ring(bx0, y0, bx1, by1, CARD_RADIUS);
-        }
-        launcher_fill_rounded(bx0, y0, bx1, by1, CARD_RADIUS, t->panel);
-        int cw = (int)(LAUNCHER_SHOWCASE_W * TILES_BIG_ZOOM), ch = (int)(LAUNCHER_SHOWCASE_H * TILES_BIG_ZOOM);
-        int cx = bx0 + (bx1 - bx0 - cw) / 2;
-        int cy = y0 + 12;
-        bool pending;
-        float zoom;
-        surface_t *image = big_cover(menu, h, TILES_BIG_ZOOM, lookups_left, &pending, &zoom);
-        launcher_draw_tile_zoomed(cx, cy, cw, ch, image, pending, h->title, false, t->panel, zoom);
-        if (focus) {
-            launcher_note_focused_cover_zoomed(image, cx, cy, cw, ch, zoom);
-        }
-        int tw = bx1 - bx0 - 28;
-        char line[160];
-        snprintf(line, sizeof(line), "%s  -  %s", rows[top[0].row].kind == ROW_RESUME ? "Resume" : "Recently played", h->title);
-        launcher_name(bx0 + 14, by1 - 34, tw, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, line);
-    }
-
-    // Two by two beside it: three more games and the Library.
-    int qx0 = bx1 + 14;
-    int cw = (LAUNCHER_X1 - qx0 - TILES_GAP) / 2;
-    int ch = (TILES_TOP_H - TILES_GAP) / 2;
-    for (int cell = 0; cell < 4; cell++) {
-        int x = qx0 + (cell % 2) * (cw + TILES_GAP);
-        int y = y0 + (cell / 2) * (ch + TILES_GAP);
-        if (cell == 3) {
-            slot_add(x, y, cw, ch, SLOT_LIBRARY, 0);
-            if (library_focused) {
-                launcher_draw_focus_ring(x, y, x + cw, y + ch, CARD_RADIUS);
-            }
-            launcher_fill_rounded(x, y, x + cw, y + ch, CARD_RADIUS, t->panel);
-            launcher_title(x + 14, y + ch / 2 - 30, cw - 28, ALIGN_LEFT, library_focused ? STL_DEFAULT : STL_GRAY, "Library");
-            char folders[32];
-            snprintf(folders, sizeof(folders), "%d folders", library_folder_count());
-            launcher_small(x + 14, y + ch / 2 + 8, cw - 28, ALIGN_LEFT, STL_GRAY, folders);
-            continue;
-        }
-        if (cell + 1 >= top_n) {
-            continue;
-        }
-        game_ref_t *ref = &top[cell + 1];
-        home_item_t *h = &rows[ref->row].items[ref->index];
-        bool focus = is_focus(ref->row, ref->index);
-        int tx = x + (cw - TILES_SMALL_W) / 2;
-        slot_add(tx, y, TILES_SMALL_W, TILES_SMALL_H, ref->row, ref->index);
-        bool pending;
-        surface_t *image = item_image(menu, h, TILES_SMALL_W, TILES_SMALL_H, lookups_left, &pending);
-        launcher_draw_tile(tx, y, TILES_SMALL_W, TILES_SMALL_H, image, pending, h->title, false, t->bg);
-        if (focus) {
-            launcher_note_focused_cover(image, tx, y, TILES_SMALL_W, TILES_SMALL_H);
-            launcher_draw_focus_ring_tile(tx, y, TILES_SMALL_W, TILES_SMALL_H);
-        }
-        launcher_small(x, y + TILES_SMALL_H + 4, cw, ALIGN_CENTER, focus ? STL_DEFAULT : STL_GRAY, h->title);
-    }
-
-    // Favorites along the bottom; their label, the focused one's title and the clock at the right.
-    int ry = by1 + 14;
-    int side_x = LAUNCHER_X1 - TILES_SIDE_W;
-    int fav = row_of_kind(ROW_FAVORITES);
-    int focus = -1;
-    if (fav >= 0) {
-        game_ref_t refs[MAX_ROW_ITEMS];
-        int n = refs_add(refs, 0, MAX_ROW_ITEMS, fav);
-        focus = refs_focus(refs, n);
-        int clip_x1 = launcher_px(side_x - 12);
-        rdpq_set_scissor(0, ry - LAUNCHER_RING - 2, clip_x1 < 1 ? 1 : clip_x1, ry + TILES_SMALL_H + LAUNCHER_RING + 2);
-        draw_strip(menu, refs, n, LAUNCHER_X0, side_x - 12, ry, TILES_SMALL_W, TILES_SMALL_H, TILES_STEP,
-            &tiles_strip, t->bg, lookups_left);
-        clip_none();
-        launcher_text(side_x, ry + 6, TILES_SIDE_W, ALIGN_LEFT, focus >= 0 ? STL_DEFAULT : STL_GRAY, "Favorites");
-        if (focus >= 0) {
-            launcher_small(side_x, ry + 32, TILES_SIDE_W, ALIGN_LEFT, STL_DEFAULT, rows[fav].items[focus].title);
-        }
-    }
-    char clock[16];
-    launcher_clock_text(menu, clock, sizeof(clock));
-    launcher_small(side_x, ry + TILES_SMALL_H - 16, TILES_SIDE_W, ALIGN_LEFT, STL_GRAY, clock);
-    launcher_draw_notes(LAUNCHER_X0, LAUNCHER_FOOTER_Y + 12, LAUNCHER_WIDTH / 2, ALIGN_LEFT);  // Across from the hints.
 }
 
 /* Cartridge: a header bar; the game to resume and the recently played stand as cartridges in a band (the first one
@@ -1114,15 +994,9 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
 /** @brief Draw Home in one of the new styles (not Classic). */
 static void draw_styled (menu_t *menu, int style, int *lookups_left) {
     slot_total = 0;
-    if (style != LAUNCHER_HOME_TILES) {
-        library_focused = false;
-    }
     switch (style) {
         case LAUNCHER_HOME_CARTRIDGE:
             draw_cartridge(menu, lookups_left);
-            break;
-        case LAUNCHER_HOME_TILES:
-            draw_tiles(menu, lookups_left);
             break;
         case LAUNCHER_HOME_SPOTLIGHT:
             draw_spotlight(menu, lookups_left);
@@ -1151,14 +1025,8 @@ static void process_styled (menu_t *menu, int style) {
         return;
     }
     home_item_t *f = focused_item();
-    if (menu->actions.enter) {
-        if (library_focused) {
-            sound_play_effect(SFX_SWISH);
-            launcher_transition(menu->mode, MENU_MODE_LIBRARY);
-            menu->next_mode = MENU_MODE_LIBRARY;
-        } else if (f) {
-            launch(menu, f);
-        }
+    if (menu->actions.enter && f) {
+        launch(menu, f);
     } else if (menu->actions.trigger_z && f) {
         launcher_game_menu_show(menu, path_clone(item_path(f)));
     }
@@ -1169,10 +1037,6 @@ static void set_style_chrome (int style) {
     switch (style) {
         case LAUNCHER_HOME_CARTRIDGE:
             launcher_set_header_style(LAUNCHER_HEADER_BAR);
-            launcher_hide_footer_line();
-            break;
-        case LAUNCHER_HOME_TILES:
-            launcher_set_header_style(LAUNCHER_HEADER_NONE);
             launcher_hide_footer_line();
             break;
         case LAUNCHER_HOME_MINIMAL:

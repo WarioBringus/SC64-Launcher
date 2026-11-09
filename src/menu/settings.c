@@ -151,7 +151,7 @@ void settings_load (settings_t *settings) {
     if (settings->launcher_tile_size < LAUNCHER_TILE_SMALL || settings->launcher_tile_size > LAUNCHER_TILE_LARGE) {
         settings->launcher_tile_size = init.launcher_tile_size;
     }
-    if (settings->launcher_home_style < LAUNCHER_HOME_CLASSIC || settings->launcher_home_style > LAUNCHER_HOME_TILES) {
+    if (settings->launcher_home_style < LAUNCHER_HOME_CLASSIC || settings->launcher_home_style > LAUNCHER_HOME_MINIMAL) {
         settings->launcher_home_style = init.launcher_home_style;
     }
 
