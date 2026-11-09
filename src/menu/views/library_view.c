@@ -268,7 +268,13 @@ static void apply_sort (library_category_t *c, int index) {
     // A new sort or filter starts at the first game; hiding a game keeps the place.
     bool new_order = c->sort != current_sort || c->filter_field != filter_field ||
         (filter_field >= 0 && strcmp(c->filter_value, filter_value) != 0);
-    if (library_arrange_category(c, current_sort, filter_field, filter_value)) {
+    uint64_t arrange_started = get_ticks_us();
+    bool arranged = library_arrange_category(c, current_sort, filter_field, filter_value);
+    uint32_t arrange_us = (uint32_t)(get_ticks_us() - arrange_started);
+    if (arrange_us > 20000) {
+        perf_log_event("arranging folder %s took %.1f ms", c->name ? c->name : "?", arrange_us / 1000.0f);
+    }
+    if (arranged) {
         int *sel = &selections[index % MAX_REMEMBERED_CATEGORIES];
         if (new_order) {
             *sel = 0;
@@ -990,6 +996,9 @@ static void preload_category (menu_t *menu, int index, int *lookups_left) {
     preload_category_covers(menu, index, lookups_left);
 }
 
+/* Sorting another folder (for its covers to be ready) can take ~100 ms: at most one a frame. */
+static bool other_folder_sorted_this_frame = false;
+
 static void preload_category_covers (menu_t *menu, int index, int *lookups_left) {
     if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
         return;     // The shelf reads its spines as they come into view.
@@ -997,6 +1006,14 @@ static void preload_category_covers (menu_t *menu, int index, int *lookups_left)
     library_category_t *c = library_category(index);
     if (!c || c->shown == 0) {
         return;
+    }
+    bool needs_sort = c->sort != current_sort || c->filter_field != filter_field ||
+        (filter_field >= 0 && strcmp(c->filter_value, filter_value) != 0);
+    if (needs_sort && index != category_index) {
+        if (other_folder_sorted_this_frame) {
+            return;
+        }
+        other_folder_sorted_this_frame = true;
     }
     apply_sort(c, index);
     int sel = selections[index % MAX_REMEMBERED_CATEGORIES];
@@ -1067,9 +1084,24 @@ static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, i
     }
 }
 
+#define NEIGHBOURS_REST_MS  (400)   /* The folders either side are got ready once the view rests this long */
+
 static void preload_neighbours (menu_t *menu, int *lookups_left) {
     int count = library_category_count();
     if (count < 2) {
+        return;
+    }
+    // Their sorting and cover reads made the frames after a view switch or a move long (the log showed
+    // 70-145 ms), so they wait until nothing has changed for a moment.
+    static int rest_key = -1;
+    static uint64_t rest_since_ms = 0;
+    int key = (menu->settings.launcher_layout * 64 + category_index) * 100000 + *current_selection();
+    uint64_t now = get_ticks_ms();
+    if (key != rest_key) {
+        rest_key = key;
+        rest_since_ms = now;
+    }
+    if (now - rest_since_ms < NEIGHBOURS_REST_MS) {
         return;
     }
     preload_category(menu, (category_index + 1) % count, lookups_left);
@@ -1561,6 +1593,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 }
 
 static void draw (menu_t *menu, surface_t *d) {
+    other_folder_sorted_this_frame = false;
     search_scope_update();
     rdpq_attach(d, NULL);
 
