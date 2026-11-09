@@ -434,6 +434,20 @@ static void home_background_work (menu_t *menu, int *lookups_left) {
     }
 }
 
+/**
+ * @brief An off-screen Home cover is still asked for (read in the background, a cover every few frames), so it
+ * belongs to this Home visit and stays in memory: scrolling to Favorites, or coming back from the library, then
+ * finds it ready.
+ */
+static void keep_loaded (menu_t *menu, home_item_t *h, int w, int hgt, int *lookups_left) {
+    bool pending;
+    bool shown_pending = covers_pending;    // Off screen: the startup Home doesn't wait for it.
+    launcher_covers_background(true);
+    item_image(menu, h, w, hgt, lookups_left, &pending);
+    launcher_covers_background(false);
+    covers_pending = shown_pending;
+}
+
 /* ------------------------------------------------------------------ Home styles other than Classic */
 
 /*
@@ -805,7 +819,8 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
             int target_y = iy + drawn - spot_scroll;
             slot_add(x, target_y, tw, th, r, i);
             if (iy + th < grid_top - 4 || iy > CONTENT_BOTTOM) {
-                continue;   // Off screen: not drawn, and its cover not read.
+                keep_loaded(menu, &rows[r].items[i], tw, th, lookups_left);
+                continue;   // Off screen: not drawn.
             }
             home_item_t *h = &rows[r].items[i];
             bool pending;
@@ -875,7 +890,8 @@ static void draw_strip (menu_t *menu, const game_ref_t *refs, int n, int x0, int
         slot_add(target_x, y, tw, th, refs[i].row, refs[i].index);
         int x = x0 + i * step - scroll_px;
         if (x + tw < x0 - step || x > x1) {
-            continue;   // Off screen: not drawn, and its cover not read.
+            keep_loaded(menu, &rows[refs[i].row].items[refs[i].index], tw, th, lookups_left);
+            continue;   // Off screen: not drawn.
         }
         home_item_t *h = &rows[refs[i].row].items[refs[i].index];
         bool pending;
