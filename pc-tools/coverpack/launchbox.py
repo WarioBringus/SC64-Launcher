@@ -86,7 +86,7 @@ def fetch(url):
         return r.read()
 
 
-SAME_BOX_DIFFERENCE = 27    # Mean grey difference (0-255) at 32x24, best crop; above it, another box or edition
+SAME_BOX_DIFFERENCE = 0.45  # Mean difference of the normalized greys at 32x24, best crop; above it, another box or edition
 
 
 def tiny(ffmpeg, path, w=32, h=24):
@@ -96,19 +96,30 @@ def tiny(ffmpeg, path, w=32, h=24):
     return r.stdout if len(r.stdout) == w * h else None
 
 
+def normalized(values):
+    """Greys as distances from their mean in standard deviations: scans that are lighter, darker or more washed out
+    (Super Mario 64's card art) compare by their picture alone."""
+    mean = sum(values) / len(values)
+    sd = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5 or 1.0
+    return [(v - mean) / sd for v in values]
+
+
 def box_difference(ffmpeg, card_art, front):
-    """How unlike the card's art a front is, allowing for scans cropped a little differently: the card's art at 32x24
-    against every 32x24 window of the front shrunk to 32x24, 34x25 and 36x27."""
+    """How unlike the card's art a front is, allowing for scans cropped a little differently or lighter/darker: the
+    card's art at 32x24 against every 32x24 window of the front shrunk to 32x24, 34x25 and 36x27, both normalized."""
     a = tiny(ffmpeg, card_art)
-    best = 255.0
+    best = 9.0
+    if not a:
+        return best
+    a = normalized(list(a))
     for w, h in ((32, 24), (34, 25), (36, 27)):
         b = tiny(ffmpeg, front, w, h)
-        if not a or not b:
-            return 255.0
+        if not b:
+            return 9.0
         for dy in range(h - 23):
             for dx in range(w - 31):
-                d = sum(abs(a[y * 32 + x] - b[(y + dy) * w + x + dx]) for y in range(24) for x in range(32)) / 768
-                best = min(best, d)
+                window = normalized([b[(y + dy) * w + x + dx] for y in range(24) for x in range(32)])
+                best = min(best, sum(abs(p - q) for p, q in zip(a, window)) / 768)
     return best
 
 
@@ -189,6 +200,9 @@ def main():
             genre[rom] = fixed[name]
 
     wanted, disagree, unmatched, front_for = {}, [], [], {}
+    # ROM hacks borrow their original's cover: the original game decides which LaunchBox entry the cover is, so
+    # hack folders come last (SM64 Last Impact once claimed Super Mario 64's cover for its own entry).
+    roms.sort(key=lambda rc: 'hack' in rc[0].rsplit('/', 1)[0].lower() if '/' in rc[0] else False)
     for rom, cid in roms:
         stem = os.path.splitext(rom.rsplit('/', 1)[-1])[0]
         latin = re.sub(r'[^\x00-\x7f]+', ' ', stem).strip()
