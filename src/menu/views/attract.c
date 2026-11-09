@@ -77,6 +77,9 @@ static surface_t *slide_cover (menu_t *menu, slide_t *s, bool *pending) {
     if (!path) {
         return NULL;
     }
+    if (launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H)) {
+        return launcher_cover_get(path, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, pending);   // Hi-res, shown 1:1
+    }
     return launcher_cover_get(path, s->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W,
         s->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H, pending);
 }
@@ -93,9 +96,19 @@ static void draw_slide (menu_t *menu, slide_t *s, int offset_x) {
     float scale = s->portrait ? PORTRAIT_SCALE : LANDSCAPE_SCALE;
     int w = (int)((s->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W) * scale);
     int h = (int)((s->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H) * scale);
+    if (image && (image->width >= LAUNCHER_HIRES_W - 2 || image->height >= LAUNCHER_HIRES_H - 2)) {
+        // A hi-res cover: drawn at its own size, 1:1, never enlarged.
+        w = image->width;
+        h = image->height;
+    } else if (!image && launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H)) {
+        w = s->portrait ? LAUNCHER_HIRES_H * LAUNCHER_HIRES_H / LAUNCHER_HIRES_W : LAUNCHER_HIRES_W;
+        h = LAUNCHER_HIRES_H;
+    }
     int x = LAUNCHER_CENTER_X - w / 2 + offset_x;
     int y = COVER_CENTER_Y - h / 2;
-    if (image) {
+    if (image && w == image->width && h == image->height) {
+        launcher_draw_tile(x, y, w, h, image, false, NULL, false, theme_current()->bg);
+    } else if (image) {
         launcher_draw_cover_scaled(image, x, y, w, h, theme_current()->bg);
     } else {
         launcher_draw_tile(x, y, w, h, NULL, pending, s->game ? s->game->title : NULL, false, theme_current()->bg);
