@@ -858,6 +858,15 @@ void launcher_transition_content_begin (int y0) {
 static void fade_band (int y0, int y1, color_t color, int alpha);
 
 void launcher_draw_screen_fade (int alpha) {
+    if (alpha >= 255) {
+        // Opaque: a plain fill, several times quicker for the RDP than blending the whole screen (which
+        // cost ~10 ms a frame and slowed the hidden startup Home).
+        rdpq_mode_push();
+            rdpq_set_mode_fill(RGBA32(0x00, 0x00, 0x00, 0xFF));
+            rdpq_fill_rectangle(0, 0, display_get_width(), display_get_height());
+        rdpq_mode_pop();
+        return;
+    }
     fade_band(0, display_get_height(), RGBA32(0x00, 0x00, 0x00, 0xFF), alpha);
 }
 
