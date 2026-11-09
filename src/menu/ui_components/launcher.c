@@ -327,6 +327,7 @@ typedef struct {
     size_t length;
     uint8_t font;
     int width;
+    int ink_x0, ink_y0, ink_y1; /**< Where the glyphs' ink starts (left) and spans (top, bottom), real pixels */
 } width_entry_t;
 
 static width_entry_t width_cache[WIDTH_CACHE_SIZE];
@@ -336,27 +337,46 @@ static int width_cache_next = 0;
  * @brief Logical width of already-escaped text, remembered for strings that stay in memory
  * (hint labels, category names) so they aren't laid out again every frame.
  */
-static int text_width_font (uint8_t font, const char *text) {
+static width_entry_t *text_measure (uint8_t font, const char *text) {
     uint8_t real_font = launcher_font(font);
     size_t length = strlen(text);
     for (int i = 0; i < WIDTH_CACHE_SIZE; i++) {
         width_entry_t *e = &width_cache[i];
         if (e->text == text && e->length == length && e->font == real_font) {
-            return logical_width(e->width);
+            return e;
         }
     }
     int nbytes = (int)length;
     rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { 0 }, real_font, text, &nbytes);
-    int width = (int)(layout->bbox.x1 - layout->bbox.x0);
-    rdpq_paragraph_free(layout);
-
     width_entry_t *e = &width_cache[width_cache_next];
     width_cache_next = (width_cache_next + 1) % WIDTH_CACHE_SIZE;
     e->text = text;
     e->length = length;
     e->font = real_font;
-    e->width = width;
-    return logical_width(width);
+    e->width = (int)(layout->bbox.x1 - layout->bbox.x0);
+    e->ink_x0 = (int)floorf(layout->bbox.x0);
+    e->ink_y0 = (int)floorf(layout->bbox.y0);
+    e->ink_y1 = (int)ceilf(layout->bbox.y1);
+    rdpq_paragraph_free(layout);
+    return e;
+}
+
+static int text_width_font (uint8_t font, const char *text) {
+    return logical_width(text_measure(font, text)->width);
+}
+
+/**
+ * @brief Draw a button's letters centered on their ink in a logical box: centering by the glyphs' advance leaves
+ * letters such as L, R and Z visibly off to one side of the icon. text must stay in memory (it is measured once).
+ */
+static void text_centered_ink (uint8_t font, int x, int y, int w, int h, menu_font_style_t style, const char *text) {
+    width_entry_t *e = text_measure(font, text);
+    int ink_w = logical_width(e->width);
+    int ink_x0 = widescreen ? (e->ink_x0 * 4) / 3 : e->ink_x0;
+    int ink_h = e->ink_y1 - e->ink_y0;
+    int left = x + (w - ink_w + 1) / 2 - ink_x0;
+    int top = y + (h - ink_h + 1) / 2 - e->ink_y0;
+    text_box_font(font, left, top, 0, ink_h + 8, ALIGN_LEFT, VALIGN_TOP, style, text);
 }
 
 static int text_width (const char *text) {
@@ -1205,7 +1225,7 @@ int launcher_draw_prompt (int x, int y, launcher_button_t kind, const char *butt
     // The button as the hints draw it: a colored circle with its letter.
     int ix = x + PROMPT_PAD, iy = y + (PROMPT_H - PROMPT_ICON) / 2;
     fill_smooth_rounded(ix, iy, ix + PROMPT_ICON, iy + PROMPT_ICON, PROMPT_ICON / 2, color);
-    text_box(ix, iy, PROMPT_ICON, PROMPT_ICON, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, button);
+    text_centered_ink(font_for(button, FNT_LAUNCHER), ix, iy, PROMPT_ICON, PROMPT_ICON, STL_ON_BUTTON, button);
     text_box(ix + PROMPT_ICON + PROMPT_PAD, y, 0, PROMPT_H, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, label);
     return w;
 }
@@ -1238,8 +1258,10 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     }
     // Measured widths are glyph extents; a little slack keeps the last letter from touching the next icon.
     for (int i = 0; i < count; i++) {
+        // One letter sits on a circle (wider would be an oval); more letters ("L R", "C" and arrows) on a pill.
         int bw = text_width_font(FNT_SMALL, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
-        button_w[i] = (bw < HINT_BUTTON_SIZE) ? HINT_BUTTON_SIZE : bw;
+        bool single = strlen(hints[i].button) == 1 && !is_c_button(hints[i].kind);
+        button_w[i] = (single || bw < HINT_BUTTON_SIZE) ? HINT_BUTTON_SIZE : bw;
         label_w[i] = text_width_font(FNT_SMALL, hints[i].label) + 2;
         total += button_w[i] + HINT_ICON_GAP + label_w[i] + (i > 0 ? HINT_GAP : 0);
     }
@@ -1261,7 +1283,7 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
         if (is_c_button(hints[i].kind)) {
             // "C" on the left, a pair of arrows drawn on the right.
             int letter_w = button_w[i] - C_ARROWS_WIDTH;
-            text_box_font(FNT_SMALL, x + 1, text_y, letter_w, HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_C_BUTTON, hints[i].button);
+            text_centered_ink(FNT_SMALL, x + 1, y, letter_w, HINT_BUTTON_SIZE, STL_ON_C_BUTTON, hints[i].button);
             int ax = x + letter_w + 1;
             int cy = y + HINT_BUTTON_SIZE / 2;
             if (hints[i].kind == LAUNCHER_BUTTON_C_UP_DOWN) {
@@ -1272,7 +1294,7 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
                 draw_arrow(ax + 3, cy, 1, 0);
             }
         } else {
-            text_box_font(FNT_SMALL, x, text_y, button_w[i], HINT_TEXT_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, hints[i].button);
+            text_centered_ink(FNT_SMALL, x, y, button_w[i], HINT_BUTTON_SIZE, STL_ON_BUTTON, hints[i].button);
         }
         x += button_w[i] + HINT_ICON_GAP;
         // No width: the label is never cut short, whatever the measurement said.
