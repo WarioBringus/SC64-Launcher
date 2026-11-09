@@ -16,6 +16,7 @@
 
 #include "launcher_ui.h"
 #include "library.h"
+#include "rom_info.h"
 #include "perf_log.h"
 #include "sound.h"
 #include "utils/fs.h"
@@ -92,6 +93,39 @@ static int new_game_count = 0;
 
 static int index_rom_cover (path_t *rom_path);
 
+
+/*
+ * Files beside the ROMs (.ini, .meta, .metadata.ini), noted while the startup check walks every folder: a launch then
+ * skips the lookups for the ones that aren't there (rom_info_set_absence_check).
+ */
+#define MAX_SIDECARS        (256)
+static uint32_t sidecar_hashes[MAX_SIDECARS];
+static int sidecar_count = 0;
+static bool sidecars_overflow = false;
+
+static uint32_t lower_hash (const char *s, size_t n) {
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < n && s[i]; i++) {
+        unsigned char c = (unsigned char)s[i];
+        h = (h ^ (uint32_t)((c >= 'A' && c <= 'Z') ? c + 32 : c)) * 16777619u;
+    }
+    return h;
+}
+
+static bool is_sidecar_name (const char *name) {
+    size_t n = strlen(name);
+    return (n > 4 && strcasecmp(name + n - 4, ".ini") == 0) || (n > 5 && strcasecmp(name + n - 5, ".meta") == 0);
+}
+
+static void note_sidecar (const char *dir, const char *name) {
+    if (sidecar_count >= MAX_SIDECARS) {
+        sidecars_overflow = true;
+        return;
+    }
+    char full[512];
+    snprintf(full, sizeof(full), "%s/%s", dir, name);
+    sidecar_hashes[sidecar_count++] = lower_hash(full, strlen(full));
+}
 
 static bool is_rom_name (const char *name) {
     // Flashcart menu files (sc64menu.n64 and its backups, EverDrive OS64*.v64) are not games.
@@ -1186,6 +1220,7 @@ int library_folder_move (int index, int delta) {
 }
 
 void library_init (menu_t *menu) {
+    rom_info_set_absence_check(library_file_known_absent);  // Launches skip lookups for files the walk saw aren't there.
     const char *root_setting = menu->settings.launcher_library_root;
     if (!root_setting || root_setting[0] == '\0') {
         root_setting = "/";
@@ -1639,6 +1674,9 @@ void library_check_new_games (int budget_us) {
             new_check_folder++;
             continue;
         }
+        if (new_check_entry.d_type != DT_DIR && is_sidecar_name(new_check_entry.d_name)) {
+            note_sidecar(dir, new_check_entry.d_name);
+        }
         if (new_check_entry.d_type == DT_DIR || !is_rom_name(new_check_entry.d_name)) {
             continue;
         }
@@ -1653,6 +1691,33 @@ void library_check_new_games (int budget_us) {
             new_game_count++;
         }
     }
+}
+
+bool library_file_known_absent (const char *path) {
+    // Only for folders the check has walked to the end, and only names it notes (an .ini or .meta file).
+    if (sidecars_overflow || !is_sidecar_name(path)) {
+        return false;
+    }
+    const char *slash = strrchr(path, '/');
+    if (!slash) {
+        return false;
+    }
+    size_t dir_len = (size_t)(slash - path);
+    bool walked = false;
+    for (int i = 0; i < folder_count && !walked; i++) {
+        const char *dir = path_get(folders[i].directory);
+        walked = (i < new_check_folder || new_check_done) && strlen(dir) == dir_len && strncasecmp(dir, path, dir_len) == 0;
+    }
+    if (!walked) {
+        return false;
+    }
+    uint32_t h = lower_hash(path, strlen(path));
+    for (int i = 0; i < sidecar_count; i++) {
+        if (sidecar_hashes[i] == h) {
+            return false;
+        }
+    }
+    return true;
 }
 
 int library_new_game_count (void) {
@@ -1768,6 +1833,8 @@ void library_free (void) {
     scanned = false;
 
     new_check_folder = 0;
+    sidecar_count = 0;
+    sidecars_overflow = false;
     new_check_listing = false;
     new_check_done = false;
     new_game_count = 0;

@@ -217,6 +217,12 @@ bool rom_info_get_cic_seed(rom_info_t *rom_info, uint8_t *seed);
 rom_err_t rom_config_load(path_t *path, rom_info_t *rom_info);
 
 /**
+ * @brief A check that says when a file beside a ROM is known not to exist, so rom_config_load needn't look for it (a
+ * missing file scans the whole folder listing, ~200 ms in a large folder). It returns false when it doesn't know.
+ */
+void rom_info_set_absence_check(bool (*known_absent)(const char *path));
+
+/**
  * @brief Load only what the ROM header and the built-in database say (no config or metadata files).
  *
  * @param path Pointer to the path structure

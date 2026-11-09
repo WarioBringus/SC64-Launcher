@@ -233,6 +233,12 @@ void library_check_new_games(int budget_us);
 /** @brief Whether the check for ROMs added since the cover index was built has finished (or has nothing to do). */
 bool library_new_games_checked(void);
 
+/**
+ * @brief Whether a file beside a ROM (.ini, .meta) is known not to exist: its folder was walked by the new-ROM check
+ * and it wasn't there. False when unknown.
+ */
+bool library_file_known_absent(const char *path);
+
 /** @brief ROMs found that aren't in the cover index (0 until the check has finished, or without an index). */
 int library_new_game_count(void);
 

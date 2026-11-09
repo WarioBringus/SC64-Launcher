@@ -17,6 +17,8 @@
 #include "boot/cic.h"
 #include "rom_info.h"
 #include "sound.h"
+
+static bool known_absent(const char *path);
 #include "utils/fs.h"
 
 
@@ -1140,7 +1142,7 @@ static void load_rom_meta_from_file (path_t *path, rom_info_t *rom_info) {
     debugf("[META] load_rom_meta_from_file: looking for '%s'\n", meta_path_str);
     
     // Try to load as ZIP file first (handles .meta files that are ZIP archives)
-    if (load_metadata_from_zip_file(meta_path_str, rom_info)) {
+    if (!known_absent(meta_path_str) && load_metadata_from_zip_file(meta_path_str, rom_info)) {
         debugf("[META] load_rom_meta_from_file: loaded as ZIP file\n");
         path_free(rom_info_meta_path);
         return;
@@ -1155,7 +1157,7 @@ static void load_rom_meta_from_file (path_t *path, rom_info_t *rom_info) {
     path_ext_replace(rom_info_meta_path, "metadata.ini");
     meta_path_str = path_get(rom_info_meta_path);
 
-    if (!file_exists(path_get(rom_info_meta_path))) {
+    if (known_absent(path_get(rom_info_meta_path)) || !file_exists(path_get(rom_info_meta_path))) {
         debugf("[META] load_rom_meta_from_file: metadata.ini not found at '%s'\n", meta_path_str);
         // If that file does not exist, fall back to metadata database using game_code (like boxart uses).
         // TODO: we should probably check the homebrew path as well.
@@ -1334,7 +1336,7 @@ static void load_rom_config_from_file (path_t *path, rom_info_t *rom_info) {
 
     path_ext_replace(rom_info_path, "ini");
 
-    ini_t *rom_config_ini = ini_load(path_get(rom_info_path));
+    ini_t *rom_config_ini = known_absent(path_get(rom_info_path)) ? NULL : ini_load(path_get(rom_info_path));
 
     rom_info->boot_override.cic = false;
     rom_info->boot_override.save = false;
@@ -1517,6 +1519,16 @@ rom_err_t rom_info_load_header (path_t *path, rom_info_t *rom_info) {
     match_t match = find_rom_in_database(&rom_header);
     extract_rom_info(&match, &rom_header, rom_info);
     return ROM_OK;
+}
+
+static bool (*file_known_absent)(const char *path) = NULL;
+
+void rom_info_set_absence_check (bool (*known_absent)(const char *path)) {
+    file_known_absent = known_absent;
+}
+
+static bool known_absent (const char *path) {
+    return file_known_absent && file_known_absent(path);
 }
 
 rom_err_t rom_config_load (path_t *path, rom_info_t *rom_info) {
