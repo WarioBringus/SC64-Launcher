@@ -8,6 +8,7 @@
 #include "../ui_components/constants.h"
 #include "views.h"
 #include "../launcher_ui.h"
+#include "../perf_log.h"
 #include "../library.h"
 #include <string.h>
 
@@ -935,6 +936,8 @@ static void load (menu_t *menu) {
     cart_load_err_t err;
 
     // SD card music keeps playing while the game loads and fades out once it's in.
+    uint64_t load_started = get_ticks_us();
+    perf_log_event("load: ROM load starting");
     sound_bgm_prepare_for_load();
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     if (!menu->settings.loading_progress_bar_enabled) {
@@ -957,6 +960,7 @@ static void load (menu_t *menu) {
         return;
     }
 
+    perf_log_event("load: ROM and save loaded in %.1f ms", (get_ticks_us() - load_started) / 1000.0f);
     sound_bgm_fade_out(BGM_FADE_MS);
     launcher_save_pending_settings(menu);
 
@@ -1082,7 +1086,9 @@ void view_load_rom_init (menu_t *menu) {
     show_expansion_pak_warning = false;
 
     debugf("Load ROM: loading ROM info from %s\n", path_get(menu->load.rom_path));
+    uint64_t step_started = get_ticks_us();
     rom_err_t err = rom_config_load(menu->load.rom_path, &menu->load.rom_info);
+    perf_log_event("load: ROM details read in %.1f ms", (get_ticks_us() - step_started) / 1000.0f);
     if (err != ROM_OK) {
         rom_info_free_meta(&menu->load.rom_info);
         path_free(menu->load.rom_path);
@@ -1153,10 +1159,12 @@ void view_load_rom_init (menu_t *menu) {
     loading_title[0] = '\0';
     loading_details[0] = '\0';
     if (menu->load.rom_path) {
+        step_started = get_ticks_us();
         char *title = library_title_from_path(menu, menu->load.rom_path);
         snprintf(loading_title, sizeof(loading_title), "%s", title ? title : "");
         free(title);
         library_details_for_path(menu, menu->load.rom_path, loading_details, sizeof(loading_details));
+        perf_log_event("load: title and details in %.1f ms", (get_ticks_us() - step_started) / 1000.0f);
     }
 
     if (quick_start) {

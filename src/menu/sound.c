@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <libdragon.h>
 #include "audio_player.h"
+#include "perf_log.h"
 #include "sound.h"
 
 #define DEFAULT_FREQUENCY   (44100)
@@ -47,10 +48,34 @@ static bool load_ahead = false;            /* A game is loading: keep every buff
  * @brief Mix audio into free buffers, up to the menu's short queue or, while a game loads, all of them
  * (the load blocks for longer than the short queue lasts).
  */
+#define LOAD_GAP_NOTE_US    (150000)    /* While a game loads, a longer gap between feeds is noted in the performance log */
+
+/** @brief While a game loads: note in the performance log how low the music's queue got and any long gap. */
+static void note_load_audio (void) {
+    static uint64_t last_us = 0;
+    static uint64_t last_low_us = 0;
+    uint64_t now = get_ticks_us();
+    if (!load_ahead) {
+        last_us = 0;
+        return;
+    }
+    int queued = audio_get_queued_buffers();
+    int ms = queued * audio_get_buffer_length() * 1000 / audio_get_frequency();
+    if (last_us && now - last_us > LOAD_GAP_NOTE_US) {
+        perf_log_event("load: music not fed for %lu ms (%d ms of it left queued)", (unsigned long)((now - last_us) / 1000), ms);
+    }
+    if (queued <= 2 && now - last_low_us > 250000) {
+        perf_log_event("load: music ran low (%d ms queued)", ms);
+        last_low_us = now;
+    }
+    last_us = now;
+}
+
 static void fill_audio (void) {
     if (!sound_initialized) {
         return;
     }
+    note_load_audio();
     int target = load_ahead ? audio_get_num_buffers() - 1 : menu_ahead_buffers;
     while (audio_get_queued_buffers() < target && audio_can_write()) {
         short *buffer = audio_write_begin();
