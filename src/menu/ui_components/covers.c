@@ -161,17 +161,31 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     return p;
 }
 
-/* Every cover pack the launcher reads (pc-tools/coverpack BOXES, UP_BOXES and the spines). */
+/* Grid tile sizes by Look > Tile size (landscape, then portrait: library_view.c grid_geometry) */
+static const int16_t grid_landscape[3][2] = { { 87, 61 }, { 133, 94 }, { 158, 112 } };
+static const int16_t grid_portrait[3][2] = { { 59, 84 }, { 70, 100 }, { 81, 115 } };
+
+/* Every other cover pack the launcher reads (pc-tools/coverpack BOXES, UP_BOXES and the spines), most needed first. */
 static const int16_t pack_sizes[][2] = {
-    { 87, 61 }, { 133, 94 }, { 158, 112 }, { 59, 84 }, { 70, 100 }, { 81, 115 }, { 112, 158 }, { 74, 52 },
     { LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H }, { LAUNCHER_SHOWCASE_H, LAUNCHER_SHOWCASE_W },
-    { LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H },
+    { LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H }, { 158, 112 }, { 112, 158 }, { 74, 52 },
+    { 87, 61 }, { 133, 94 }, { 59, 84 }, { 70, 100 }, { 81, 115 },
 };
 
-bool launcher_covers_open_ahead (const char *storage_prefix) {
+bool launcher_covers_open_ahead (const char *storage_prefix, int tile_size) {
     bool wide = launcher_is_widescreen();
+    if (tile_size < 0 || tile_size > 2) {
+        tile_size = 2;
+    }
+    const int16_t *order[2 + sizeof(pack_sizes) / sizeof(pack_sizes[0])];
+    int count = 0;
+    order[count++] = grid_landscape[tile_size];     // The grid's own size first: it's the library's first view.
+    order[count++] = grid_portrait[tile_size];
     for (size_t n = 0; n < sizeof(pack_sizes) / sizeof(pack_sizes[0]); n++) {
-        int w = pack_sizes[n][0], h = pack_sizes[n][1];
+        order[count++] = pack_sizes[n];
+    }
+    for (int n = 0; n < count; n++) {
+        int w = order[n][0], h = order[n][1];
         bool known = false;
         for (int i = 0; i < MAX_PACKS && !known; i++) {
             known = packs[i].tried && packs[i].w == w && packs[i].h == h && packs[i].wide == wide;

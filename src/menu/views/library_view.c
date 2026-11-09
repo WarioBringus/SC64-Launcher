@@ -1616,8 +1616,16 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     }
 }
 
+#define OPEN_AHEAD_IDLE_MS  (1000)
+
 static void draw (menu_t *menu, surface_t *d) {
     other_folder_sorted_this_frame = false;
+    // Cover packs not opened yet (Home opens them when idle; a button press there can leave some) are
+    // opened while the controller rests, so no view's first frame waits ~55 ms for one.
+    static bool packs_open = false;
+    if (!packs_open && idle_for(OPEN_AHEAD_IDLE_MS) && !launcher_transition_running()) {
+        packs_open = launcher_covers_open_ahead(menu->storage_prefix, menu->settings.launcher_tile_size);
+    }
     search_scope_update();
     rdpq_attach(d, NULL);
 
@@ -1747,6 +1755,7 @@ void view_library_preload (menu_t *menu, int *lookups_left) {
 }
 
 void view_library_init (menu_t *menu) {
+    last_input_ms = get_ticks_ms();     // Arriving counts as input: idle work waits until it rests.
     motion_snap = true;
     launcher_focus_reset();
     library_init(menu);

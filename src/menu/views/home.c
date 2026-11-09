@@ -468,7 +468,7 @@ static void draw (menu_t *menu, surface_t *d) {
         // The library's views each read their own pack; opening one cost the first switch into that view a
         // ~70-90 ms frame, so they are opened here while nothing moves.
         if (!packs_open && reveal == REVEAL_SHOWN && get_ticks_ms() - home_last_input_ms >= OPEN_AHEAD_IDLE_MS) {
-            packs_open = launcher_covers_open_ahead(menu->storage_prefix);
+            packs_open = launcher_covers_open_ahead(menu->storage_prefix, menu->settings.launcher_tile_size);
         }
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }

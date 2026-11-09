@@ -155,9 +155,10 @@ void launcher_covers_hold(bool hold);
 
 /**
  * @brief Open the next cover pack not opened yet (one a call), so the first view to use it doesn't wait for
- * the open. prefix is the card's ("sd:/"). True once every pack has been opened (or tried).
+ * the open (~55 ms each). prefix is the card's ("sd:/"); the grid's packs for tile_size come first, then
+ * the carousel's, the shelf's and the rest. True once every pack has been opened (or tried).
  */
-bool launcher_covers_open_ahead(const char *storage_prefix);
+bool launcher_covers_open_ahead(const char *storage_prefix, int tile_size);
 
 /**
  * @brief Covers asked for from now on are read ahead of need (rows off screen, other folders): they
