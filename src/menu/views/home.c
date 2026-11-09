@@ -549,6 +549,19 @@ static void clip_none (void) {
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 }
 
+/**
+ * @brief A large Home cover meant to show at the showcase size times want_zoom: read from the hi-res pack when the
+ * card has it (drawn at *zoom, at most 1), else from the showcase pack enlarged.
+ */
+static surface_t *big_cover (menu_t *menu, home_item_t *h, float want_zoom, int *lookups_left, bool *pending, float *zoom) {
+    if (launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H)) {
+        *zoom = want_zoom * LAUNCHER_SHOWCASE_W / LAUNCHER_HIRES_W;
+        return item_image(menu, h, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, lookups_left, pending);
+    }
+    *zoom = want_zoom;
+    return item_image(menu, h, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, pending);
+}
+
 /* Minimal: no tabs; big type on the background, a short accent line under the focused title, and the focused
    game's cover large on the right. */
 #define MIN_TOP             (30)
@@ -632,9 +645,10 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     home_item_t *f = focused_item();
     if (f) {
         bool pending;
-        surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, t->bg, MIN_COVER_ZOOM);
-        launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, MIN_COVER_ZOOM);
+        float zoom;
+        surface_t *image = big_cover(menu, f, MIN_COVER_ZOOM, lookups_left, &pending, &zoom);
+        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, t->bg, zoom);
+        launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, zoom);
         char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         int text_y = cover_y + cover_h + 14;
@@ -671,7 +685,7 @@ static const char *row_label (row_kind_t kind) {
 #define SPOT_TOP_SHARE      (58)    /* The panel's width at the top and bottom, in percent of the screen */
 #define SPOT_BOTTOM_SHARE   (52)
 #define SPOT_COVER_Y        (66)
-#define SPOT_COVER_ZOOM     (1.4f)  /* The focused cover, enlarged from the largest pack size */
+#define SPOT_COVER_ZOOM     (1.4f)  /* The focused cover, 1.4x the showcase size (the hi-res pack's own size) */
 #define SPOT_OUTLINE        (3)
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
@@ -696,16 +710,17 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         }
         int cy = SPOT_COVER_Y;
         bool pending;
-        surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        // The cover, enlarged, sits in an outline in the color text on the feature color takes.
+        float zoom;
+        surface_t *image = big_cover(menu, f, SPOT_COVER_ZOOM, lookups_left, &pending, &zoom);
+        // The cover sits in an outline in the color text on the feature color takes.
         int box_w = (int)(LAUNCHER_SHOWCASE_W * SPOT_COVER_ZOOM), box_h = (int)(LAUNCHER_SHOWCASE_H * SPOT_COVER_ZOOM);
-        int iw = image ? (int)(image->width * SPOT_COVER_ZOOM) : box_w;
-        int ih = image ? (int)(image->height * SPOT_COVER_ZOOM) : box_h;
+        int iw = image ? (int)(image->width * zoom) : box_w;
+        int ih = image ? (int)(image->height * zoom) : box_h;
         int ix = cx, iy = cy + (box_h - ih) / 2;
         launcher_fill_rounded(ix - SPOT_OUTLINE, iy - SPOT_OUTLINE, ix + iw + SPOT_OUTLINE, iy + ih + SPOT_OUTLINE,
             8, t->on_feature);
-        launcher_draw_tile_zoomed(ix, iy, iw, ih, image, pending, f->title, false, t->on_feature, SPOT_COVER_ZOOM);
-        launcher_note_focused_cover_zoomed(image, ix, iy, iw, ih, SPOT_COVER_ZOOM);
+        launcher_draw_tile_zoomed(ix, iy, iw, ih, image, pending, f->title, false, t->on_feature, zoom);
+        launcher_note_focused_cover_zoomed(image, ix, iy, iw, ih, zoom);
 
         int tw = bottom_x - cx - 20;
         int y = cy + box_h + 18;
@@ -919,10 +934,11 @@ static void draw_tiles (menu_t *menu, int *lookups_left) {
         int cx = bx0 + (bx1 - bx0 - cw) / 2;
         int cy = y0 + 12;
         bool pending;
-        surface_t *image = item_image(menu, h, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        launcher_draw_tile_zoomed(cx, cy, cw, ch, image, pending, h->title, false, t->panel, TILES_BIG_ZOOM);
+        float zoom;
+        surface_t *image = big_cover(menu, h, TILES_BIG_ZOOM, lookups_left, &pending, &zoom);
+        launcher_draw_tile_zoomed(cx, cy, cw, ch, image, pending, h->title, false, t->panel, zoom);
         if (focus) {
-            launcher_note_focused_cover_zoomed(image, cx, cy, cw, ch, TILES_BIG_ZOOM);
+            launcher_note_focused_cover_zoomed(image, cx, cy, cw, ch, zoom);
         }
         int tw = bx1 - bx0 - 28;
         char line[160];

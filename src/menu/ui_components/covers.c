@@ -279,6 +279,13 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     return p;
 }
 
+bool launcher_covers_have_pack (const char *storage_prefix, int w, int h) {
+    if (launcher_is_widescreen() && pack_for(storage_prefix, w, h, true)) {
+        return true;
+    }
+    return pack_for(storage_prefix, w, h, false) != NULL;
+}
+
 /* Grid tile sizes by Look > Tile size (landscape, then portrait: library_view.c grid_geometry) */
 static const int16_t grid_landscape[3][2] = { { 87, 61 }, { 133, 94 }, { 158, 112 } };
 static const int16_t grid_portrait[3][2] = { { 59, 84 }, { 70, 100 }, { 81, 115 } };
@@ -286,7 +293,7 @@ static const int16_t grid_portrait[3][2] = { { 59, 84 }, { 70, 100 }, { 81, 115 
 /* Every other cover pack the launcher reads (pc-tools/coverpack BOXES, UP_BOXES and the spines), most needed first. */
 static const int16_t pack_sizes[][2] = {
     { LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H }, { LAUNCHER_SHOWCASE_H, LAUNCHER_SHOWCASE_W },
-    { LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H }, { 158, 112 }, { 112, 158 }, { 74, 52 },
+    { LAUNCHER_HIRES_W, LAUNCHER_HIRES_H }, { LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H }, { 158, 112 }, { 112, 158 }, { 74, 52 },
     { 87, 61 }, { 133, 94 }, { 59, 84 }, { 70, 100 }, { 81, 115 },
 };
 

@@ -40,6 +40,14 @@
 #define LAUNCHER_SHOWCASE_W     (210)
 #define LAUNCHER_SHOWCASE_H     (150)
 
+/* Home's large covers (Spotlight, Minimal, Tiles): a pack built from hi-res art (pc-tools/coverpack HIRES_BOXES,
+   --hires), drawn at or below its size. Without it, the showcase pack is enlarged. */
+#define LAUNCHER_HIRES_W        (294)
+#define LAUNCHER_HIRES_H        (210)
+
+/** @brief Whether the cover packs have this size for the screen in use (storage_prefix is the card's, "sd:/"). */
+bool launcher_covers_have_pack(const char *storage_prefix, int w, int h);
+
 /** @brief Controller buttons shown in the hints bar (sets the icon color). */
 typedef enum {
     LAUNCHER_BUTTON_A,

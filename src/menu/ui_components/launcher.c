@@ -603,8 +603,8 @@ void launcher_draw_new_games_notice (void) {
 #define LOADING_DETAILS_DY  (34)    /* Details line below the title */
 #define LOADING_DETAILS_GAP (22)    /* Room the details line adds above the bar */
 
-#define LAUNCH_COVER_MAX_W  (240)
-#define LAUNCH_COVER_MAX_H  (180)
+#define LAUNCH_COVER_MAX_W  (LAUNCHER_HIRES_W)
+#define LAUNCH_COVER_MAX_H  (LAUNCHER_HIRES_H)
 #define LAUNCH_COVER_ZOOM   (1.5f)  /* A tile-sized thumbnail (no Large cover in the pack) grows no more than this */
 #define LAUNCH_LARGE_ZOOM   (1.15f) /* The Large cover grows a little too, so it visibly grows even from a large tile */
 #define LAUNCH_LARGE_W      (LAUNCHER_SHOWCASE_W)   /* The largest cover-pack size (pc-tools/coverpack UP_BOXES) */
@@ -660,8 +660,13 @@ static void launch_cover_take (void) {
     // A cover already shown at that size (carousel, shelf) is read again too: in 16:9 the one on
     // screen is squeezed and can't be copied.
     bool landscape = focused_image->width >= focused_image->height;
-    surface_t *large = launcher_cover_larger(focused_image, landscape ? LAUNCH_LARGE_W : LAUNCH_LARGE_H,
-                                             landscape ? LAUNCH_LARGE_H : LAUNCH_LARGE_W);
+    // A cover shown from the hi-res pack (Home's large covers) is larger than the Large one: read it from there.
+    surface_t *large = (focused_image->width > LAUNCH_LARGE_W + 2 || focused_image->height > LAUNCH_LARGE_H + 2) ?
+        launcher_cover_larger(focused_image, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H) : NULL;
+    if (!large) {
+        large = launcher_cover_larger(focused_image, landscape ? LAUNCH_LARGE_W : LAUNCH_LARGE_H,
+                                      landscape ? LAUNCH_LARGE_H : LAUNCH_LARGE_W);
+    }
     // Within a couple of pixels: covers are trimmed to even sizes, so a 16:9 cover read again at the size it is
     // shown at (Home's Spotlight, Minimal and Tiles, the carousel, the shelf) can come back a pixel narrower.
     if (large && large->width + 2 >= focused_image->width) {
