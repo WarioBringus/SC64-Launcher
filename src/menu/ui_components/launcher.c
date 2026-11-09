@@ -610,6 +610,7 @@ void launcher_draw_new_games_notice (void) {
 #define LAUNCH_COVER_MAX_W  (240)
 #define LAUNCH_COVER_MAX_H  (180)
 #define LAUNCH_COVER_ZOOM   (1.5f)  /* A tile-sized thumbnail (no Large cover in the pack) grows no more than this */
+#define LAUNCH_LARGE_ZOOM   (1.15f) /* The Large cover grows a little too, so it visibly grows even from a large tile */
 #define LAUNCH_LARGE_W      (LAUNCHER_SHOWCASE_W)   /* The largest cover-pack size (pc-tools/coverpack UP_BOXES) */
 #define LAUNCH_LARGE_H      (LAUNCHER_SHOWCASE_H)
 #define LAUNCH_GROW_MS      (300)
@@ -665,7 +666,9 @@ static void launch_cover_take (void) {
     bool landscape = focused_image->width >= focused_image->height;
     surface_t *large = launcher_cover_larger(focused_image, landscape ? LAUNCH_LARGE_W : LAUNCH_LARGE_H,
                                              landscape ? LAUNCH_LARGE_H : LAUNCH_LARGE_W);
-    if (large && large->width >= focused_image->width) {
+    // Within a couple of pixels: covers are trimmed to even sizes, so a 16:9 cover read again at the size it is
+    // shown at (Home's Spotlight, Minimal and Tiles, the carousel, the shelf) can come back a pixel narrower.
+    if (large && large->width + 2 >= focused_image->width) {
         launch_cover = *large;
         free(large);
         launch_cover_valid = true;
@@ -707,7 +710,7 @@ void launcher_draw_loading (const char *title, const char *details, float progre
     int status_y = title_y + (LOADING_STATUS_Y - LOADING_TITLE_Y) + details_gap;
     if (launch_cover_valid) {
         // The cover sits above the name, and the whole block stays centered on screen.
-        float scale = fminf(launch_cover_large ? 1.0f : LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
+        float scale = fminf(launch_cover_large ? LAUNCH_LARGE_ZOOM : LAUNCH_COVER_ZOOM, fminf((float)LAUNCH_COVER_MAX_W / launch_cover.width,
                                                      (float)LAUNCH_COVER_MAX_H / launch_cover.height));
         int dw = (int)(launch_cover.width * scale);
         int dh = (int)(launch_cover.height * scale);
