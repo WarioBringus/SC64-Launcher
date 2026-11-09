@@ -52,7 +52,7 @@ static const launcher_hint_t hints_empty[] = {
 #define REVEAL_FADE_MS      (250)   /* Then it fades in from black over this long */
 #define REVEAL_STEADY_FRAMES (6)    /* ...once this many frames in a row came quickly (startup has settled) */
 #define REVEAL_STEADY_MS    (25)
-#define REVEAL_STEP_MS      (20)    /* A frame moves the fade on by at most this much, so a slow one pauses it */
+#define REVEAL_STEP_MS      (40)    /* A frame moves the fade on by at most this much, so a hitch pauses it */
 
 #define HINT_COUNT(h) ((int)(sizeof(h) / sizeof((h)[0])))
 
