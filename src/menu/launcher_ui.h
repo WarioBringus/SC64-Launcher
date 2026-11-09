@@ -270,7 +270,8 @@ void launcher_draw_footer(const launcher_hint_t *hints, int count);
 void launcher_fill_rounded(int x0, int y0, int x1, int y1, int radius, color_t color);
 
 /**
- * @brief Draw a selection ring around a rounded rectangle (draw it before the content).
+ * @brief Draw a selection ring around a cover tile (draw it before the content). In 16:9 its right side
+ * meets the cover's squeezed width; launcher_draw_focus_ring is for anything else, such as a card.
  */
 void launcher_draw_ring(int x0, int y0, int x1, int y1, int radius);
 

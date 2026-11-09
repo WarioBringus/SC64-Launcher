@@ -1121,7 +1121,10 @@ void launcher_focus_reset (void) {
     ring_valid = false;
 }
 
-void launcher_draw_focus_ring (int x0, int y0, int x1, int y1, int radius) {
+static void draw_ring_around (int x0, int y0, int x1, int y1, int radius, bool cover);
+
+/** @brief The gliding focus ring, around a cover tile or around something else (a card). */
+static void focus_ring (int x0, int y0, int x1, int y1, int radius, bool cover) {
     if (!ring_valid || fabsf(x0 - ring_x0) > FOCUS_SNAP_DISTANCE || fabsf(y0 - ring_y0) > FOCUS_SNAP_DISTANCE) {
         ring_x0 = x0;
         ring_y0 = y0;
@@ -1136,12 +1139,16 @@ void launcher_draw_focus_ring (int x0, int y0, int x1, int y1, int radius) {
         ring_y1 = launcher_ease(ring_y1, y1);
         ring_radius = launcher_ease(ring_radius, radius);
     }
-    launcher_draw_ring((int)lroundf(ring_x0), (int)lroundf(ring_y0), (int)lroundf(ring_x1), (int)lroundf(ring_y1),
-        (int)lroundf(ring_radius));
+    draw_ring_around((int)lroundf(ring_x0), (int)lroundf(ring_y0), (int)lroundf(ring_x1), (int)lroundf(ring_y1),
+        (int)lroundf(ring_radius), cover);
+}
+
+void launcher_draw_focus_ring (int x0, int y0, int x1, int y1, int radius) {
+    focus_ring(x0, y0, x1, y1, radius, false);
 }
 
 void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {
-    launcher_draw_focus_ring(x, y, x + w, y + h, TILE_RADIUS);
+    focus_ring(x, y, x + w, y + h, TILE_RADIUS, true);
 }
 
 #define FAST_SCROLL_GAP_MS  (250)   /* Two moves this close together count as fast scrolling... */
@@ -1173,13 +1180,20 @@ int launcher_focus_lift (int key) {
     return (int)(FOCUS_LIFT * e + 0.5f);
 }
 
-void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
-    // The band's inner edges meet what it surrounds: in 16:9, a squeezed cover's real width.
+/**
+ * @brief The ring's inner edges meet what it surrounds: around a cover in 16:9, the width the cover
+ * was squeezed to; around anything else (a card), its own right edge.
+ */
+static void draw_ring_around (int x0, int y0, int x1, int y1, int radius, bool cover) {
     int t = (int)(LAUNCHER_RING * (widescreen ? WIDE_SQUEEZE : 1.0f) + 0.5f);
     int rx0 = px(x0) - t;
-    int rx1 = px(x0) + real_cover_width(x1 - x0) + t;
+    int rx1 = (cover ? px(x0) + real_cover_width(x1 - x0) : px(x1)) + t;
     outline_rounded_real(rx0, y0 - LAUNCHER_RING, rx1, y1 + LAUNCHER_RING,
         radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, theme_current()->accent);
+}
+
+void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
+    draw_ring_around(x0, y0, x1, y1, radius, true);
 }
 
 /**
