@@ -1369,9 +1369,18 @@ static bool game_matches_filter (const library_game_t *g) {
         return true;
     }
     if (filter_field_now == LAUNCHER_FILTER_SEARCH) {
-        char title[128];
-        squash_text(g->title, title, sizeof(title));
-        return strstr(title, search_now) != NULL;
+        // The title, or the developer, genre or year ("rare", "racing", "1998").
+        const char *fields[] = { g->title, g->developer, g->genre, g->year };
+        for (int i = 0; i < 4; i++) {
+            if (fields[i]) {
+                char text[128];
+                squash_text(fields[i], text, sizeof(text));
+                if (strstr(text, search_now) != NULL) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     char label[64];
     library_game_group((library_game_t *)g, filter_field_now, label, sizeof(label));

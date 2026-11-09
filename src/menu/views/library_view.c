@@ -536,7 +536,7 @@ static void search_draw (library_category_t *c) {
         snprintf(typed, sizeof(typed), "%s_", search_text);
         launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_DEFAULT, typed);
     } else {
-        launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_GRAY, "Type part of a name");
+        launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_GRAY, "Type a name, developer, genre or year");
     }
     int shown = c ? c->shown : 0;
     launcher_text(LAUNCHER_X1 - 180, top + 14, 160, ALIGN_RIGHT, STL_GRAY, shown == 1 ? "1 game" : "%d games", shown);
