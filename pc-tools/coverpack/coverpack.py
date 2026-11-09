@@ -5,9 +5,9 @@ Build the launcher's cover index and thumbnail packs on the SD card.
 
 Writes to <card>/menu/cache/launcher/:
   covers.idx              which cover each ROM uses (so the menu needn't read ROM headers)
-  covers_<W>x<H>.pak      every cover pre-scaled to each tile size (so the menu needn't decode PNGs)
-  covers_<W>x<H>_w.pak    the same squeezed to 3/4 width for the launcher's 16:9 screen
-  covers_64x210[_w].pak   box spines for the shelf layout, under each front cover's id, 210 tall and as
+  covers.pak              every cover pre-scaled to each tile size (so the menu needn't decode PNGs),
+                          each size also squeezed to 3/4 width for the launcher's 16:9 screen (_w)
+  (covers.pak 64x210[_w]) box spines for the shelf layout, under each front cover's id, 210 tall and as
                           thick as the box: the box's top edge (boxart_top.png) turned upright, else a
                           spine scan (boxart_spine.png, e.g. from the LaunchBox Games Database), else a
                           slice of the front (30 wide). covers.idx gives each one's width (W lines).
@@ -23,8 +23,9 @@ Index format (UTF-8 text, sorted byte-wise so the menu can binary search):
   R<TAB><ROM path relative to the card><TAB><cover id or -1>
   M<TAB><ROM path><TAB><genre><TAB><developer><TAB><year><TAB><players><TAB><publisher>   (when known, see gamemeta.py)
 
-Pack format (big-endian): "CVP1", u32 count, u32 offset[count] (0 = none), then for each cover
-"CVR1", u16 width, u16 height, RGBA5551 pixels. In the 16:9 packs each cover is "CVW1", u16 stored
+covers.pak (big-endian): "CVPA", u32 pack count, a directory entry per pack (u16 w, u16 h, u8 16:9,
+u8 0, u16 0, u32 table offset, u32 count), then each pack's table, u32 absolute offset[count] (0 = none),
+and its covers: "CVR1", u16 width, u16 height, RGBA5551 pixels. In the 16:9 packs each cover is "CVW1", u16 stored
 width, u16 height, u16 the 4:3 width it stands for, u16 0, RGBA5551 pixels.
 """
 import argparse, hashlib, json, os, shutil, struct, subprocess, sys, tempfile
@@ -309,11 +310,12 @@ def main():
           (real_spines, scanned_spines, len(spine_signatures) - real_spines - scanned_spines))
 
     # Skip rewriting the packs (88 MB or so) when the covers are exactly the same as last time.
-    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown', 'align:8'] + spine_signatures).encode('utf-8')).hexdigest()
+    manifest = hashlib.sha1('\n'.join(signatures + [name for _, name in PACKS] + ['order:shown', 'align:8', 'combined'] + spine_signatures).encode('utf-8')).hexdigest()
     manifest_path = out_dir + '/covers.manifest'
     all_packs = [(name, blobs[pack]) for pack in PACKS for name in [pack[1]]] + \
         [(name, spine_blobs[name]) for _, name in SPINE_PACKS]
-    packs_present = all(os.path.exists('%s/covers_%s.pak' % (out_dir, name)) for name, _ in all_packs)
+    combined_path = out_dir + '/covers.pak'
+    packs_present = os.path.exists(combined_path)
     old_manifest = open(manifest_path).read().strip() if os.path.exists(manifest_path) else ''
 
     def shown_title_key(stem):
@@ -339,38 +341,50 @@ def main():
                 order.append(cover_id[c])
     order += [i for i in range(len(covers)) if i not in placed]
 
-    total = 0
-    for name, items in all_packs:
-        if packs_current:
-            total += os.path.getsize('%s/covers_%s.pak' % (out_dir, name))
-            continue
-        table_end = 8 + 4 * len(items)
-        offsets, data, pos = [0] * len(items), bytearray(), table_end
-        for i in order:
-            b = items[i]
-            if b:
-                # Pixels start on an 8-byte boundary, so the cart reads whole sectors straight into
-                # the cover's memory instead of copying them one at a time.
-                header = 12 if b[:4] == b'CVW1' else 8
-                pad = (-(pos + header)) % 8
-                data += bytes(pad)
-                pos += pad
-                offsets[i] = pos
-                data += b
-                pos += len(b)
-        path = '%s/covers_%s.pak' % (out_dir, name)
-        with open(path + '.tmp', 'wb') as f:
-            f.write(b'CVP1' + struct.pack('>I', len(items)))
-            f.write(struct.pack('>%dI' % len(items), *offsets))
-            f.write(data)
-        os.replace(path + '.tmp', path)
-        total += os.path.getsize(path)
-    # Packs no longer built (an old size, or 4:3 packs after --wide-only) would be read as current.
-    written = {'covers_%s.pak' % name for name, _ in all_packs}
+    # Every size goes into one file, covers.pak, so the menu opens one file (an open costs ~55 ms on the
+    # console) rather than one per size:
+    #   "CVPA", u32 pack count, then per pack: u16 w, u16 h, u8 wide, u8 0, u16 0, u32 table offset,
+    #   u32 cover count; then each pack's table (u32 absolute offset per cover id, 0 = none) and covers.
+    if packs_current:
+        total = os.path.getsize(combined_path)
+    else:
+        layout, pos = [], 8 + 16 * len(all_packs)
+        for name, items in all_packs:
+            table_offset = pos
+            pos += 4 * len(items)
+            offsets, chunks = [0] * len(items), []
+            for i in order:
+                b = items[i]
+                if b:
+                    # Pixels start on an 8-byte boundary, so the cart reads whole sectors straight into
+                    # the cover's memory instead of copying them one at a time.
+                    header = 12 if b[:4] == b'CVW1' else 8
+                    pad = (-(pos + header)) % 8
+                    if pad:
+                        chunks.append(bytes(pad))
+                        pos += pad
+                    offsets[i] = pos
+                    chunks.append(b)
+                    pos += len(b)
+            layout.append((name, table_offset, offsets, chunks))
+        with open(combined_path + '.tmp', 'wb') as f:
+            f.write(b'CVPA' + struct.pack('>I', len(layout)))
+            for name, table_offset, offsets, _ in layout:
+                size, wide = (name[:-2], 1) if name.endswith('_w') else (name, 0)
+                w, h = (int(v) for v in size.split('x'))
+                f.write(struct.pack('>HHBBHII', w, h, wide, 0, 0, table_offset, len(offsets)))
+            for name, table_offset, offsets, chunks in layout:
+                assert f.tell() == table_offset
+                f.write(struct.pack('>%dI' % len(offsets), *offsets))
+                for chunk in chunks:
+                    f.write(chunk)
+        os.replace(combined_path + '.tmp', combined_path)
+        total = os.path.getsize(combined_path)
+    # The per-size packs of older runs: the menu reads covers.pak first, but stale ones would only waste space.
     for old in sorted(os.listdir(out_dir)):
-        if old.startswith('covers_') and old.endswith('.pak') and old not in written:
+        if old.startswith('covers_') and old.endswith('.pak'):
             os.remove(os.path.join(out_dir, old))
-            print('Removed %s (no longer built)' % old)
+            print('Removed %s (now in covers.pak)' % old)
     if packs_current:
         print('Covers unchanged: packs left as they are.')
     else:
