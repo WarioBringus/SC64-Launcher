@@ -302,6 +302,12 @@ void launcher_clock_text(menu_t *menu, char *buffer, size_t size);
  */
 void launcher_fill_slanted(int x_top, int x_bottom, int y0, int y1, color_t color);
 
+/**
+ * @brief A button prompt on a pill: the button's icon as the hints draw it (e.g. the blue A) and what it does.
+ * Returns its width; it is 34 tall.
+ */
+int launcher_draw_prompt(int x, int y, launcher_button_t kind, const char *button, const char *label, color_t pill);
+
 /** @brief Draw the separator and a right-aligned row of button icons with labels. */
 void launcher_draw_footer(const launcher_hint_t *hints, int count);
 

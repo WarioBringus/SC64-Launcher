@@ -437,7 +437,6 @@ static void home_background_work (menu_t *menu, int *lookups_left) {
  */
 #define MAX_SLOTS           (ROW_KINDS * MAX_ROW_ITEMS + 1)
 #define SLOT_LIBRARY        (-1)    /* Tiles: the Library tile */
-#define HOME_PILL_H         (24)    /* launcher_draw_pill's height */
 
 typedef struct {
     int x, y, w, h;
@@ -676,7 +675,6 @@ static const char *row_label (row_kind_t kind) {
 #define SPOT_OUTLINE        (3)
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
-#define SPOT_PILL_W         (128)
 #define SPOT_RESUME_H       (77)    /* The Resume card pinned at the top of the column */
 
 static int spot_scroll = 0;
@@ -718,9 +716,8 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
         launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_ON_FEATURE, line);
         y += 32;
-        // "A Resume" on a pill in the background color.
-        launcher_fill_rounded(cx, y, cx + SPOT_PILL_W, y + HOME_PILL_H, HOME_PILL_H / 2, t->bg);
-        launcher_text(cx, y + 3, SPOT_PILL_W, ALIGN_CENTER, STL_DEFAULT, "%s", on_panel ? "A  Resume" : "A  Play");
+        // The A button and what it does, on a pill in the background color.
+        launcher_draw_prompt(cx, y, LAUNCHER_BUTTON_A, "A", on_panel ? "Resume" : "Play", t->bg);
     }
 
     // The column: Recently played and Favorites as tiles, two across where they fit.

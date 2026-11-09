@@ -1081,6 +1081,29 @@ static void draw_arrow (int cx, int cy, int dx, int dy) {
     flat_end();
 }
 
+#define PROMPT_H            (34)    /* launcher_draw_prompt's pill */
+#define PROMPT_ICON         (22)
+#define PROMPT_PAD          (8)
+
+int launcher_draw_prompt (int x, int y, launcher_button_t kind, const char *button, const char *label, color_t pill) {
+    color_t color;
+    switch (kind) {
+        case LAUNCHER_BUTTON_A: color = BUTTON_A_COLOR; break;
+        case LAUNCHER_BUTTON_B: color = BUTTON_B_COLOR; break;
+        case LAUNCHER_BUTTON_START: color = BUTTON_START_COLOR; break;
+        default: color = theme_current()->text_muted; break;
+    }
+    int label_w = text_width(label) + 2;
+    int w = PROMPT_PAD + PROMPT_ICON + PROMPT_PAD + label_w + PROMPT_PAD + 4;
+    launcher_fill_rounded(x, y, x + w, y + PROMPT_H, PROMPT_H / 2, pill);
+    // The button as the hints draw it: a colored circle with its letter.
+    int ix = x + PROMPT_PAD, iy = y + (PROMPT_H - PROMPT_ICON) / 2;
+    launcher_fill_rounded(ix, iy, ix + PROMPT_ICON, iy + PROMPT_ICON, PROMPT_ICON / 2, color);
+    text_box(ix, iy, PROMPT_ICON, PROMPT_ICON, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, button);
+    text_box(ix + PROMPT_ICON + PROMPT_PAD, y, 0, PROMPT_H, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, label);
+    return w;
+}
+
 static bool is_c_button (launcher_button_t kind) {
     return kind == LAUNCHER_BUTTON_C_UP_DOWN || kind == LAUNCHER_BUTTON_C_LEFT_RIGHT;
 }
