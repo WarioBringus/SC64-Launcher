@@ -14,7 +14,7 @@
 #include "../perf_log.h"
 #include "../png_decoder.h"
 
-#define COVER_SLOTS             (96)    /* With an Expansion Pak */
+#define COVER_SLOTS             (160)   /* With an Expansion Pak */
 #define COVER_SLOTS_4MB         (24)    /* Without one */
 /* A cover is read from its pack a piece at a time, at the start of each frame, until this much time has
    gone on it: one whole cover (~10 ms for a grid cover) in one frame made that frame long. */
@@ -27,6 +27,9 @@
 /* Memory for decoded covers: what the slots held when every cover was at most 158x112, so the
    carousel's and shelf's larger covers never take more than covers did before. */
 #define COVER_BYTES_PER_SLOT    (LAUNCHER_COVER_W * LAUNCHER_COVER_H * 2)
+#define COVER_BUDGET_MIN        (96 * COVER_BYTES_PER_SLOT)     /* 3.4 MB: what the cache always had */
+#define COVER_BUDGET_MAX        (6 * 1024 * 1024)
+#define COVER_HEAP_RESERVE      (2 * 1024 * 1024)               /* Left free for everything else */
 #define COMBINED_FILE_FORMAT    "%.*s/menu/cache/launcher/covers.pak"
 #define COMBINED_MAX            (32)    /* Packs listed in covers.pak's directory */
 
@@ -668,6 +671,29 @@ static void slot_free (cover_slot_t *slot) {
     memset(slot, 0, sizeof(*slot));
 }
 
+/**
+ * @brief How much cover pixel memory to hold: with an Expansion Pak, as much as the heap can spare above a reserve
+ * (covers scrolled off and back, or left on Home and back, then stay in memory rather than being read again), at
+ * least the 3.4 MB it always had and at most 6 MB. Worked out as each new cover is read.
+ */
+static size_t cover_budget (void) {
+    if (!is_memory_expanded()) {
+        return (size_t)COVER_SLOTS_4MB * COVER_BYTES_PER_SLOT;
+    }
+    heap_stats_t stats;
+    sys_get_heap_stats(&stats);
+    size_t spare = (stats.free > COVER_HEAP_RESERVE) ? (size_t)(stats.free - COVER_HEAP_RESERVE) : 0;
+    size_t budget = bytes_used + spare;
+    budget = (budget < COVER_BUDGET_MIN) ? COVER_BUDGET_MIN : ((budget > COVER_BUDGET_MAX) ? COVER_BUDGET_MAX : budget);
+    static size_t noted = 0;
+    if (budget / (256 * 1024) != noted / (256 * 1024)) {
+        perf_log_event("cover memory: %u KB allowed (heap %d KB free, %u KB of covers held)", (unsigned)(budget / 1024),
+            stats.free / 1024, (unsigned)(bytes_used / 1024));
+        noted = budget;
+    }
+    return budget;
+}
+
 static bool hold_new = false;
 static uint32_t last_read_frame = 0;    /* Frame of the last pack read or PNG decode started */
 
@@ -815,7 +841,8 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
 
     // Free the covers unused longest until this one fits in memory.
     size_t need = (size_t)max_w * max_h * 2 * (want_wide ? 3 : 4) / 4;
-    while (bytes_used + need > (size_t)slot_count * COVER_BYTES_PER_SLOT) {
+    size_t budget = cover_budget();
+    while (bytes_used + need > budget) {
         cover_slot_t *oldest = NULL;
         for (int i = 0; i < slot_count; i++) {
             cover_slot_t *s = &slots[i];
