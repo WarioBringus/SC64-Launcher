@@ -987,6 +987,7 @@ static int transition_dir = 0;              /* +1 slides in from the right, -1 f
 static bool transition_pending = false;
 static uint64_t transition_start_ms = 0;
 static int transition_y0 = 0;
+static int transition_y1 = LAUNCHER_FOOTER_Y;  /* The fade's band ends here (the whole screen for Home's styles) */
 static float transition_fade = 0.0f;        /* Content fade still to clear this frame (1 = background only) */
 
 void launcher_transition (menu_mode_t from, menu_mode_t to) {
@@ -1088,7 +1089,7 @@ static void fade_band (int y0, int y1, color_t color, int alpha) {
 static void transition_content_end (void) {
     slide_dx = 0;
     if (transition_fade > 0.0f) {
-        fade_band(transition_y0, LAUNCHER_FOOTER_Y, theme_current()->bg, (int)(transition_fade * 255.0f));
+        fade_band(transition_y0, transition_y1, theme_current()->bg, (int)(transition_fade * 255.0f));
         transition_fade = 0.0f;
     }
 }
@@ -1281,8 +1282,12 @@ static bool is_c_button (launcher_button_t kind) {
 
 void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     uint64_t perf_started = get_ticks_us();
+    // Home's styles without the tab row draw from the top of the screen to the bottom (Spotlight's panel): their
+    // whole screen fades in, or the panel's ends showed at full color around the fading middle, like a tear.
+    bool full_screen = (header_style != LAUNCHER_HEADER_TABS);
     draw_header_parts(menu, active);
-    launcher_transition_content_begin(HEADER_UNDERLINE_Y + 6);
+    launcher_transition_content_begin(full_screen ? 0 : HEADER_UNDERLINE_Y + 6);
+    transition_y1 = full_screen ? display_get_height() : LAUNCHER_FOOTER_Y;
     perf_log_add(PERF_CHROME, (uint32_t)(get_ticks_us() - perf_started));
 }
 
