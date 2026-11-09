@@ -45,6 +45,10 @@
 #define LAUNCHER_HIRES_W        (294)
 #define LAUNCHER_HIRES_H        (210)
 
+/* Wallpaper (attract) mode's covers: a larger pack from the same hi-res art (pc-tools/coverpack HIRES_PACKS), 1:1. */
+#define LAUNCHER_WALL_W         (420)
+#define LAUNCHER_WALL_H         (300)
+
 /**
  * @brief For a launch, in 16:9: a copy of the cover's hi-res version (LAUNCHER_HIRES_W x H) as squeezed pixels, with
  * the width they stand for in *logical_w; from memory when it is held, else read from its pack. The caller frees it.

@@ -17,11 +17,11 @@
 
 #define SLIDE_MS            (7000)  /* Time each game is shown */
 #define SLIDE_IN_MS         (900)   /* Time the covers take to move on: the old one off to the left as the new one comes in */
-#define COVER_CENTER_Y      (200)
+#define COVER_CENTER_Y      (196)
 #define LANDSCAPE_SCALE     (2.0f)
 #define PORTRAIT_SCALE      (1.75f)
-#define TITLE_Y             (340)
-#define DETAILS_Y           (376)
+#define TITLE_Y             (356)
+#define DETAILS_Y           (392)
 #define HINT_Y              (430)
 
 typedef struct {
@@ -79,6 +79,9 @@ static surface_t *slide_cover (menu_t *menu, slide_t *s, bool *pending) {
     if (!path) {
         return NULL;
     }
+    if (launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H)) {
+        return launcher_cover_get(path, LAUNCHER_WALL_W, LAUNCHER_WALL_H, pending);     // Large hi-res, shown 1:1
+    }
     if (launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H)) {
         return launcher_cover_get(path, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, pending);   // Hi-res, shown 1:1
     }
@@ -98,10 +101,14 @@ static void draw_slide (menu_t *menu, slide_t *s, int offset_x) {
     float scale = s->portrait ? PORTRAIT_SCALE : LANDSCAPE_SCALE;
     int w = (int)((s->portrait ? LAUNCHER_COVER_H : LAUNCHER_COVER_W) * scale);
     int h = (int)((s->portrait ? LAUNCHER_COVER_W : LAUNCHER_COVER_H) * scale);
+    bool wall = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H);
     if (image && (image->width >= LAUNCHER_HIRES_W - 2 || image->height >= LAUNCHER_HIRES_H - 2)) {
         // A hi-res cover: drawn at its own size, 1:1, never enlarged.
         w = image->width;
         h = image->height;
+    } else if (!image && wall) {
+        w = s->portrait ? LAUNCHER_WALL_H * LAUNCHER_WALL_H / LAUNCHER_WALL_W : LAUNCHER_WALL_W;
+        h = LAUNCHER_WALL_H;
     } else if (!image && launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H)) {
         w = s->portrait ? LAUNCHER_HIRES_H * LAUNCHER_HIRES_H / LAUNCHER_HIRES_W : LAUNCHER_HIRES_W;
         h = LAUNCHER_HIRES_H;

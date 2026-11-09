@@ -258,7 +258,7 @@ static const int16_t grid_portrait[3][2] = { { 59, 84 }, { 70, 100 }, { 81, 115 
 static const int16_t pack_sizes[][2] = {
     { LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H }, { LAUNCHER_SHOWCASE_H, LAUNCHER_SHOWCASE_W },
     { LAUNCHER_HIRES_W, LAUNCHER_HIRES_H }, { LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H }, { 158, 112 }, { 112, 158 }, { 74, 52 },
-    { 87, 61 }, { 133, 94 }, { 59, 84 }, { 70, 100 }, { 81, 115 },
+    { 87, 61 }, { 133, 94 }, { 59, 84 }, { 70, 100 }, { 81, 115 }, { LAUNCHER_WALL_W, LAUNCHER_WALL_H },
 };
 
 bool launcher_covers_open_ahead (const char *storage_prefix, int tile_size) {

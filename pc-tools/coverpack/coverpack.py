@@ -55,7 +55,9 @@ PACKS = [('%dx%d' % b, '%dx%d' % b) for b in BOXES] + [('%dx%dw' % b, '%dx%d_w' 
 SPINE_PACKS = [('64x210ru', '64x210'), ('64x210rwu', '64x210_w')]
 # Home's large covers (LAUNCHER_HIRES_W/H in src/menu/launcher_ui.h): from the hi-res front under --hires
 # (launchbox.py --fronts) when there is one, else the card's art enlarged.
-HIRES_PACKS = [('294x210', '294x210'), ('294x210w', '294x210_w')]
+HIRES_PACKS = [('294x210', '294x210'), ('294x210w', '294x210_w'),
+               # Wallpaper mode's covers (LAUNCHER_WALL_W/H), 1:1 at about 80% of the screen's height
+               ('420x300', '420x300'), ('420x300w', '420x300_w')]
 SPINE_UPRIGHT = ['64x210u', '64x210wu']
 SPINE_FALLBACK = ['30x210su', '30x210swu']
 
