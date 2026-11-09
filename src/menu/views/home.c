@@ -675,6 +675,7 @@ static const char *row_label (row_kind_t kind) {
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
 #define SPOT_PILL_W         (128)
+#define SPOT_RESUME_H       (77)    /* The Resume card pinned at the top of the column */
 
 static int spot_scroll = 0;
 static float spot_scroll_pos = 0.0f;
@@ -686,9 +687,6 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     launcher_fill_slanted(top_x, bottom_x, 0, display_get_height(), t->accent);
     int resume_row = row_of_kind(ROW_RESUME);
     bool on_panel = (resume_row >= 0 && is_focus(resume_row, 0));
-    if (resume_row >= 0) {
-        slot_add(0, 0, bottom_x, CONTENT_BOTTOM, resume_row, 0);
-    }
 
     home_item_t *f = focused_item();
     if (f) {
@@ -739,6 +737,25 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     }
     int line_h = th + SPOT_GAP;
 
+    // The game to resume stays in view at the top of the column, whichever game the panel shows.
+    int grid_top = CONTENT_TOP;
+    if (resume_row >= 0) {
+        home_item_t *h = &rows[resume_row].items[0];
+        int ry0 = CONTENT_TOP + 8, ry1 = ry0 + SPOT_RESUME_H;
+        slot_add(gx0, ry0, avail, SPOT_RESUME_H, resume_row, 0);
+        if (on_panel) {
+            launcher_draw_focus_ring(gx0, ry0, LAUNCHER_X1, ry1, CARD_RADIUS);
+        }
+        launcher_fill_rounded(gx0, ry0, LAUNCHER_X1, ry1, CARD_RADIUS, t->panel);
+        bool pending;
+        surface_t *image = item_image(menu, h, 87, 61, lookups_left, &pending);
+        launcher_draw_tile(gx0 + 8, ry0 + 8, 87, 61, image, pending, h->title, false, t->panel);
+        int text_x = gx0 + 8 + 87 + 12;
+        launcher_text(text_x, ry0 + 12, LAUNCHER_X1 - 8 - text_x, ALIGN_LEFT, STL_ACCENT, "Resume");
+        launcher_game_name(text_x, ry0 + 38, LAUNCHER_X1 - 8 - text_x, ALIGN_LEFT, on_panel ? STL_DEFAULT : STL_GRAY, h->title);
+        grid_top = ry1 + 6;
+    }
+
     // Keep the focused tile's line in view.
     int y = 0;
     for (int r = 0; r < row_count; r++) {
@@ -752,8 +769,8 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
             if (top < spot_scroll) {
                 spot_scroll = top;
             }
-            if (bottom - spot_scroll > CONTENT_BOTTOM - CONTENT_TOP) {
-                spot_scroll = bottom - (CONTENT_BOTTOM - CONTENT_TOP);
+            if (bottom - spot_scroll > CONTENT_BOTTOM - grid_top) {
+                spot_scroll = bottom - (CONTENT_BOTTOM - grid_top);
             }
         }
         y += SPOT_LABEL_H + ((rows[r].count + cols - 1) / cols) * line_h + 6;
@@ -761,14 +778,16 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     spot_scroll_pos = motion_snap ? (float)spot_scroll : launcher_ease(spot_scroll_pos, (float)spot_scroll);
     int drawn = (int)lroundf(spot_scroll_pos);
 
-    clip_content();
-    y = CONTENT_TOP + 8 - drawn;
+    int clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
+    rdpq_set_scissor(0, grid_top - LAUNCHER_RING - 2, clip_x1 > display_get_width() ? display_get_width() : clip_x1,
+        CONTENT_BOTTOM + 2);
+    y = grid_top + 8 - drawn;
     for (int r = 0; r < row_count; r++) {
         if (rows[r].kind == ROW_RESUME) {
             continue;
         }
         bool row_focus = !library_focused && r == row_selected;
-        if (y + SPOT_LABEL_H > CONTENT_TOP - 4 && y < CONTENT_BOTTOM) {
+        if (y + SPOT_LABEL_H > grid_top - 4 && y < CONTENT_BOTTOM) {
             launcher_text(gx0, y, avail, ALIGN_LEFT, row_focus ? STL_DEFAULT : STL_GRAY, "%s", row_label(rows[r].kind));
         }
         int ty = y + SPOT_LABEL_H;
@@ -777,7 +796,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
             int iy = ty + (i / cols) * line_h;
             int target_y = iy + drawn - spot_scroll;
             slot_add(x, target_y, tw, th, r, i);
-            if (iy + th < CONTENT_TOP - 4 || iy > CONTENT_BOTTOM) {
+            if (iy + th < grid_top - 4 || iy > CONTENT_BOTTOM) {
                 continue;   // Off screen: not drawn, and its cover not read.
             }
             home_item_t *h = &rows[r].items[i];
