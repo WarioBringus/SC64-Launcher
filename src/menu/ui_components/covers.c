@@ -73,6 +73,7 @@ typedef struct {
     bool failed;
     uint32_t failed_frame;      /**< When it failed; it is retried after FAILED_RETRY_FRAMES */
     uint32_t last_used;
+    uint32_t pin;               /**< The Home visit it was drawn on (launcher_covers_pin) */
     size_t bytes;               /**< Pixel memory held */
     /* While its pixels are being read from a pack (loading, and it is the slot being streamed): */
     cover_pack_t *stream_pack;
@@ -316,6 +317,7 @@ static void even_size(surface_t *image);
 static void slot_account(cover_slot_t *slot);
 
 static void slot_free(cover_slot_t *slot);
+static uint32_t evict_key(const cover_slot_t *s);
 
 /** @brief Free the cover unused longest (not drawn this frame, not loading, not keep); false when there is none. */
 static bool free_oldest_cover (cover_slot_t *keep) {
@@ -323,7 +325,7 @@ static bool free_oldest_cover (cover_slot_t *keep) {
     for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];
         if (s != keep && s->path && s->bytes && s->last_used != frame && !s->loading &&
-            (!oldest || s->last_used < oldest->last_used)) {
+            (!oldest || evict_key(s) < evict_key(oldest))) {
             oldest = s;
         }
     }
@@ -750,6 +752,27 @@ static size_t cover_budget (void) {
     return budget;
 }
 
+/*
+ * Home's covers are kept over the library's: the performance log showed ~3.3 MB for covers in all, which browsing
+ * the library fills, so Home's were read again on returning. Covers drawn on the latest Home visit are given up only
+ * when nothing else can be.
+ */
+static uint32_t pin_set = 0;            /* The latest Home visit */
+static bool pinning = false;            /* Covers asked for now belong to it */
+
+void launcher_covers_pin_new_set (void) {
+    pin_set++;
+}
+
+void launcher_covers_pin (bool pin) {
+    pinning = pin;
+}
+
+/** @brief A slot's age for giving it up: Home's covers count as just used. */
+static uint32_t evict_key (const cover_slot_t *s) {
+    return (pin_set && s->pin == pin_set) ? UINT32_MAX - 1 : s->last_used;
+}
+
 static bool hold_new = false;
 static uint32_t last_read_frame = 0;    /* Frame of the last pack read or PNG decode started */
 
@@ -780,6 +803,7 @@ void launcher_covers_begin_frame (void) {
     frame++;
     hold_new = false;
     background_reads = false;
+    pinning = false;
     launcher_clear_focused_cover();
     if (slot_count == 0) {
         slot_count = is_memory_expanded() ? COVER_SLOTS : COVER_SLOTS_4MB;
@@ -841,6 +865,9 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
                 break;
             }
             s->last_used = frame;
+            if (pinning) {
+                s->pin = pin_set;
+            }
             if (pending) {
                 *pending = s->loading;
             }
@@ -885,7 +912,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
             victim = s;
             break;
         }
-        if (s->last_used != frame && !s->loading && (!victim || s->last_used < victim->last_used)) {
+        if (s->last_used != frame && !s->loading && (!victim || evict_key(s) < evict_key(victim))) {
             victim = s;
         }
     }
@@ -902,7 +929,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
         cover_slot_t *oldest = NULL;
         for (int i = 0; i < slot_count; i++) {
             cover_slot_t *s = &slots[i];
-            if (s->path && s->bytes && s->last_used != frame && !s->loading && (!oldest || s->last_used < oldest->last_used)) {
+            if (s->path && s->bytes && s->last_used != frame && !s->loading && (!oldest || evict_key(s) < evict_key(oldest))) {
                 oldest = s;
             }
         }
@@ -918,6 +945,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     victim->max_h = max_h;
     victim->for_wide = want_wide;
     victim->last_used = frame;
+    victim->pin = pinning ? pin_set : 0;
 
     last_read_frame = frame;
     if (background_reads) {

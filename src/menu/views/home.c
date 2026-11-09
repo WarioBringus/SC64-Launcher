@@ -416,6 +416,7 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
 #define LAUNCH_AHEAD_IDLE_MS (300)  /* The focused game's hi-res cover is read once the controller rests this long */
 
 static void home_background_work (menu_t *menu, int *lookups_left) {
+    launcher_covers_pin(false);     // Read-ahead isn't Home's own.
     if (reveal == REVEAL_SHOWN && get_ticks_ms() - home_last_input_ms >= LAUNCH_AHEAD_IDLE_MS) {
         launcher_covers_read_ahead_launch();    // So a launch needn't wait for the card.
     }
@@ -1061,6 +1062,7 @@ static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
     launcher_covers_begin_frame();
+    launcher_covers_pin(true);      // Home's own covers (not the read-ahead below): kept over the library's.
     if (row_count > 0) {
         set_style_chrome(menu->settings.launcher_home_style);
     }
@@ -1180,6 +1182,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 void view_home_init (menu_t *menu) {
     packs_open = false;     // Leaving the launcher closes them.
+    launcher_covers_pin_new_set();
     if (reveal == REVEAL_HIDDEN) {
         // The startup work behind black makes frames of up to ~440 ms, longer than the menu's usual ~140 ms of
         // music queued ahead (the music stuttered): every buffer is kept full, as for a game load, until Home shows.

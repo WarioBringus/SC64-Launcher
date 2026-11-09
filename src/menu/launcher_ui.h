@@ -61,6 +61,12 @@ void launcher_covers_read_ahead_launch(void);
 /** @brief The cover in the focused tile this frame (NULL when none). */
 surface_t *launcher_focused_cover(void);
 
+/** @brief Start a new Home visit: covers drawn on it (while pinned) are the last the cache gives up. */
+void launcher_covers_pin_new_set(void);
+
+/** @brief While on, covers asked for belong to the latest Home visit. Off at the start of each frame. */
+void launcher_covers_pin(bool pin);
+
 /** @brief Whether the cover packs have this size for the screen in use (storage_prefix is the card's, "sd:/"). */
 bool launcher_covers_have_pack(const char *storage_prefix, int w, int h);
 
