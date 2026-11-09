@@ -671,7 +671,8 @@ static const char *row_label (row_kind_t kind) {
    screen; the other games in a column of tiles beside it. */
 #define SPOT_TOP_SHARE      (58)    /* The panel's width at the top and bottom, in percent of the screen */
 #define SPOT_BOTTOM_SHARE   (52)
-#define SPOT_COVER_Y        (74)
+#define SPOT_COVER_Y        (66)
+#define SPOT_COVER_ZOOM     (1.4f)  /* The focused cover, enlarged from the largest pack size */
 #define SPOT_OUTLINE        (3)
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
@@ -698,24 +699,25 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         int cy = SPOT_COVER_Y;
         bool pending;
         surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        // The cover sits in an outline in the color text on the accent takes.
-        int iw = image ? image->width : LAUNCHER_SHOWCASE_W;
-        int ih = image ? image->height : LAUNCHER_SHOWCASE_H;
-        int ix = cx, iy = cy + (LAUNCHER_SHOWCASE_H - ih) / 2;
+        // The cover, enlarged, sits in an outline in the color text on the accent takes.
+        int box_w = (int)(LAUNCHER_SHOWCASE_W * SPOT_COVER_ZOOM), box_h = (int)(LAUNCHER_SHOWCASE_H * SPOT_COVER_ZOOM);
+        int iw = image ? (int)(image->width * SPOT_COVER_ZOOM) : box_w;
+        int ih = image ? (int)(image->height * SPOT_COVER_ZOOM) : box_h;
+        int ix = cx, iy = cy + (box_h - ih) / 2;
         launcher_fill_rounded(ix - SPOT_OUTLINE, iy - SPOT_OUTLINE, ix + iw + SPOT_OUTLINE, iy + ih + SPOT_OUTLINE,
             8, t->on_accent);
-        launcher_draw_tile(ix, iy, iw, ih, image, pending, f->title, false, t->on_accent);
-        launcher_note_focused_cover(image, ix, iy, iw, ih);
+        launcher_draw_tile_zoomed(ix, iy, iw, ih, image, pending, f->title, false, t->on_accent, SPOT_COVER_ZOOM);
+        launcher_note_focused_cover_zoomed(image, ix, iy, iw, ih, SPOT_COVER_ZOOM);
 
         int tw = bottom_x - cx - 20;
-        int y = cy + LAUNCHER_SHOWCASE_H + 22;
+        int y = cy + box_h + 18;
         launcher_title(cx, y, tw, ALIGN_LEFT, STL_ON_ACCENT, f->title);
-        y += 38;
+        y += 34;
         char details[160], line[200];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
         launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_ON_ACCENT, line);
-        y += 40;
+        y += 32;
         // "A Resume" on a pill in the background color.
         launcher_fill_rounded(cx, y, cx + SPOT_PILL_W, y + HOME_PILL_H, HOME_PILL_H / 2, t->bg);
         launcher_text(cx, y + 3, SPOT_PILL_W, ALIGN_CENTER, STL_DEFAULT, "%s", on_panel ? "A  Resume" : "A  Play");
