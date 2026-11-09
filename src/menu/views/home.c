@@ -638,6 +638,135 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     }
 }
 
+static int row_of_kind (row_kind_t kind) {
+    for (int r = 0; r < row_count; r++) {
+        if (rows[r].kind == kind) {
+            return r;
+        }
+    }
+    return -1;
+}
+
+static const char *row_label (row_kind_t kind) {
+    return (kind == ROW_RESUME) ? "Resume" : ((kind == ROW_RECENT) ? "Recently played" : "Favorites");
+}
+
+/* Spotlight: the focused game large on a panel at the left; the other games in a column of tiles beside it. */
+#define SPOT_PANEL_SHARE    (55)    /* Percent of the width */
+#define SPOT_PAD            (18)
+#define SPOT_GAP            (12)
+#define SPOT_LABEL_H        (24)
+
+static int spot_scroll = 0;
+static float spot_scroll_pos = 0.0f;
+
+static void draw_spotlight (menu_t *menu, int *lookups_left) {
+    const theme_t *t = theme_current();
+    int px0 = LAUNCHER_X0, px1 = LAUNCHER_X0 + LAUNCHER_WIDTH * SPOT_PANEL_SHARE / 100;
+    int py0 = CONTENT_TOP + 2, py1 = CONTENT_BOTTOM - 2;
+    int resume_row = row_of_kind(ROW_RESUME);
+    bool on_panel = (resume_row >= 0 && is_focus(resume_row, 0));
+
+    // The panel: the Resume game's slot, and where the focused game is shown.
+    if (resume_row >= 0) {
+        slot_add(px0, py0, px1 - px0, py1 - py0, resume_row, 0);
+    }
+    if (on_panel) {
+        launcher_draw_focus_ring(px0, py0, px1, py1, CARD_RADIUS);
+    }
+    launcher_fill_rounded(px0, py0, px1, py1, CARD_RADIUS, t->panel);
+    home_item_t *f = focused_item();
+    if (f) {
+        int cx = px0 + SPOT_PAD, cy = py0 + SPOT_PAD;
+        int tw = px1 - SPOT_PAD - cx;
+        bool pending;
+        surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
+        launcher_draw_tile(cx, cy, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, image, pending, f->title, false, t->panel);
+        launcher_note_focused_cover(image, cx, cy, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H);
+        int y = cy + LAUNCHER_SHOWCASE_H + 12;
+        launcher_text(cx, y, tw, ALIGN_LEFT, STL_ACCENT, "%s", row_label(rows[row_selected].kind));
+        y += 24;
+        launcher_title(cx, y, tw, ALIGN_LEFT, STL_DEFAULT, f->title);
+        y += 34;
+        char details[160];
+        library_details_for_path(menu, item_path(f), details, sizeof(details));
+        if (details[0]) {
+            launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_GRAY, details);
+        }
+        launcher_draw_pill(cx, py1 - SPOT_PAD - HOME_PILL_H, on_panel ? "A  Resume" : "A  Play", true);
+    }
+
+    // The column: Recently played and Favorites as tiles, as many across as fit.
+    int gx0 = px1 + 20;
+    int avail = LAUNCHER_X1 - gx0;
+    int tw = 133, th = 94;
+    if (avail < 2 * tw + SPOT_GAP) {
+        tw = 87;
+        th = 61;
+    }
+    int cols = (avail + SPOT_GAP) / (tw + SPOT_GAP);
+    if (cols < 1) {
+        cols = 1;
+    }
+    int line_h = th + SPOT_GAP;
+
+    // Keep the focused tile's line in view.
+    int y = 0;
+    for (int r = 0; r < row_count; r++) {
+        if (rows[r].kind == ROW_RESUME) {
+            continue;
+        }
+        if (!library_focused && r == row_selected) {
+            int line = rows[r].selected / cols;
+            int top = y + (line == 0 ? 0 : SPOT_LABEL_H + line * line_h);
+            int bottom = y + SPOT_LABEL_H + (line + 1) * line_h;
+            if (top < spot_scroll) {
+                spot_scroll = top;
+            }
+            if (bottom - spot_scroll > CONTENT_BOTTOM - CONTENT_TOP) {
+                spot_scroll = bottom - (CONTENT_BOTTOM - CONTENT_TOP);
+            }
+        }
+        y += SPOT_LABEL_H + ((rows[r].count + cols - 1) / cols) * line_h + 6;
+    }
+    spot_scroll_pos = motion_snap ? (float)spot_scroll : launcher_ease(spot_scroll_pos, (float)spot_scroll);
+    int drawn = (int)lroundf(spot_scroll_pos);
+
+    clip_content();
+    y = CONTENT_TOP + 2 - drawn;
+    for (int r = 0; r < row_count; r++) {
+        if (rows[r].kind == ROW_RESUME) {
+            continue;
+        }
+        bool row_focus = !library_focused && r == row_selected;
+        if (y + SPOT_LABEL_H > CONTENT_TOP - 4 && y < CONTENT_BOTTOM) {
+            launcher_text(gx0, y, avail, ALIGN_LEFT, row_focus ? STL_DEFAULT : STL_GRAY, "%s", row_label(rows[r].kind));
+        }
+        int ty = y + SPOT_LABEL_H;
+        for (int i = 0; i < rows[r].count; i++) {
+            int x = gx0 + (i % cols) * (tw + SPOT_GAP);
+            int iy = ty + (i / cols) * line_h;
+            int target_y = iy + drawn - spot_scroll;
+            slot_add(x, target_y, tw, th, r, i);
+            if (iy + th < CONTENT_TOP - 4 || iy > CONTENT_BOTTOM) {
+                continue;   // Off screen: not drawn, and its cover not read.
+            }
+            home_item_t *h = &rows[r].items[i];
+            bool pending;
+            surface_t *image = item_image(menu, h, tw, th, lookups_left, &pending);
+            launcher_draw_tile(x, iy, tw, th, image, pending, h->title, false, t->bg);
+            if (is_focus(r, i)) {
+                launcher_draw_focus_ring_tile(x, target_y, tw, th);
+            }
+            if (rows[r].kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
+                launcher_draw_favorite_star(x, iy, tw);
+            }
+        }
+        y = ty + ((rows[r].count + cols - 1) / cols) * line_h + 6;
+    }
+    clip_none();
+}
+
 /** @brief Draw Home in one of the new styles (not Classic). */
 static void draw_styled (menu_t *menu, int style, int *lookups_left) {
     slot_total = 0;
@@ -645,6 +774,9 @@ static void draw_styled (menu_t *menu, int style, int *lookups_left) {
         library_focused = false;
     }
     switch (style) {
+        case LAUNCHER_HOME_SPOTLIGHT:
+            draw_spotlight(menu, lookups_left);
+            break;
         default:
             draw_minimal(menu, lookups_left);
             break;
