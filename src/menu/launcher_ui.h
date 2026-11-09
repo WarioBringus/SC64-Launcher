@@ -284,6 +284,12 @@ void launcher_set_header_style(launcher_header_style_t style);
 /** @brief Height of the bar LAUNCHER_HEADER_BAR draws. */
 #define LAUNCHER_HEADER_BAR_H   (60)
 
+/**
+ * @brief Draw the "Now playing" note while a track has just started, else the new games notice, in a box of
+ * the launcher's small text (header styles without room for them draw them through this).
+ */
+void launcher_draw_notes(int x, int y, int width, rdpq_align_t align);
+
 /** @brief Leave out the separator line above the hints in the next launcher_draw_footer. */
 void launcher_hide_footer_line(void);
 

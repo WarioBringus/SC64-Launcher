@@ -647,10 +647,11 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         item_folder(f, folder, sizeof(folder));
         launcher_name(cover_x - 60, text_y, cover_w + 60, ALIGN_RIGHT, STL_GRAY, folder);
     }
-    // The clock at the bottom left, across from the hints.
+    // The clock at the bottom left, across from the hints; the music note above the cover.
     char clock[16];
     launcher_clock_text(menu, clock, sizeof(clock));
     launcher_small(LAUNCHER_X0 + 8, LAUNCHER_FOOTER_Y + 12, 200, ALIGN_LEFT, STL_GRAY, clock);
+    launcher_draw_notes(cover_x - 200, MIN_TOP + 4, cover_w + 206, ALIGN_RIGHT);
 }
 
 static int row_of_kind (row_kind_t kind) {
@@ -989,6 +990,7 @@ static void draw_tiles (menu_t *menu, int *lookups_left) {
     char clock[16];
     launcher_clock_text(menu, clock, sizeof(clock));
     launcher_small(side_x, ry + TILES_SMALL_H - 16, TILES_SIDE_W, ALIGN_LEFT, STL_GRAY, clock);
+    launcher_draw_notes(LAUNCHER_X0, LAUNCHER_FOOTER_Y + 12, LAUNCHER_WIDTH / 2, ALIGN_LEFT);  // Across from the hints.
 }
 
 /* Cartridge: a header bar; the game to resume and the recently played stand as cartridges in a band (the first one

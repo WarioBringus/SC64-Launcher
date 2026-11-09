@@ -588,15 +588,11 @@ void launcher_paragraph_free (launcher_paragraph_t *p) {
     }
 }
 
+static void draw_new_games_notice_at(int x, int y, int width, rdpq_align_t align);
+
 void launcher_draw_new_games_notice (void) {
-    int count = library_new_game_count();
-    if (count <= 0) {
-        return;
-    }
-    char text[128];
-    snprintf(text, sizeof(text), "%d new game%s: run the cover tool", count, count == 1 ? "" : "s");
-    launcher_small(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W,
-        ALIGN_RIGHT, STL_ACCENT, text);
+    draw_new_games_notice_at(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2,
+        LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W, ALIGN_RIGHT);
 }
 
 #define LOADING_TITLE_Y     (186)
@@ -774,7 +770,14 @@ static uint64_t now_playing_until_ms = 0;
  *
  * @return Whether it was drawn.
  */
+static bool draw_now_playing_at (int x, int y, int width, rdpq_align_t align);
+
 static bool draw_now_playing (void) {
+    return draw_now_playing_at(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2,
+        LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W, ALIGN_RIGHT);
+}
+
+static bool draw_now_playing_at (int x, int y, int width, rdpq_align_t align) {
     uint32_t generation = sound_bgm_track_generation();
     if (generation != now_playing_generation) {
         now_playing_generation = generation;
@@ -786,9 +789,25 @@ static bool draw_now_playing (void) {
     }
     char text[128];
     snprintf(text, sizeof(text), "Now playing: %s", name);
-    launcher_small(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W,
-        ALIGN_RIGHT, STL_GRAY, text);
+    launcher_small(x, y, width, align, STL_GRAY, text);
     return true;
+}
+
+static void draw_new_games_notice_at (int x, int y, int width, rdpq_align_t align) {
+    int count = library_new_game_count();
+    if (count <= 0) {
+        return;
+    }
+    char text[128];
+    snprintf(text, sizeof(text), "%d new game%s: run the cover tool", count, count == 1 ? "" : "s");
+    launcher_small(x, y, width, align, STL_ACCENT, text);
+}
+
+void launcher_draw_notes (int x, int y, int width, rdpq_align_t align) {
+    // The music note takes the spot for its few seconds; the new games notice comes back after.
+    if (!draw_now_playing_at(x, y, width, align)) {
+        draw_new_games_notice_at(x, y, width, align);
+    }
 }
 
 #define TRANSITION_MS       (180)
@@ -997,10 +1016,13 @@ static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     header_style = LAUNCHER_HEADER_TABS;    // Only for this frame's header.
     if (style == LAUNCHER_HEADER_CORNER) {
         draw_header_corner(menu, active);
+        launcher_draw_notes(LAUNCHER_X0, LAUNCHER_HEADER_Y + 22, LAUNCHER_WIDTH, ALIGN_RIGHT);   // Under it.
         return;
     }
     if (style == LAUNCHER_HEADER_BAR) {
         draw_header_bar(menu, active);
+        launcher_draw_notes(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W,
+            ALIGN_RIGHT);
         return;
     }
     if (style == LAUNCHER_HEADER_NONE) {
