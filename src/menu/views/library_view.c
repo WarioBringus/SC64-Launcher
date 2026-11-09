@@ -786,7 +786,24 @@ static surface_t *game_cover (menu_t *menu, library_game_t *game, int w, int h, 
     return launcher_cover_get(path, w, h, pending);
 }
 
+/*
+ * Optional background work that can take ~100 ms in one frame (the new-ROM check reads folder listings;
+ * other folders are listed and sorted) waits until the controller has been left alone this long.
+ */
+#define NEW_ROMS_IDLE_MS    (3000)
+
+static uint64_t last_input_ms = 0;
+
+static bool idle_for (uint64_t ms) {
+    return get_ticks_ms() - last_input_ms >= ms;
+}
+
 static void process (menu_t *menu) {
+    if (menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
+        menu->actions.enter || menu->actions.back || menu->actions.settings || menu->actions.lz_context ||
+        menu->actions.shoulder_r) {
+        last_input_ms = get_ticks_ms();
+    }
     search_scope_update();
     if (launcher_menu_process(menu)) {
         return;
@@ -1093,24 +1110,16 @@ static void preload_group_jumps (menu_t *menu, library_category_t *c, int sel, i
     }
 }
 
-#define NEIGHBOURS_REST_MS  (400)   /* The folders either side are got ready once the view rests this long */
+static bool idle_for (uint64_t ms);
+#define NEIGHBOURS_IDLE_MS  (1500)
 
 static void preload_neighbours (menu_t *menu, int *lookups_left) {
     int count = library_category_count();
     if (count < 2) {
         return;
     }
-    // Their sorting and cover reads made the frames after a view switch or a move long (the log showed
-    // 70-145 ms), so they wait until nothing has changed for a moment.
-    static int rest_key = -1;
-    static uint64_t rest_since_ms = 0;
-    int key = (menu->settings.launcher_layout * 64 + category_index) * 100000 + *current_selection();
-    uint64_t now = get_ticks_ms();
-    if (key != rest_key) {
-        rest_key = key;
-        rest_since_ms = now;
-    }
-    if (now - rest_since_ms < NEIGHBOURS_REST_MS) {
+    // Listing and sorting them made frames of 100+ ms (the log), so it waits until the controller rests.
+    if (!idle_for(NEIGHBOURS_IDLE_MS)) {
         return;
     }
     preload_category(menu, (category_index + 1) % count, lookups_left);
@@ -1267,7 +1276,9 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         TIMED("reading ahead rows", any_pending = preload_rows_around(menu, c, &g, first, last, &lookups_left));
     }
     if (!any_pending) {
-        TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+        if (idle_for(NEW_ROMS_IDLE_MS)) {
+            TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+        }
         TIMED("getting jump targets ready", preload_group_jumps(menu, c, sel, &lookups_left));
         TIMED("getting other folders ready", preload_neighbours(menu, &lookups_left));
     }
@@ -1364,7 +1375,9 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
         snprintf(position, sizeof(position), "%s  -  %s  -  %d of %d", c->name, group, sel + 1, c->shown);
     }
     if (!pending && carousel_position == (float)sel) {
-        TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+        if (idle_for(NEW_ROMS_IDLE_MS)) {
+            TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+        }
         launcher_covers_background(true);
         TIMED("getting jump targets ready", preload_group_jumps(menu, c, sel, &lookups_left));
         TIMED("getting other folders ready", preload_neighbours(menu, &lookups_left));
@@ -1594,7 +1607,9 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
             }
         }
         if (!any_pending) {
-            TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+            if (idle_for(NEW_ROMS_IDLE_MS)) {
+                TIMED("checking for new ROMs", library_check_new_games(NEW_GAMES_CHECK_US));
+            }
             TIMED("getting jump targets ready", preload_group_jumps(menu, c, sel, &lookups_left));
         }
         launcher_covers_background(false);
