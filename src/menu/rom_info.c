@@ -1145,6 +1145,9 @@ static void load_rom_meta_from_file (path_t *path, rom_info_t *rom_info) {
         path_free(rom_info_meta_path);
         return;
     }
+    // A missing file scans the whole game folder's listing (~200 ms for N64 USA): the music is fed between the
+    // lookups, or two in a row ran its queue nearly dry on launch (performance log: 473 ms without a feed).
+    sound_bgm_keep_alive();
     
     // Fall back to flat INI format
     debugf("[META] load_rom_meta_from_file: trying flat INI format\n");
