@@ -1659,17 +1659,33 @@ void library_check_new_games (int budget_us) {
     if (new_check_done || !index_roms || index_lists_disabled || folder_count == 0 || !folders[0].from_index) {
         return;
     }
+    // Measured for the performance log: the walk's total, its slowest step and each folder's time.
+    static uint32_t walk_us = 0, slowest_us = 0, folder_us = 0, entries = 0;
     uint64_t start = get_ticks_us();
     while (get_ticks_us() - start < (uint64_t)budget_us) {
         if (new_check_folder >= folder_count) {
             new_check_done = true;
+            perf_log_event("new-ROM walk: %lu ms in all over %lu entries, slowest step %lu ms", (unsigned long)(walk_us / 1000),
+                (unsigned long)entries, (unsigned long)(slowest_us / 1000));
             return;
         }
         library_category_t *c = &folders[new_check_folder];
         const char *dir = path_get(c->directory);
+        uint64_t step_started = get_ticks_us();
         int result = new_check_listing ? dir_findnext(dir, &new_check_entry) : dir_findfirst(dir, &new_check_entry);
+        uint32_t step_us = (uint32_t)(get_ticks_us() - step_started);
+        walk_us += step_us;
+        folder_us += step_us;
+        entries++;
+        slowest_us = (step_us > slowest_us) ? step_us : slowest_us;
+        if (step_us > 20000) {
+            perf_log_event("new-ROM walk: one step in %s took %lu ms (%s)", dir, (unsigned long)(step_us / 1000),
+                new_check_listing ? "next entry" : "opening the folder");
+        }
         new_check_listing = true;
         if (result != 0) {
+            perf_log_event("new-ROM walk: %s took %lu ms", dir, (unsigned long)(folder_us / 1000));
+            folder_us = 0;
             new_check_listing = false;
             new_check_folder++;
             continue;
