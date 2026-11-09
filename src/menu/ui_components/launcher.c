@@ -989,20 +989,14 @@ static void draw_header_corner (menu_t *menu, launcher_tab_t active) {
     }
 }
 
-/** @brief A full-width bar with the tab's name in capitals, four dots and the clock. */
+/** @brief A full-width bar with the tab's name in capitals and the clock. */
 static void draw_header_bar (menu_t *menu, launcher_tab_t active) {
     const theme_t *t = theme_current();
     flat_begin(t->panel);
     rdpq_fill_rectangle(0, 0, display_get_width(), LAUNCHER_HEADER_BAR_H);
     flat_end();
-    int w = launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, 0, ALIGN_LEFT, STL_DEFAULT, "%s",
+    launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, 0, ALIGN_LEFT, STL_DEFAULT, "%s",
         active == LAUNCHER_TAB_HOME ? "HOME" : "LIBRARY");
-    color_t dots[4] = { t->text_red, t->text_yellow, t->text_green, t->text_blue };
-    int x = LAUNCHER_X0 + w + 16;
-    for (int i = 0; i < 4; i++) {
-        launcher_fill_rounded(x, LAUNCHER_HEADER_Y + 4, x + 10, LAUNCHER_HEADER_Y + 14, 5, dots[i]);
-        x += 15;
-    }
     char clock[16];
     launcher_clock_text(menu, clock, sizeof(clock));
     if (clock[0]) {

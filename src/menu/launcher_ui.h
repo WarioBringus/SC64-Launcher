@@ -274,7 +274,7 @@ void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 typedef enum {
     LAUNCHER_HEADER_TABS,       /**< Tabs at the top left, the clock at the right (every screen's own) */
     LAUNCHER_HEADER_CORNER,     /**< "Home  ·  Library  ·  clock" small in the top-right corner */
-    LAUNCHER_HEADER_BAR,        /**< A full-width bar: the tab's name in capitals, four colored dots, the clock */
+    LAUNCHER_HEADER_BAR,        /**< A full-width bar: the tab's name in capitals and the clock */
     LAUNCHER_HEADER_NONE,       /**< Only the background */
 } launcher_header_style_t;
 
