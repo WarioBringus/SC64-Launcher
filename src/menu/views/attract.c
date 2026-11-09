@@ -16,7 +16,7 @@
 #include "../theme.h"
 
 #define SLIDE_MS            (7000)  /* Time each game is shown */
-#define SLIDE_IN_MS         (700)   /* Time a new cover takes to slide in */
+#define SLIDE_IN_MS         (900)   /* Time the covers take to move on: the old one off to the left as the new one comes in */
 #define COVER_CENTER_Y      (200)
 #define LANDSCAPE_SCALE     (2.0f)
 #define PORTRAIT_SCALE      (1.75f)
@@ -31,6 +31,8 @@ typedef struct {
 
 static slide_t current;
 static slide_t next;
+static slide_t previous;                /* Sliding off to the left while current comes in */
+static bool have_previous = false;
 static bool have_current = false;
 static uint64_t shown_at_ms = 0;
 static menu_mode_t back_mode = MENU_MODE_HOME;
@@ -151,6 +153,8 @@ static void process (menu_t *menu) {
     // Keep the next cover loading; move on once its time is up and it's ready.
     slide_cover(menu, &next, &pending);
     if (now - shown_at_ms > SLIDE_MS && !pending) {
+        previous = current;
+        have_previous = true;
         current = next;
         next = pick_visible_game();
         shown_at_ms = now;
@@ -166,12 +170,16 @@ static void draw (menu_t *menu, surface_t *d) {
     if (!current.game) {
         launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No games found");
     } else {
-        // New covers slide in from the right, easing out.
+        // Like a carousel: the cover on show moves off to the left while the next comes in from the right and
+        // settles in the centre, both a whole screen width apart, so neither pops on or off.
         uint64_t elapsed = get_ticks_ms() - shown_at_ms;
         float t = elapsed >= SLIDE_IN_MS ? 1.0f : (float)elapsed / SLIDE_IN_MS;
-        float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
-        int offset = (int)((1.0f - ease) * LAUNCHER_WIDTH / 2);
-        draw_slide(menu, &current, offset);
+        float ease = t * t * (3.0f - 2.0f * t);
+        int travel = LAUNCHER_SCREEN_W;
+        if (t < 1.0f && have_previous) {
+            draw_slide(menu, &previous, -(int)(ease * travel));
+        }
+        draw_slide(menu, &current, (int)((1.0f - ease) * travel));
     }
 
     if (menu->current_time >= 0) {
@@ -196,6 +204,7 @@ void view_attract_init (menu_t *menu) {
     }
     library_init(menu);
     have_current = false;
+    have_previous = false;
 }
 
 void view_attract_display (menu_t *menu, surface_t *display) {
