@@ -110,6 +110,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     memset(p, 0, sizeof(*p));
     p->tried = true;
     p->tried_frame = frame;
+    uint64_t open_started = get_ticks_us();
     p->w = w;
     p->h = h;
     p->wide = wide;
@@ -153,7 +154,34 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
         p->offsets[i] = read_u32_be(raw + i * 4);
     }
     free(raw);
+    uint32_t open_us = (uint32_t)(get_ticks_us() - open_started);
+    if (open_us > 20000) {
+        perf_log_event("opening cover pack %dx%d%s took %.1f ms", w, h, wide ? "_w" : "", open_us / 1000.0f);
+    }
     return p;
+}
+
+/* Every cover pack the launcher reads (pc-tools/coverpack BOXES, UP_BOXES and the spines). */
+static const int16_t pack_sizes[][2] = {
+    { 87, 61 }, { 133, 94 }, { 158, 112 }, { 59, 84 }, { 70, 100 }, { 81, 115 }, { 112, 158 }, { 74, 52 },
+    { LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H }, { LAUNCHER_SHOWCASE_H, LAUNCHER_SHOWCASE_W },
+    { LAUNCHER_SPINE_MAX_W, LAUNCHER_SPINE_H },
+};
+
+bool launcher_covers_open_ahead (const char *storage_prefix) {
+    bool wide = launcher_is_widescreen();
+    for (size_t n = 0; n < sizeof(pack_sizes) / sizeof(pack_sizes[0]); n++) {
+        int w = pack_sizes[n][0], h = pack_sizes[n][1];
+        bool known = false;
+        for (int i = 0; i < MAX_PACKS && !known; i++) {
+            known = packs[i].tried && packs[i].w == w && packs[i].h == h && packs[i].wide == wide;
+        }
+        if (!known) {
+            pack_for(storage_prefix, w, h, wide);   // One a call: an open can take tens of ms.
+            return false;
+        }
+    }
+    return true;
 }
 
 /**

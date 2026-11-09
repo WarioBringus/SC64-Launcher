@@ -243,7 +243,17 @@ static void launch (menu_t *menu, home_item_t *h) {
     launcher_leave(menu, disk ? MENU_MODE_LOAD_DISK : MENU_MODE_LOAD_ROM);
 }
 
+#define OPEN_AHEAD_IDLE_MS  (1000)  /* Home opens the cover packs ahead once the controller rests this long */
+
+static uint64_t home_last_input_ms = 0;
+static bool packs_open = false;         /* Every cover pack opened ahead (again after the launcher was left) */
+
 static void process (menu_t *menu) {
+    if (menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
+        menu->actions.enter || menu->actions.back || menu->actions.settings || menu->actions.lz_context ||
+        menu->actions.shoulder_r) {
+        home_last_input_ms = get_ticks_ms();
+    }
     if (launcher_menu_process(menu)) {
         return;
     }
@@ -455,6 +465,11 @@ static void draw (menu_t *menu, surface_t *d) {
             view_library_preload(menu, &lookups_left);
             launcher_covers_background(false);
         }
+        // The library's views each read their own pack; opening one cost the first switch into that view a
+        // ~70-90 ms frame, so they are opened here while nothing moves.
+        if (!packs_open && reveal == REVEAL_SHOWN && get_ticks_ms() - home_last_input_ms >= OPEN_AHEAD_IDLE_MS) {
+            packs_open = launcher_covers_open_ahead(menu->storage_prefix);
+        }
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
 
@@ -501,6 +516,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_home_init (menu_t *menu) {
+    packs_open = false;     // Leaving the launcher closes them.
     launcher_menu_init();
     build_rows(menu);
     motion_snap = true;
