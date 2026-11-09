@@ -545,12 +545,15 @@ static void clip_none (void) {
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 }
 
-/* Minimal: lists of titles on the left, the focused game's cover large on the right. */
-#define MIN_LABEL_H         (26)
-#define MIN_ITEM_H          (28)
-#define MIN_RESUME_H        (40)
-#define MIN_SECTION_GAP     (14)
-#define MIN_BAR_W           (4)
+/* Minimal: no tabs; big type on the background, a short accent line under the focused title, and the focused
+   game's cover large on the right. */
+#define MIN_TOP             (30)
+#define MIN_LABEL_H         (24)
+#define MIN_ITEM_H          (30)
+#define MIN_RESUME_H        (44)
+#define MIN_SECTION_GAP     (22)
+#define MIN_BAR_W           (26)
+#define MIN_COVER_ZOOM      (1.25f)
 
 static int min_scroll = 0;
 static float min_scroll_pos = 0.0f;
@@ -561,10 +564,13 @@ static const char *min_label (row_kind_t kind) {
 
 static void draw_minimal (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
-    int cover_x = LAUNCHER_X1 - LAUNCHER_SHOWCASE_W;
-    int cover_y = CONTENT_TOP + 26;
-    int list_x = LAUNCHER_X0 + MIN_BAR_W + 12;
-    int list_w = cover_x - 28 - list_x;
+    int cover_w = (int)(LAUNCHER_SHOWCASE_W * MIN_COVER_ZOOM);
+    int cover_h = (int)(LAUNCHER_SHOWCASE_H * MIN_COVER_ZOOM);
+    int cover_x = LAUNCHER_X1 - cover_w - 6;
+    int cover_y = MIN_TOP + 36;
+    int list_x = LAUNCHER_X0 + 8;
+    int list_w = cover_x - 32 - list_x;
+    int top = MIN_TOP, bottom = CONTENT_BOTTOM;
 
     // Where the focused title sits in the whole list, so the list scrolls to keep it in view.
     int y = 0, focus_top = 0, focus_bottom = 0;
@@ -580,21 +586,21 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         }
         y += MIN_SECTION_GAP;
     }
-    int view_h = CONTENT_BOTTOM - CONTENT_TOP;
     if (focus_top < min_scroll) {
         min_scroll = focus_top;
     }
-    if (focus_bottom - min_scroll > view_h) {
-        min_scroll = focus_bottom - view_h;
+    if (focus_bottom - min_scroll > bottom - top) {
+        min_scroll = focus_bottom - (bottom - top);
     }
     min_scroll_pos = motion_snap ? (float)min_scroll : launcher_ease(min_scroll_pos, (float)min_scroll);
     int drawn = (int)lroundf(min_scroll_pos);
 
-    clip_content();
-    y = CONTENT_TOP - drawn;
+    int clip_x1 = launcher_px(cover_x - 8);
+    rdpq_set_scissor(0, top - 2, clip_x1 < 1 ? 1 : clip_x1, bottom + 2);
+    y = top - drawn;
     for (int r = 0; r < row_count; r++) {
-        if (y + MIN_LABEL_H > CONTENT_TOP - 4 && y < CONTENT_BOTTOM) {
-            launcher_small(list_x, y + 6, list_w, ALIGN_LEFT, STL_GRAY, min_label(rows[r].kind));
+        if (y + MIN_LABEL_H > top - 4 && y < bottom) {
+            launcher_small(list_x, y + 4, list_w, ALIGN_LEFT, STL_GRAY, min_label(rows[r].kind));
         }
         y += MIN_LABEL_H;
         for (int i = 0; i < rows[r].count; i++) {
@@ -602,15 +608,15 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
             bool resume = (rows[r].kind == ROW_RESUME);
             int item_h = resume ? MIN_RESUME_H : MIN_ITEM_H;
             bool focus = is_focus(r, i);
-            slot_add(list_x, y - (CONTENT_TOP - drawn) - min_scroll + CONTENT_TOP, list_w, item_h, r, i);
-            if (y + item_h > CONTENT_TOP - 4 && y < CONTENT_BOTTOM) {
-                if (focus) {
-                    launcher_fill_rounded(LAUNCHER_X0, y + 5, LAUNCHER_X0 + MIN_BAR_W, y + item_h - 5, MIN_BAR_W / 2, t->accent);
-                }
+            slot_add(list_x, y + drawn - min_scroll, list_w, item_h, r, i);
+            if (y + item_h > top - 4 && y < bottom) {
                 if (resume) {
-                    launcher_title(list_x, y + 2, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
+                    launcher_title(list_x, y, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
                 } else {
-                    launcher_game_name(list_x, y + 4, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
+                    launcher_game_name(list_x, y + 2, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
+                }
+                if (focus) {
+                    launcher_fill_rounded(list_x, y + item_h - 5, list_x + MIN_BAR_W, y + item_h - 2, 1, t->accent);
                 }
             }
             y += item_h;
@@ -623,19 +629,23 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     if (f) {
         bool pending;
         surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        launcher_draw_tile(cover_x, cover_y, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, image, pending, f->title, false, t->bg);
-        launcher_note_focused_cover(image, cover_x, cover_y, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H);
+        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, t->bg, MIN_COVER_ZOOM);
+        launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, MIN_COVER_ZOOM);
         char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
-        int text_y = cover_y + LAUNCHER_SHOWCASE_H + 12;
+        int text_y = cover_y + cover_h + 14;
         if (details[0]) {
-            launcher_game_details(cover_x - 40, text_y, LAUNCHER_SHOWCASE_W + 40, ALIGN_RIGHT, STL_GRAY, details);
+            launcher_game_details(cover_x - 60, text_y, cover_w + 60, ALIGN_RIGHT, STL_GRAY, details);
             text_y += 24;
         }
         char folder[64];
         item_folder(f, folder, sizeof(folder));
-        launcher_name(cover_x - 40, text_y, LAUNCHER_SHOWCASE_W + 40, ALIGN_RIGHT, STL_GRAY, folder);
+        launcher_name(cover_x - 60, text_y, cover_w + 60, ALIGN_RIGHT, STL_GRAY, folder);
     }
+    // The clock at the bottom left, across from the hints.
+    char clock[16];
+    launcher_clock_text(menu, clock, sizeof(clock));
+    launcher_small(LAUNCHER_X0 + 8, LAUNCHER_FOOTER_Y + 12, 200, ALIGN_LEFT, STL_GRAY, clock);
 }
 
 static int row_of_kind (row_kind_t kind) {
@@ -1056,6 +1066,10 @@ static void process_styled (menu_t *menu, int style) {
 /** @brief The header and footer a style draws with (set before the header is drawn). */
 static void set_style_chrome (int style) {
     switch (style) {
+        case LAUNCHER_HOME_MINIMAL:
+            launcher_set_header_style(LAUNCHER_HEADER_NONE);
+            launcher_hide_footer_line();
+            break;
         case LAUNCHER_HOME_SPOTLIGHT:
             launcher_set_header_style(LAUNCHER_HEADER_CORNER);
             launcher_hide_footer_line();
