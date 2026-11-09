@@ -440,6 +440,9 @@ static void home_background_work (menu_t *menu, int *lookups_left) {
  * finds it ready.
  */
 static void keep_loaded (menu_t *menu, home_item_t *h, int w, int hgt, int *lookups_left) {
+    if (reveal != REVEAL_SHOWN) {
+        return;     // The startup Home's own covers first: these reads held up its reveal to the 3 s limit.
+    }
     bool pending;
     bool shown_pending = covers_pending;    // Off screen: the startup Home doesn't wait for it.
     launcher_covers_background(true);
