@@ -219,6 +219,23 @@ static void set_launcher_widescreen_type (menu_t *menu, void *arg) {
     settings_save(&menu->settings);
 }
 
+static void set_launcher_cover_style_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_cartridge_art = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_launcher_cover_style_current_selection (menu_t *menu) {
+    return menu->settings.launcher_cartridge_art ? 1 : 0;
+}
+
+static component_context_menu_t set_launcher_cover_style_context_menu = {
+    .get_default_selection = get_launcher_cover_style_current_selection,
+    .list = {
+        { .text = "Box", .action = set_launcher_cover_style_type, .arg = (void *)(uintptr_t)(false) },
+        { .text = "Cartridge", .action = set_launcher_cover_style_type, .arg = (void *)(uintptr_t)(true) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static void remove_background_image (menu_t *menu, void *arg) {
     (void)arg;
     (void)menu;
@@ -762,6 +779,8 @@ static const settings_row_t look_rows[] = {
     { .label = "Text size", .choices = &set_launcher_large_text_context_menu,
       .note = "Large makes game titles and details easier to read from the couch" },
     { .label = "Game titles", .choices = &set_launcher_titles_highlight_only_context_menu },
+    { .label = "Covers", .choices = &set_launcher_cover_style_context_menu,
+      .note = "Cartridge shows each game's cartridge label where there is one" },
     { .label = "Background image", .action = remove_background_image, .does = "Remove",
       .note = "Takes away the picture behind the menu (menu/background.png on the SD card)" },
 };
