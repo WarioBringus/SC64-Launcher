@@ -270,6 +270,32 @@ void launcher_launch_cover_free(void);
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 
+/** @brief How the next launcher_draw_header draws the tabs and clock (Home's styles). */
+typedef enum {
+    LAUNCHER_HEADER_TABS,       /**< Tabs at the top left, the clock at the right (every screen's own) */
+    LAUNCHER_HEADER_CORNER,     /**< "Home  ·  Library  ·  clock" small in the top-right corner */
+    LAUNCHER_HEADER_BAR,        /**< A full-width bar: the tab's name in capitals, four colored dots, the clock */
+    LAUNCHER_HEADER_NONE,       /**< Only the background */
+} launcher_header_style_t;
+
+/** @brief Use this header style for the next launcher_draw_header only. */
+void launcher_set_header_style(launcher_header_style_t style);
+
+/** @brief Height of the bar LAUNCHER_HEADER_BAR draws. */
+#define LAUNCHER_HEADER_BAR_H   (60)
+
+/** @brief Leave out the separator line above the hints in the next launcher_draw_footer. */
+void launcher_hide_footer_line(void);
+
+/** @brief The clock's text ("8:52 PM"), or an empty string when the time isn't known. */
+void launcher_clock_text(menu_t *menu, char *buffer, size_t size);
+
+/**
+ * @brief Fill a panel from the left edge of the screen with a slanted right side: x_top wide at y0,
+ * x_bottom wide at y1 (logical x).
+ */
+void launcher_fill_slanted(int x_top, int x_bottom, int y0, int y1, color_t color);
+
 /** @brief Draw the separator and a right-aligned row of button icons with labels. */
 void launcher_draw_footer(const launcher_hint_t *hints, int count);
 

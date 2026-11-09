@@ -908,8 +908,97 @@ static void transition_content_end (void) {
     }
 }
 
+static launcher_header_style_t header_style = LAUNCHER_HEADER_TABS;
+static bool footer_line = true;
+
+void launcher_set_header_style (launcher_header_style_t style) {
+    header_style = style;
+}
+
+void launcher_hide_footer_line (void) {
+    footer_line = false;
+}
+
+void launcher_clock_text (menu_t *menu, char *buffer, size_t size) {
+    buffer[0] = '\0';
+    if (menu->current_time >= 0) {
+        char clock[16];
+        struct tm *t = localtime(&menu->current_time);
+        strftime(clock, sizeof(clock), "%I:%M %p", t);
+        snprintf(buffer, size, "%s", clock[0] == '0' ? clock + 1 : clock);
+    }
+}
+
+void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t color) {
+    int straight = (x_top < x_bottom) ? x_top : x_bottom;
+    flat_begin(color);
+    rdpq_fill_rectangle(0, y0, px(straight), y1);
+    // The slanted part: a triangle between the two right ends.
+    float a[] = { px(straight), y0 }, b[] = { px(x_top), y0 }, c[] = { px(x_bottom), y1 }, d[] = { px(straight), y1 };
+    if (x_top > x_bottom) {
+        rdpq_triangle(&TRIFMT_FILL, a, b, d);
+    } else if (x_bottom > x_top) {
+        rdpq_triangle(&TRIFMT_FILL, a, c, d);
+    }
+    flat_end();
+}
+
+/** @brief Home  ·  Library  ·  clock, right-aligned at the top. */
+static void draw_header_corner (menu_t *menu, launcher_tab_t active) {
+    char clock[16];
+    launcher_clock_text(menu, clock, sizeof(clock));
+    const char *parts[5] = { "Home", "  -  ", "Library", clock[0] ? "  -  " : "", clock };
+    int widths[5], total = 0;
+    for (int i = 0; i < 5; i++) {
+        widths[i] = parts[i][0] ? text_width(parts[i]) + 2 : 0;
+        total += widths[i];
+    }
+    int x = LAUNCHER_X1 - total;
+    for (int i = 0; i < 5; i++) {
+        bool on = (i == 0 && active == LAUNCHER_TAB_HOME) || (i == 2 && active == LAUNCHER_TAB_LIBRARY);
+        if (widths[i]) {
+            launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, on ? STL_DEFAULT : STL_GRAY, "%s", parts[i]);
+        }
+        x += widths[i];
+    }
+}
+
+/** @brief A full-width bar with the tab's name in capitals, four dots and the clock. */
+static void draw_header_bar (menu_t *menu, launcher_tab_t active) {
+    const theme_t *t = theme_current();
+    flat_begin(t->panel);
+    rdpq_fill_rectangle(0, 0, display_get_width(), LAUNCHER_HEADER_BAR_H);
+    flat_end();
+    int w = launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, 0, ALIGN_LEFT, STL_DEFAULT, "%s",
+        active == LAUNCHER_TAB_HOME ? "HOME" : "LIBRARY");
+    color_t dots[4] = { t->text_red, t->text_yellow, t->text_green, t->text_blue };
+    int x = LAUNCHER_X0 + w + 16;
+    for (int i = 0; i < 4; i++) {
+        launcher_fill_rounded(x, LAUNCHER_HEADER_Y + 4, x + 10, LAUNCHER_HEADER_Y + 14, 5, dots[i]);
+        x += 15;
+    }
+    char clock[16];
+    launcher_clock_text(menu, clock, sizeof(clock));
+    if (clock[0]) {
+        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock);
+    }
+}
+
 static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     launcher_draw_background();
+    launcher_header_style_t style = header_style;
+    header_style = LAUNCHER_HEADER_TABS;    // Only for this frame's header.
+    if (style == LAUNCHER_HEADER_CORNER) {
+        draw_header_corner(menu, active);
+        return;
+    }
+    if (style == LAUNCHER_HEADER_BAR) {
+        draw_header_bar(menu, active);
+        return;
+    }
+    if (style == LAUNCHER_HEADER_NONE) {
+        return;
+    }
 
     static const char *tabs[] = { "Home", "Library" };
     int x = LAUNCHER_X0;
@@ -983,7 +1072,10 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     uint64_t perf_started = get_ticks_us();
     transition_content_end();
-    ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
+    if (footer_line) {
+        ui_components_box_draw(px(LAUNCHER_X0), LAUNCHER_FOOTER_Y, px(LAUNCHER_X1), LAUNCHER_FOOTER_Y + 1, theme_current()->line);
+    }
+    footer_line = true;     // Only for this frame's footer.
 
     // Lay the hints out right-aligned: [button] label   [button] label ...
     int button_w[8];
