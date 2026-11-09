@@ -284,6 +284,15 @@ typedef enum {
 
 void launcher_settings_do(menu_t *menu, launcher_do_t what);
 
+/** @brief The Library's filter (for this session): its field (LAUNCHER_SORT_GENRE...), or -1 for none. */
+int launcher_filter_field(void);
+
+/** @brief The group the filter keeps ("Racing"). */
+const char *launcher_filter_value(void);
+
+/** @brief Filter the Library on a field's group, or field -1 for no filter. */
+void launcher_filter_set(int field, const char *value);
+
 /** @brief Draw a page title in the header (for screens opened from the launcher). */
 void launcher_draw_page_title(const char *title);
 

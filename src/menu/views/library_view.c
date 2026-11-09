@@ -95,6 +95,19 @@ static int current_sort = LAUNCHER_SORT_TITLE;
 static int filter_field = -1;
 static char filter_value[64] = "";
 
+int launcher_filter_field (void) {
+    return (filter_field == LAUNCHER_FILTER_SEARCH) ? -1 : filter_field;
+}
+
+const char *launcher_filter_value (void) {
+    return filter_value;
+}
+
+void launcher_filter_set (int field, const char *value) {
+    filter_field = (field >= 0 && value) ? field : -1;
+    snprintf(filter_value, sizeof(filter_value), "%s", (field >= 0 && value) ? value : "");
+}
+
 /* Filter picker: first a field, then one of its groups. */
 static const char *picker_field_names[] = { "No filter", "Genre", "Developer", "Year", "Players" };
 static const int picker_field_ids[] = { -1, LAUNCHER_SORT_GENRE, LAUNCHER_SORT_DEVELOPER, LAUNCHER_SORT_YEAR, LAUNCHER_SORT_PLAYERS };
