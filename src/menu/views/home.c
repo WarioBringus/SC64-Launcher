@@ -621,7 +621,7 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
                     launcher_game_name(list_x, y + 2, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
                 }
                 if (focus) {
-                    launcher_fill_rounded(list_x, y + item_h - 5, list_x + MIN_BAR_W, y + item_h - 2, 1, t->accent);
+                    launcher_fill_rounded(list_x, y + item_h - 5, list_x + MIN_BAR_W, y + item_h - 2, 1, t->feature);
                 }
             }
             y += item_h;
@@ -667,7 +667,7 @@ static const char *row_label (row_kind_t kind) {
     return (kind == ROW_RESUME) ? "Resume" : ((kind == ROW_RECENT) ? "Recently played" : "Favorites");
 }
 
-/* Spotlight: the focused game on a bold slanted panel in the theme's accent color, filling the left half of the
+/* Spotlight: the focused game on a bold slanted panel in the theme's feature color, filling the left half of the
    screen; the other games in a column of tiles beside it. */
 #define SPOT_TOP_SHARE      (58)    /* The panel's width at the top and bottom, in percent of the screen */
 #define SPOT_BOTTOM_SHARE   (52)
@@ -686,7 +686,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
     int top_x = LAUNCHER_SCREEN_W * SPOT_TOP_SHARE / 100;
     int bottom_x = LAUNCHER_SCREEN_W * SPOT_BOTTOM_SHARE / 100;
-    launcher_fill_slanted(top_x, bottom_x, 0, display_get_height(), t->accent);
+    launcher_fill_slanted(top_x, bottom_x, 0, display_get_height(), t->feature);
     int resume_row = row_of_kind(ROW_RESUME);
     bool on_panel = (resume_row >= 0 && is_focus(resume_row, 0));
 
@@ -699,24 +699,24 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         int cy = SPOT_COVER_Y;
         bool pending;
         surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
-        // The cover, enlarged, sits in an outline in the color text on the accent takes.
+        // The cover, enlarged, sits in an outline in the color text on the feature color takes.
         int box_w = (int)(LAUNCHER_SHOWCASE_W * SPOT_COVER_ZOOM), box_h = (int)(LAUNCHER_SHOWCASE_H * SPOT_COVER_ZOOM);
         int iw = image ? (int)(image->width * SPOT_COVER_ZOOM) : box_w;
         int ih = image ? (int)(image->height * SPOT_COVER_ZOOM) : box_h;
         int ix = cx, iy = cy + (box_h - ih) / 2;
         launcher_fill_rounded(ix - SPOT_OUTLINE, iy - SPOT_OUTLINE, ix + iw + SPOT_OUTLINE, iy + ih + SPOT_OUTLINE,
-            8, t->on_accent);
-        launcher_draw_tile_zoomed(ix, iy, iw, ih, image, pending, f->title, false, t->on_accent, SPOT_COVER_ZOOM);
+            8, t->on_feature);
+        launcher_draw_tile_zoomed(ix, iy, iw, ih, image, pending, f->title, false, t->on_feature, SPOT_COVER_ZOOM);
         launcher_note_focused_cover_zoomed(image, ix, iy, iw, ih, SPOT_COVER_ZOOM);
 
         int tw = bottom_x - cx - 20;
         int y = cy + box_h + 18;
-        launcher_title(cx, y, tw, ALIGN_LEFT, STL_ON_ACCENT, f->title);
+        launcher_title(cx, y, tw, ALIGN_LEFT, STL_ON_FEATURE, f->title);
         y += 34;
         char details[160], line[200];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
-        launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_ON_ACCENT, line);
+        launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_ON_FEATURE, line);
         y += 32;
         // "A Resume" on a pill in the background color.
         launcher_fill_rounded(cx, y, cx + SPOT_PILL_W, y + HOME_PILL_H, HOME_PILL_H / 2, t->bg);

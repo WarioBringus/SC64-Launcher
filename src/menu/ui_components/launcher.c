@@ -992,15 +992,15 @@ static void draw_header_corner (menu_t *menu, launcher_tab_t active) {
 /** @brief A full-width bar with the tab's name in capitals and the clock. */
 static void draw_header_bar (menu_t *menu, launcher_tab_t active) {
     const theme_t *t = theme_current();
-    flat_begin(t->panel);
+    flat_begin(t->feature);
     rdpq_fill_rectangle(0, 0, display_get_width(), LAUNCHER_HEADER_BAR_H);
     flat_end();
-    launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, 0, ALIGN_LEFT, STL_DEFAULT, "%s",
+    launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, 0, ALIGN_LEFT, STL_ON_FEATURE, "%s",
         active == LAUNCHER_TAB_HOME ? "HOME" : "LIBRARY");
     char clock[16];
     launcher_clock_text(menu, clock, sizeof(clock));
     if (clock[0]) {
-        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock);
+        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_ON_FEATURE, "%s", clock);
     }
 }
 

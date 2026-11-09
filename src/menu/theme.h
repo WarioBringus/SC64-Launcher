@@ -23,6 +23,8 @@ typedef struct {
     color_t accent;         /**< Selection ring, progress fill */
     color_t accent2;        /**< Active tab, secondary accent */
     color_t on_accent;      /**< Text drawn on the accent color */
+    color_t feature;        /**< The theme's signature color, for large areas (Home's Spotlight panel) */
+    color_t on_feature;     /**< Text drawn on the feature color */
 
     color_t text;           /**< Main text */
     color_t text_muted;     /**< Secondary text, hints */
