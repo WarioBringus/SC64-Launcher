@@ -346,6 +346,7 @@ static surface_t *cover_surface_alloc (cover_slot_t *keep, int w, int h) {
         return NULL;
     }
     int freed = 0;
+    size_t freed_bytes = 0, need = (size_t)w * h * 2;
     while (true) {
         *image = surface_alloc(FMT_RGBA16, w, h);
         if (image->buffer) {
@@ -354,12 +355,16 @@ static surface_t *cover_surface_alloc (cover_slot_t *keep, int w, int h) {
             }
             return image;
         }
-        if (!free_oldest_cover(keep)) {
+        // Freeing a few covers' worth helps when memory is short; when it is broken into small pieces, freeing
+        // the rest of the cache would only lose covers for nothing.
+        size_t before = bytes_used;
+        if (freed_bytes > need * 3 || !free_oldest_cover(keep)) {
             perf_log_event("no memory for a %dx%d cover (%u KB of covers held)", w, h, (unsigned)(bytes_used / 1024));
             free(image);
             return NULL;
         }
         freed++;
+        freed_bytes += before - bytes_used;
     }
 }
 

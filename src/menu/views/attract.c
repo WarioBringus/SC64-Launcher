@@ -27,6 +27,7 @@
 typedef struct {
     library_game_t *game;
     bool portrait;
+    bool small;                 /**< Its large cover didn't load: the 294x210 one is used */
 } slide_t;
 
 static slide_t current;
@@ -41,7 +42,7 @@ static bool seeded = false;
 
 /** @brief A random game from the whole library (each game equally likely). */
 static slide_t pick_game (void) {
-    slide_t s = { NULL, false };
+    slide_t s = { NULL, false, false };
     int categories = library_category_count();
     int total = 0;
     for (int i = 0; i < categories; i++) {
@@ -79,8 +80,14 @@ static surface_t *slide_cover (menu_t *menu, slide_t *s, bool *pending) {
     if (!path) {
         return NULL;
     }
-    if (launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H)) {
-        return launcher_cover_get(path, LAUNCHER_WALL_W, LAUNCHER_WALL_H, pending);     // Large hi-res, shown 1:1
+    if (!s->small && launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H)) {
+        surface_t *image = launcher_cover_get(path, LAUNCHER_WALL_W, LAUNCHER_WALL_H, pending);   // Large hi-res, 1:1
+        if (image || *pending) {
+            return image;
+        }
+        s->small = true;    // Not tried again for this slide.
+        // It didn't load: a 420x300 cover needs ~190 KB in one piece, which a long-running menu's memory may not
+        // have (the performance log). The 294x210 one, half that, stands in rather than leaving the wallpaper stuck.
     }
     if (launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H)) {
         return launcher_cover_get(path, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, pending);   // Hi-res, shown 1:1
@@ -135,7 +142,7 @@ static void draw_slide (menu_t *menu, slide_t *s, int offset_x) {
 
 /** @brief A random game that isn't hidden (a few tries). */
 static slide_t pick_visible_game (void) {
-    slide_t s = { NULL, false };
+    slide_t s = { NULL, false, false };
     for (int attempt = 0; attempt < 16 && !s.game; attempt++) {
         s = pick_game();
     }
