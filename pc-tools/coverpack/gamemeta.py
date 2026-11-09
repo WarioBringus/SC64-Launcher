@@ -109,4 +109,7 @@ def match(rel, crc, by_crc, by_name):
 
 
 def clean(value):
-    return (value or '').replace('\t', ' ').replace('\n', ' ').strip()
+    # The database marks unknown parts with question marks ("Konami Computer Entertainment ???"): never shown.
+    value = (value or '').replace('\t', ' ').replace('\n', ' ')
+    value = re.sub(r'\?{2,}|(?<!\S)\?(?!\S)', ' ', value)
+    return re.sub(r'\s+', ' ', value).strip(' -,/')
