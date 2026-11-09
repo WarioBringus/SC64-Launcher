@@ -327,6 +327,7 @@ static int text_box (int x, int y, int w, int h, rdpq_align_t align, rdpq_valign
 typedef struct {
     const char *text;
     size_t length;
+    uint32_t hash;              /**< Of the text itself: a buffer reused for new text (the clock) isn't stale */
     uint8_t font;
     int width;
     int ink_x0;                 /**< Where the glyphs' ink starts, from the pen (real pixels) */
@@ -342,9 +343,10 @@ static int width_cache_next = 0;
 static width_entry_t *text_measure (uint8_t font, const char *text) {
     uint8_t real_font = launcher_font(font);
     size_t length = strlen(text);
+    uint32_t hash = text_hash(text);
     for (int i = 0; i < WIDTH_CACHE_SIZE; i++) {
         width_entry_t *e = &width_cache[i];
-        if (e->text == text && e->length == length && e->font == real_font) {
+        if (e->text == text && e->length == length && e->font == real_font && e->hash == hash) {
             return e;
         }
     }
@@ -353,6 +355,7 @@ static width_entry_t *text_measure (uint8_t font, const char *text) {
     width_entry_t *e = &width_cache[width_cache_next];
     width_cache_next = (width_cache_next + 1) % WIDTH_CACHE_SIZE;
     e->text = text;
+    e->hash = hash;
     e->length = length;
     e->font = real_font;
     e->width = (int)(layout->bbox.x1 - layout->bbox.x0);
