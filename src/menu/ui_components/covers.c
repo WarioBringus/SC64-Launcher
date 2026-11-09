@@ -27,6 +27,8 @@
    carousel's and shelf's larger covers never take more than covers did before. */
 #define COVER_BYTES_PER_SLOT    (LAUNCHER_COVER_W * LAUNCHER_COVER_H * 2)
 #define PACK_FILE_FORMAT        "%.*s/menu/cache/launcher/covers_%dx%d%s.pak"
+#define COMBINED_FILE_FORMAT    "%.*s/menu/cache/launcher/covers.pak"
+#define COMBINED_MAX            (32)    /* Packs listed in covers.pak's directory */
 
 /* Pre-scaled covers built on the PC by pc-tools/coverpack (one file per tile size). */
 typedef struct {
@@ -36,9 +38,26 @@ typedef struct {
     bool tried;
     uint32_t tried_frame;       /**< When it was last opened; one that failed is tried again later */
     FILE *f;
+    bool shared;                /**< f is covers.pak's, closed once for all its packs */
     uint32_t count;
     uint32_t *offsets;
 } cover_pack_t;
+
+/* covers.pak (pc-tools/coverpack): every pack in one file, so the card opens one file rather than one a size. */
+typedef struct {
+    uint16_t w;
+    uint16_t h;
+    bool wide;
+    uint32_t table_offset;
+    uint32_t count;
+} combined_entry_t;
+
+typedef enum {
+    COMBINED_UNTRIED,
+    COMBINED_OPEN,
+    COMBINED_MISSING,           /* Not on the card: the per-size packs are used */
+    COMBINED_FAILED,            /* Didn't open or read; tried again after FAILED_RETRY_FRAMES */
+} combined_state_t;
 
 typedef struct {
     char *path;
@@ -68,6 +87,11 @@ static int slot_count = 0;
 static uint32_t frame = 0;
 static bool decoding = false;
 static cover_pack_t packs[MAX_PACKS];
+static FILE *combined_f = NULL;
+static combined_state_t combined_state = COMBINED_UNTRIED;
+static uint32_t combined_tried_frame = 0;
+static combined_entry_t combined[COMBINED_MAX];
+static int combined_count = 0;
 static bool cartridge_art = false;
 static cover_slot_t *streaming = NULL;     /* The cover whose pixels are being read, if any */
 static size_t bytes_used = 0;
@@ -80,8 +104,84 @@ static uint32_t read_u32_be (const uint8_t *p) {
     return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
 }
 
+/** @brief Open covers.pak and read its directory, once (and again later if a read failed). */
+static bool combined_open (const char *path) {
+    if (combined_state == COMBINED_OPEN) {
+        return true;
+    }
+    if (combined_state == COMBINED_MISSING ||
+        (combined_state == COMBINED_FAILED && frame - combined_tried_frame < FAILED_RETRY_FRAMES)) {
+        return false;
+    }
+    combined_tried_frame = frame;
+    const char *colon = strchr(path, ':');
+    if (!colon) {
+        return false;
+    }
+    uint64_t started = get_ticks_us();
+    char file[96];
+    snprintf(file, sizeof(file), COMBINED_FILE_FORMAT, (int)(colon - path + 1), path);
+    combined_f = fopen(file, "rb");
+    if (!combined_f) {
+        if (errno == ENOENT) {
+            combined_state = COMBINED_MISSING;
+        } else {
+            combined_state = COMBINED_FAILED;
+            perf_log_event("covers.pak did not open (errno %d)", errno);
+        }
+        return false;
+    }
+    // Unbuffered, as the per-size packs: a cover is one large read straight into its surface.
+    setvbuf(combined_f, NULL, _IONBF, 0);
+    uint8_t head[8];
+    uint8_t dir[16 * COMBINED_MAX];
+    bool ok = fread(head, 1, sizeof(head), combined_f) == sizeof(head) && memcmp(head, "CVPA", 4) == 0;
+    uint32_t n = ok ? read_u32_be(head + 4) : 0;
+    ok = ok && n > 0 && n <= COMBINED_MAX && fread(dir, 16, n, combined_f) == n;
+    if (!ok) {
+        perf_log_event("covers.pak: bad header or directory (errno %d)", errno);
+        fclose(combined_f);
+        combined_f = NULL;
+        combined_state = COMBINED_FAILED;
+        return false;
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        const uint8_t *e = dir + i * 16;
+        combined[i].w = (e[0] << 8) | e[1];
+        combined[i].h = (e[2] << 8) | e[3];
+        combined[i].wide = e[4] != 0;
+        combined[i].table_offset = read_u32_be(e + 8);
+        combined[i].count = read_u32_be(e + 12);
+    }
+    combined_count = (int)n;
+    combined_state = COMBINED_OPEN;
+    uint32_t open_us = (uint32_t)(get_ticks_us() - started);
+    if (open_us > 20000) {
+        perf_log_event("opening covers.pak took %.1f ms", open_us / 1000.0f);
+    }
+    return true;
+}
+
+/** @brief Read a pack's table of cover offsets (absolute in its file) from where f stands. */
+static bool pack_read_table (cover_pack_t *p) {
+    p->offsets = malloc(p->count * sizeof(uint32_t));
+    uint8_t *raw = malloc(p->count * 4);
+    if (!p->offsets || !raw || fread(raw, 4, p->count, p->f) != p->count) {
+        free(raw);
+        free(p->offsets);
+        p->offsets = NULL;
+        return false;
+    }
+    for (uint32_t i = 0; i < p->count; i++) {
+        p->offsets[i] = read_u32_be(raw + i * 4);
+    }
+    free(raw);
+    return true;
+}
+
 /**
  * @brief The pack for a tile size, opened on first use. path is any cover path, for its "sd:" prefix.
+ * It comes from covers.pak when the card has it, else from the size's own file.
  */
 static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     cover_pack_t *free_entry = NULL;
@@ -115,6 +215,33 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     p->h = h;
     p->wide = wide;
 
+    if (combined_open(path)) {
+        for (int i = 0; i < combined_count; i++) {
+            combined_entry_t *e = &combined[i];
+            if (e->w != w || e->h != h || e->wide != wide) {
+                continue;
+            }
+            p->f = combined_f;
+            p->shared = true;
+            p->count = e->count;
+            if (fseek(p->f, e->table_offset, SEEK_SET) != 0 || !pack_read_table(p)) {
+                perf_log_event("covers.pak %dx%d%s: table unreadable (errno %d)", w, h, wide ? "_w" : "", errno);
+                p->f = NULL;
+                p->shared = false;
+                return NULL;
+            }
+            uint32_t open_us = (uint32_t)(get_ticks_us() - open_started);
+            if (open_us > 20000) {
+                perf_log_event("reading covers.pak %dx%d%s took %.1f ms", w, h, wide ? "_w" : "", open_us / 1000.0f);
+            }
+            return p;
+        }
+        return NULL;    // covers.pak has every size there is; this one isn't built.
+    }
+    if (combined_state == COMBINED_FAILED) {
+        return NULL;    // It's there but didn't read: wait for its retry rather than look for the old files.
+    }
+
     const char *colon = strchr(path, ':');
     if (!colon) {
         return NULL;
@@ -139,21 +266,12 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
         return NULL;
     }
     p->count = read_u32_be(head + 4);
-    p->offsets = malloc(p->count * sizeof(uint32_t));
-    uint8_t *raw = malloc(p->count * 4);
-    if (!p->offsets || !raw || fread(raw, 4, p->count, p->f) != p->count) {
+    if (!pack_read_table(p)) {
         perf_log_event("cover pack %dx%d%s: table unreadable (errno %d)", w, h, wide ? "_w" : "", errno);
-        free(raw);
-        free(p->offsets);
-        p->offsets = NULL;
         fclose(p->f);
         p->f = NULL;
         return NULL;
     }
-    for (uint32_t i = 0; i < p->count; i++) {
-        p->offsets[i] = read_u32_be(raw + i * 4);
-    }
-    free(raw);
     uint32_t open_us = (uint32_t)(get_ticks_us() - open_started);
     if (open_us > 20000) {
         perf_log_event("opening cover pack %dx%d%s took %.1f ms", w, h, wide ? "_w" : "", open_us / 1000.0f);
@@ -424,12 +542,18 @@ static surface_t *pack_read (cover_pack_t *p, int id, int w, int h) {
 
 static void packs_close (void) {
     for (int i = 0; i < MAX_PACKS; i++) {
-        if (packs[i].f) {
+        if (packs[i].f && !packs[i].shared) {
             fclose(packs[i].f);
         }
         free(packs[i].offsets);
         memset(&packs[i], 0, sizeof(packs[i]));
     }
+    if (combined_f) {
+        fclose(combined_f);
+        combined_f = NULL;
+    }
+    combined_state = COMBINED_UNTRIED;
+    combined_count = 0;
 }
 
 
