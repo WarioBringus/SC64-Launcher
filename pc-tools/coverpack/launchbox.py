@@ -86,14 +86,30 @@ def fetch(url):
         return r.read()
 
 
-SAME_BOX_DIFFERENCE = 25    # Mean difference (0-255) of the two shrunk to 32x24; above it, another box or edition
+SAME_BOX_DIFFERENCE = 27    # Mean grey difference (0-255) at 32x24, best crop; above it, another box or edition
 
 
-def tiny(ffmpeg, path):
-    """An image shrunk to 32x24 RGB, for comparing."""
-    r = subprocess.run([ffmpeg, '-loglevel', 'error', '-i', path, '-vf', 'scale=32:24:flags=area', '-f', 'rawvideo',
-                        '-pix_fmt', 'rgb24', '-'], capture_output=True)
-    return r.stdout if len(r.stdout) == 32 * 24 * 3 else None
+def tiny(ffmpeg, path, w=32, h=24):
+    """An image shrunk to w x h grey, for comparing."""
+    r = subprocess.run([ffmpeg, '-loglevel', 'error', '-i', path, '-vf', 'scale=%d:%d:flags=area' % (w, h), '-f', 'rawvideo',
+                        '-pix_fmt', 'gray', '-'], capture_output=True)
+    return r.stdout if len(r.stdout) == w * h else None
+
+
+def box_difference(ffmpeg, card_art, front):
+    """How unlike the card's art a front is, allowing for scans cropped a little differently: the card's art at 32x24
+    against every 32x24 window of the front shrunk to 32x24, 34x25 and 36x27."""
+    a = tiny(ffmpeg, card_art)
+    best = 255.0
+    for w, h in ((32, 24), (34, 25), (36, 27)):
+        b = tiny(ffmpeg, front, w, h)
+        if not a or not b:
+            return 255.0
+        for dy in range(h - 23):
+            for dx in range(w - 31):
+                d = sum(abs(a[y * 32 + x] - b[(y + dy) * w + x + dx]) for y in range(24) for x in range(32)) / 768
+                best = min(best, d)
+    return best
 
 
 def save_fronts(args, menu, front_for):
@@ -125,8 +141,7 @@ def save_fronts(args, menu, front_for):
                 skipped += 1
                 continue
             saved += 1
-        a, b = tiny(args.ffmpeg, dest), tiny(args.ffmpeg, menu + cover)
-        if not a or not b or sum(abs(x - y) for x, y in zip(a, b)) / len(a) > SAME_BOX_DIFFERENCE:
+        if box_difference(args.ffmpeg, menu + cover, dest) > SAME_BOX_DIFFERENCE:
             os.remove(dest)
             different += 1
     kept = len(front_for) - skipped - different
