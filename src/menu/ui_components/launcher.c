@@ -1865,12 +1865,6 @@ static void open_screen (menu_t *menu, void *arg) {
     launcher_leave(menu, (menu_mode_t)(arg));
 }
 
-static void open_file_browser (menu_t *menu, void *arg) {
-    (void)arg;
-    // The file browser is a destination of its own; screens opened from it return to it.
-    menu->launcher_return_mode = MENU_MODE_NONE;
-    menu->next_mode = MENU_MODE_BROWSER;
-}
 
 void launcher_apply_theme (menu_t *menu, int index) {
     theme_set(index);
@@ -1885,38 +1879,8 @@ void launcher_apply_theme (menu_t *menu, int index) {
     settings_save(&menu->settings);
 }
 
-static void set_theme (menu_t *menu, void *arg) {
-    launcher_apply_theme(menu, (int)(uintptr_t)(arg));
-}
 
-static int get_theme_selection (menu_t *menu) {
-    return theme_current_index();
-}
 
-// Labels are filled from theme.c in launcher_menu_init.
-static component_context_menu_t theme_menu = {
-    .get_default_selection = get_theme_selection,
-    .list = {
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(0) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(1) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(2) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(3) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(4) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(5) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(6) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(7) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(8) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(9) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(10) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(11) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(12) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(13) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(14) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(15) },
-        { .text = "", .action = set_theme, .arg = (void *)(uintptr_t)(16) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
 static void set_tile_size (menu_t *menu, void *arg) {
     menu->settings.launcher_tile_size = (int)(uintptr_t)(arg);
@@ -1946,34 +1910,9 @@ static int get_layout_selection (menu_t *menu) {
     return menu->settings.launcher_layout;
 }
 
-/* Home style menu rows, in order (-1 ends): */
-static const int home_style_values[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_CARTRIDGE, LAUNCHER_HOME_MINIMAL, -1 };
 
-static void set_home_style (menu_t *menu, void *arg) {
-    menu->settings.launcher_home_style = (int)(uintptr_t)(arg);
-    settings_save(&menu->settings);
-}
 
-static int get_home_style_selection (menu_t *menu) {
-    // The list's order isn't the setting's numbering: find the row.
-    for (int i = 0; home_style_values[i] >= 0; i++) {
-        if (home_style_values[i] == menu->settings.launcher_home_style) {
-            return i;
-        }
-    }
-    return 0;
-}
 
-static component_context_menu_t home_style_menu = {
-    .get_default_selection = get_home_style_selection,
-    .list = {
-        { .text = "Classic", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CLASSIC) },
-        { .text = "Spotlight", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_SPOTLIGHT) },
-        { .text = "Cartridge", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CARTRIDGE) },
-        { .text = "Minimal", .action = set_home_style, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_MINIMAL) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
 static component_context_menu_t layout_menu = {
     .get_default_selection = get_layout_selection,
@@ -2024,60 +1963,17 @@ static component_context_menu_t cover_style_menu = {
     }
 };
 
-static void set_titles (menu_t *menu, void *arg) {
-    menu->settings.launcher_titles_highlight_only = (bool)(uintptr_t)(arg);
-    settings_save(&menu->settings);
-}
 
-static int get_titles_selection (menu_t *menu) {
-    return menu->settings.launcher_titles_highlight_only ? 0 : 1;
-}
 
-static void set_text_size (menu_t *menu, void *arg) {
-    menu->settings.launcher_large_text = (bool)(uintptr_t)(arg);
-    settings_save(&menu->settings);
-}
 
-static int get_text_size_selection (menu_t *menu) {
-    return menu->settings.launcher_large_text ? 1 : 0;
-}
 
-static component_context_menu_t text_size_menu = {
-    .get_default_selection = get_text_size_selection,
-    .list = {
-        { .text = "Normal", .action = set_text_size, .arg = (void *)(uintptr_t)(false) },
-        { .text = "Large", .action = set_text_size, .arg = (void *)(uintptr_t)(true) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
-static component_context_menu_t titles_menu = {
-    .get_default_selection = get_titles_selection,
-    .list = {
-        { .text = "Highlighted only", .action = set_titles, .arg = (void *)(uintptr_t)(true) },
-        { .text = "Always", .action = set_titles, .arg = (void *)(uintptr_t)(false) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
 /* Start menu state: the highlighted game, and requests for the library view. */
 static path_t *selected_rom = NULL;
 static launcher_request_t pending_request = LAUNCHER_REQUEST_NONE;
 static bool favorites_changed = false;
 static char favorite_label[32] = "Add to favorites";
-static char rescan_label[40] = "Rescan folders";
-static char sort_label[40] = "Sort by";
-static char theme_label[48] = "Theme";
-static char layout_label[40] = "Layout";
-static char home_style_label[40] = "Home style";
-static char tile_size_label[40] = "Tile size";
-static char cover_style_label[40] = "Cover style";
-static char titles_label[48] = "Game titles";
-static char text_size_label[48] = "Text size";
-static char pause_label[24] = "Pause";
-static char music_label[24] = "Music";
-static char order_label[32] = "Order";
-static char volume_label[32] = "Volume";
 static char folder_label[64] = "Folder";
 static int requested_category = 0;
 
@@ -2198,15 +2094,7 @@ static void hide_game (menu_t *menu, void *arg) {
     }
 }
 
-static void open_hidden (menu_t *menu, void *arg) {
-    (void)arg;
-    request(menu, LAUNCHER_REQUEST_HIDDEN);
-}
 
-static void open_folders (menu_t *menu, void *arg) {
-    (void)arg;
-    request(menu, LAUNCHER_REQUEST_FOLDERS);
-}
 
 static void open_filter (menu_t *menu, void *arg) {
     (void)arg;
@@ -2266,27 +2154,7 @@ static component_context_menu_t game_menu = {
     }
 };
 
-static component_context_menu_t browse_menu = {
-    .list = {
-        { .text = sort_label, .submenu = &sort_menu },
-        { .text = "Filter", .action = open_filter },
-        { .text = "Hidden games", .action = open_hidden },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
-static component_context_menu_t look_menu = {
-    .list = {
-        { .text = theme_label, .submenu = &theme_menu },
-        { .text = home_style_label, .submenu = &home_style_menu },
-        { .text = layout_label, .submenu = &layout_menu },
-        { .text = tile_size_label, .submenu = &tile_size_menu },
-        { .text = cover_style_label, .submenu = &cover_style_menu },
-        { .text = titles_label, .submenu = &titles_menu },
-        { .text = text_size_label, .submenu = &text_size_menu },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
 static void next_track (menu_t *menu, void *arg) {
     (void)menu;
@@ -2300,75 +2168,15 @@ static void toggle_pause (menu_t *menu, void *arg) {
     sound_bgm_set_paused(!sound_bgm_is_paused());
 }
 
-static void set_music (menu_t *menu, void *arg) {
-    menu->settings.bgm_enabled = (bool)(uintptr_t)(arg);
-    sound_use_bgm(menu->settings.bgm_enabled);
-    settings_save(&menu->settings);
-}
 
-static int get_music_selection (menu_t *menu) {
-    return menu->settings.bgm_enabled ? 0 : 1;
-}
 
-static component_context_menu_t music_onoff_menu = {
-    .get_default_selection = get_music_selection,
-    .list = {
-        { .text = "On", .action = set_music, .arg = (void *)(uintptr_t)(true) },
-        { .text = "Off", .action = set_music, .arg = (void *)(uintptr_t)(false) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
-static void set_music_order (menu_t *menu, void *arg) {
-    menu->settings.bgm_order = (int)(uintptr_t)(arg);
-    sound_bgm_set_order(menu->settings.bgm_order);
-    settings_save(&menu->settings);
-}
 
-static int get_music_order_selection (menu_t *menu) {
-    return menu->settings.bgm_order;
-}
 
-static component_context_menu_t music_order_menu = {
-    .get_default_selection = get_music_order_selection,
-    .list = {
-        { .text = "Shuffle", .action = set_music_order, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_SHUFFLE) },
-        { .text = "In order", .action = set_music_order, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_IN_ORDER) },
-        { .text = "Repeat one", .action = set_music_order, .arg = (void *)(uintptr_t)(SOUND_BGM_ORDER_REPEAT_ONE) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
-static void set_music_volume (menu_t *menu, void *arg) {
-    menu->settings.bgm_volume = (int)(uintptr_t)(arg);
-    sound_bgm_set_volume(menu->settings.bgm_volume);
-    settings_save(&menu->settings);
-}
 
-static int get_music_volume_selection (menu_t *menu) {
-    return menu->settings.bgm_volume;
-}
 
-static component_context_menu_t music_volume_menu = {
-    .get_default_selection = get_music_volume_selection,
-    .list = {
-        { .text = "Low", .action = set_music_volume, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_LOW) },
-        { .text = "Medium", .action = set_music_volume, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_MEDIUM) },
-        { .text = "High", .action = set_music_volume, .arg = (void *)(uintptr_t)(SOUND_BGM_VOLUME_HIGH) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
-static component_context_menu_t music_menu = {
-    .list = {
-        { .text = "Next track", .action = next_track },
-        { .text = pause_label, .action = toggle_pause },
-        { .text = music_label, .submenu = &music_onoff_menu },
-        { .text = order_label, .submenu = &music_order_menu },
-        { .text = volume_label, .submenu = &music_volume_menu },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
 #define FOLDER_MENU_ROWS    (16)
 
@@ -2406,50 +2214,7 @@ static component_context_menu_t folder_menu = {
     }
 };
 
-static component_context_menu_t files_menu = {
-    .list = {
-        { .text = rescan_label, .action = rescan_folders },
-        { .text = "Folders", .action = open_folders },
-        { .text = "File browser", .action = open_file_browser },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
-static component_context_menu_t system_menu = {
-    .list = {
-        { .text = "Menu settings", .action = open_screen, .arg = (void *)(MENU_MODE_SETTINGS_EDITOR) },
-        { .text = "Controller Pak manager", .action = open_screen, .arg = (void *)(MENU_MODE_CONTROLLER_PAKFS) },
-        { .text = "Time (RTC) settings", .action = open_screen, .arg = (void *)(MENU_MODE_RTC) },
-        { .text = "Menu information", .action = open_screen, .arg = (void *)(MENU_MODE_CREDITS) },
-        { .text = "Flashcart information", .action = open_screen, .arg = (void *)(MENU_MODE_FLASHCART) },
-        { .text = "N64 information", .action = open_screen, .arg = (void *)(MENU_MODE_SYSTEM_INFO) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
-
-/* Start: the whole launcher, grouped. */
-static component_context_menu_t start_menu = {
-    .list = {
-        { .text = "Search", .action = open_search },
-        { .text = "Surprise me", .action = surprise_me },
-        { .text = folder_label, .submenu = &folder_menu },
-        { .text = "Browse", .submenu = &browse_menu },
-        { .text = "Look", .submenu = &look_menu },
-        { .text = "Music", .submenu = &music_menu },
-        { .text = "Library", .submenu = &files_menu },
-        { .text = "System", .submenu = &system_menu },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
-
-void launcher_menu_init (void) {
-    for (int i = 0; i < THEME_BUILTIN_COUNT; i++) {
-        const theme_t *theme = theme_at(i);
-        theme_menu.list[i].text = theme ? theme->name : "-";
-    }
-    ui_components_context_menu_init(&start_menu);
-    ui_components_context_menu_init(&game_menu);
-}
 
 /** @brief The name of a choice menu's current choice, e.g. "Medium" from the tile size menu. */
 static const char *current_choice (menu_t *menu, component_context_menu_t *choices) {
@@ -2468,23 +2233,6 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     selected_rom = rom;
     snprintf(favorite_label, sizeof(favorite_label), "%s",
         favorite_index(menu, rom) >= 0 ? "Remove from favorites" : "Add to favorites");
-    int new_games = library_new_game_count();
-    if (new_games > 0) {
-        snprintf(rescan_label, sizeof(rescan_label), "Rescan folders (%d new)", new_games);
-    } else {
-        snprintf(rescan_label, sizeof(rescan_label), "Rescan folders");
-    }
-    snprintf(sort_label, sizeof(sort_label), "Sort by: %s", current_choice(menu, &sort_menu));
-    snprintf(theme_label, sizeof(theme_label), "Theme: %s", current_choice(menu, &theme_menu));
-    snprintf(layout_label, sizeof(layout_label), "Layout: %s", current_choice(menu, &layout_menu));
-    snprintf(home_style_label, sizeof(home_style_label), "Home style: %s", current_choice(menu, &home_style_menu));
-    snprintf(tile_size_label, sizeof(tile_size_label), "Tile size: %s", current_choice(menu, &tile_size_menu));
-    snprintf(cover_style_label, sizeof(cover_style_label), "Cover style: %s", current_choice(menu, &cover_style_menu));
-    snprintf(text_size_label, sizeof(text_size_label), "Text size: %s", current_choice(menu, &text_size_menu));
-    snprintf(titles_label, sizeof(titles_label), "Game titles: %s",
-        menu->settings.launcher_titles_highlight_only ? "Highlighted" : "Always");
-    snprintf(pause_label, sizeof(pause_label), "%s", sound_bgm_is_paused() ? "Resume" : "Pause");
-
     // Folders, in the order set in Library > Folders.
     library_init(menu);
     int folders = library_category_count();
@@ -2496,14 +2244,276 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     }
     const char *shown = library_category_name(get_folder_selection(menu));
     snprintf(folder_label, sizeof(folder_label), "Folder: %s", shown ? shown : "-");
-    snprintf(music_label, sizeof(music_label), "Music: %s", current_choice(menu, &music_onoff_menu));
-    snprintf(order_label, sizeof(order_label), "Order: %s", current_choice(menu, &music_order_menu));
-    snprintf(volume_label, sizeof(volume_label), "Volume: %s", current_choice(menu, &music_volume_menu));
 }
+
+/*
+ * Start: the Quick menu, a panel sliding in from the right. Big buttons for the things to do now, the view's
+ * settings changed in place with left and right, the music, and the way into Settings.
+ */
+typedef enum {
+    QUICK_SEARCH,
+    QUICK_SURPRISE,
+    QUICK_FOLDER,
+    QUICK_FILTER,
+    QUICK_SORT,
+    QUICK_LAYOUT,
+    QUICK_TILE_SIZE,
+    QUICK_COVERS,
+    QUICK_PAUSE,
+    QUICK_SKIP,
+    QUICK_SETTINGS,
+} quick_item_t;
+
+typedef struct {
+    quick_item_t items[2];
+    int count;                              /**< 1 or 2 side by side */
+    component_context_menu_t *choices;      /**< A setting changed with left and right */
+    const char *label;
+    const char *heading;                    /**< Starts a group ("This view") */
+} quick_row_t;
+
+static const quick_row_t quick_rows[] = {
+    { .items = { QUICK_SEARCH, QUICK_SURPRISE }, .count = 2 },
+    { .items = { QUICK_FOLDER, QUICK_FILTER }, .count = 2 },
+    { .items = { QUICK_SORT }, .count = 1, .choices = &sort_menu, .label = "Sort", .heading = "This view" },
+    { .items = { QUICK_LAYOUT }, .count = 1, .choices = &layout_menu, .label = "Layout" },
+    { .items = { QUICK_TILE_SIZE }, .count = 1, .choices = &tile_size_menu, .label = "Tile size" },
+    { .items = { QUICK_COVERS }, .count = 1, .choices = &cover_style_menu, .label = "Covers" },
+    { .items = { QUICK_PAUSE, QUICK_SKIP }, .count = 2, .heading = "Music" },
+    { .items = { QUICK_SETTINGS }, .count = 1, .label = "Settings" },
+};
+
+#define QUICK_ROW_COUNT     ((int)(sizeof(quick_rows) / sizeof(quick_rows[0])))
+#define QUICK_W             (336)   /* Logical width of the panel */
+#define QUICK_PAD           (18)
+#define QUICK_TOP           (20)
+#define QUICK_BUTTON_H      (44)
+#define QUICK_ROW_H         (34)
+#define QUICK_GAP           (6)
+#define QUICK_HEADING_H     (26)
+#define QUICK_SONG_H        (22)
+#define QUICK_MS            (170)   /* Slide in or out */
+
+static bool quick_open = false;
+static uint64_t quick_changed_ms = 0;       /* When it last started opening or closing */
+static int quick_row = 0;
+static int quick_col = 0;
+static bool quick_folders_open = false;     /* The folder list, over the panel */
+static menu_mode_t quick_mode = MENU_MODE_NONE;    /* The screen it was opened on */
+
+/** @brief 0 (off screen) to 1 (fully in), eased; it slides back out after closing. */
+static float quick_progress (void) {
+    float p = fminf(1.0f, (float)(get_ticks_ms() - quick_changed_ms) / QUICK_MS);
+    float eased = 1.0f - (1.0f - p) * (1.0f - p) * (1.0f - p);
+    return quick_open ? eased : 1.0f - eased;
+}
+
+static bool quick_visible (void) {
+    return quick_open || get_ticks_ms() - quick_changed_ms < QUICK_MS;
+}
+
+static void quick_close (bool slide) {
+    if (!quick_open) {
+        return;
+    }
+    quick_open = false;
+    quick_folders_open = false;
+    quick_changed_ms = slide ? get_ticks_ms() : 0;
+    settings_defer_saves(false);    // One write for everything changed while it was open.
+}
+
+static bool quick_is_button_row (const quick_row_t *row) {
+    return row->count == 2;
+}
+
+static const char *quick_item_label (quick_item_t item) {
+    switch (item) {
+        case QUICK_SEARCH: return "Search";
+        case QUICK_SURPRISE: return "Surprise me";
+        case QUICK_FOLDER: return "Folder";
+        case QUICK_FILTER: return "Filter";
+        case QUICK_PAUSE: return sound_bgm_is_paused() ? "Play" : "Pause";
+        case QUICK_SKIP: return "Skip";
+        default: return "";
+    }
+}
+
+/** @brief Step a setting to its next (or previous) choice, wrapping round. */
+static void quick_cycle (menu_t *menu, component_context_menu_t *c, int step) {
+    int n = 0;
+    while (c->list[n].text) {
+        n++;
+    }
+    if (n == 0) {
+        return;
+    }
+    int i = (((c->get_default_selection(menu) + step) % n) + n) % n;
+    c->list[i].action(menu, c->list[i].arg);
+    sound_play_effect(SFX_SETTING);
+}
+
+static void quick_run (menu_t *menu, quick_item_t item) {
+    switch (item) {
+        case QUICK_SEARCH: quick_close(false); open_search(menu, NULL); break;
+        case QUICK_SURPRISE: quick_close(false); surprise_me(menu, NULL); break;
+        case QUICK_FILTER: quick_close(false); open_filter(menu, NULL); break;
+        case QUICK_SETTINGS: quick_close(false); open_screen(menu, (void *)(MENU_MODE_SETTINGS_EDITOR)); break;
+        case QUICK_FOLDER:
+            ui_components_context_menu_init(&folder_menu);
+            ui_components_context_menu_show(&folder_menu);
+            folder_menu.row_selected = get_folder_selection(menu);
+            quick_folders_open = true;
+            break;
+        case QUICK_PAUSE: toggle_pause(menu, NULL); break;
+        case QUICK_SKIP: next_track(menu, NULL); break;
+        default: break;
+    }
+    sound_play_effect(SFX_ENTER);
+}
+
+static bool quick_process (menu_t *menu) {
+    if (quick_open && menu->mode != quick_mode) {
+        quick_close(false);         // Its screen was left another way (attract mode): it doesn't follow.
+    }
+    if (!quick_open) {
+        return quick_visible() && menu->mode == quick_mode;    // Sliding out: the screen behind waits for it.
+    }
+    if (quick_folders_open) {
+        launcher_request_t before = pending_request;
+        ui_components_context_menu_process(menu, &folder_menu);
+        if (pending_request != before || menu->next_mode != menu->mode) {
+            quick_close(false);     // A folder was chosen: straight to it.
+        } else if (folder_menu.row_selected < 0 || folder_menu.hide_pending) {
+            quick_folders_open = false;
+        }
+        return true;
+    }
+    const quick_row_t *row = &quick_rows[quick_row];
+    if (menu->actions.back || menu->actions.settings) {
+        sound_play_effect(SFX_EXIT);
+        quick_close(true);
+    } else if (menu->actions.go_up && quick_row > 0) {
+        quick_row--;
+        sound_play_effect(SFX_TICK);
+    } else if (menu->actions.go_down && quick_row + 1 < QUICK_ROW_COUNT) {
+        quick_row++;
+        sound_play_effect(SFX_TICK);
+    } else if ((menu->actions.go_left || menu->actions.go_right) && row->choices) {
+        quick_cycle(menu, row->choices, menu->actions.go_left ? -1 : 1);
+    } else if ((menu->actions.go_left || menu->actions.go_right) && quick_is_button_row(row)) {
+        int col = menu->actions.go_left ? 0 : 1;
+        if (col != quick_col) {
+            quick_col = col;
+            sound_play_effect(SFX_TICK);
+        }
+    } else if (menu->actions.enter) {
+        if (row->choices) {
+            quick_cycle(menu, row->choices, 1);
+        } else {
+            quick_run(menu, row->items[quick_is_button_row(row) ? quick_col : 0]);
+        }
+    }
+    return true;
+}
+
+/** @brief A big button: the accent colour when selected, the background colour otherwise. */
+static void quick_draw_button (int x0, int y, int x1, int h, bool on, const char *label) {
+    const theme_t *theme = theme_current();
+    launcher_fill_rounded(x0, y, x1, y + h, 8, on ? theme->accent : theme->bg);
+    launcher_text_sized(LAUNCHER_SIZE_LARGE, x0, y, x1 - x0, h, ALIGN_CENTER, on ? STL_ON_ACCENT : STL_DEFAULT, label);
+}
+
+static void quick_draw (menu_t *menu) {
+    float t = quick_progress();
+    if (t <= 0.0f) {
+        return;
+    }
+    const theme_t *theme = theme_current();
+    fade_band(0, display_get_height(), theme->bg, (int)(MENU_BACKDROP_ALPHA * t));
+    int x0 = LAUNCHER_SCREEN_W - (int)(QUICK_W * t + 0.5f);
+    ui_components_box_draw(launcher_px(x0), 0, display_get_width(), display_get_height(), theme->panel);
+    ui_components_box_draw(launcher_px(x0), 0, launcher_px(x0) + 1, display_get_height(), theme->line);
+    int left = x0 + QUICK_PAD;
+    int right = x0 + QUICK_W - QUICK_PAD - (launcher_is_widescreen() ? 6 : 0);
+
+    int y = QUICK_TOP;
+    for (int r = 0; r < QUICK_ROW_COUNT; r++) {
+        const quick_row_t *row = &quick_rows[r];
+        bool row_on = (r == quick_row) && !quick_folders_open;
+        if (row->heading) {
+            y += QUICK_GAP;
+            launcher_text_sized(LAUNCHER_SIZE_BODY, left, y, 0, QUICK_HEADING_H, ALIGN_LEFT, STL_ACCENT, row->heading);
+            y += QUICK_HEADING_H;
+            if (row->items[0] == QUICK_PAUSE) {
+                // What's playing, above its buttons.
+                const char *name = sound_bgm_track_name();
+                const char *song = (!menu->settings.bgm_enabled || !name) ? "Music is off" : name;
+                launcher_text_sized(LAUNCHER_SIZE_BODY, left, y, right - left, QUICK_SONG_H, ALIGN_LEFT, STL_GRAY, song);
+                y += QUICK_SONG_H + 4;
+            }
+        }
+        if (quick_is_button_row(row)) {
+            int h = (row->items[0] == QUICK_PAUSE) ? QUICK_ROW_H + 4 : QUICK_BUTTON_H;
+            int mid = (left + right) / 2;
+            quick_draw_button(left, y, mid - 4, h, row_on && quick_col == 0, quick_item_label(row->items[0]));
+            quick_draw_button(mid + 4, y, right, h, row_on && quick_col == 1, quick_item_label(row->items[1]));
+            y += h + QUICK_GAP;
+            continue;
+        }
+        if (row_on) {
+            launcher_fill_rounded(left - 8, y, right + 8, y + QUICK_ROW_H, 6, theme->highlight);
+            launcher_fill_rounded(left - 8, y + 4, left - 4, y + QUICK_ROW_H - 4, 2, theme->accent2);
+        }
+        launcher_text_sized(LAUNCHER_SIZE_TITLE, left + 4, y, 0, QUICK_ROW_H, ALIGN_LEFT, row_on ? STL_DEFAULT : STL_GRAY,
+            row->label);
+        if (row->choices) {
+            const char *value = current_choice(menu, row->choices);
+            int w = launcher_text_sized_width(LAUNCHER_SIZE_TITLE, value);
+            int vx = right - (row_on ? 22 : 4) - w;
+            launcher_text_sized(LAUNCHER_SIZE_TITLE, vx, y, 0, QUICK_ROW_H, ALIGN_LEFT, row_on ? STL_ACCENT : STL_GRAY, value);
+            if (row_on) {
+                int cy = y + QUICK_ROW_H / 2;
+                launcher_draw_arrow(vx - 16, cy, 12, false, theme->accent);
+                launcher_draw_arrow(right - 6, cy, 12, true, theme->accent);
+            }
+        } else if (row_on) {
+            launcher_draw_arrow(right - 6, y + QUICK_ROW_H / 2, 12, true, theme->accent);
+        }
+        y += QUICK_ROW_H + QUICK_GAP;
+    }
+
+    if (quick_open && t >= 1.0f) {
+        const quick_row_t *row = &quick_rows[quick_row];
+        static const launcher_hint_t select_hints[] = {
+            { LAUNCHER_BUTTON_A, "A", "Select" },
+            { LAUNCHER_BUTTON_B, "B", "Close" },
+        };
+        static const launcher_hint_t change_hints[] = {
+            { LAUNCHER_BUTTON_A, "A", "Change" },
+            { LAUNCHER_BUTTON_B, "B", "Close" },
+        };
+        launcher_hide_footer_line();
+        launcher_draw_footer(row->choices ? change_hints : select_hints, 2);
+    }
+    if (quick_folders_open) {
+        ui_components_context_menu_draw(&folder_menu);
+    }
+}
+
+void launcher_menu_init (void) {
+    ui_components_context_menu_init(&game_menu);
+}
+
+static menu_t *quick_owner = NULL;
 
 void launcher_menu_show (menu_t *menu, path_t *rom) {
     prepare_menus(menu, rom);
-    ui_components_context_menu_show(&start_menu);
+    quick_owner = menu;
+    quick_mode = menu->mode;
+    quick_open = true;
+    quick_changed_ms = get_ticks_ms();
+    quick_folders_open = false;
+    settings_defer_saves(true);
     sound_play_effect(SFX_POP);
 }
 
@@ -2517,14 +2527,17 @@ void launcher_game_menu_show (menu_t *menu, path_t *rom) {
 }
 
 bool launcher_menu_process (menu_t *menu) {
-    return ui_components_context_menu_process(menu, &start_menu) ||
-        ui_components_context_menu_process(menu, &game_menu);
+    quick_owner = menu;
+    return quick_process(menu) || ui_components_context_menu_process(menu, &game_menu);
 }
 
 void launcher_menu_draw (void) {
+    if (quick_owner && quick_owner->mode != quick_mode) {
+        quick_close(false);
+    }
     static bool was_open = false;
     static uint64_t opened_ms = 0;
-    bool open = (start_menu.row_selected >= 0) || (game_menu.row_selected >= 0);
+    bool open = (game_menu.row_selected >= 0);
     if (open && !was_open) {
         opened_ms = get_ticks_ms();
     }
@@ -2533,6 +2546,8 @@ void launcher_menu_draw (void) {
         float t = fminf(1.0f, (float)(get_ticks_ms() - opened_ms) / MENU_FADE_MS);
         fade_band(0, display_get_height(), theme_current()->bg, (int)(MENU_BACKDROP_ALPHA * t));
     }
-    ui_components_context_menu_draw(&start_menu);
     ui_components_context_menu_draw(&game_menu);
+    if (quick_owner) {
+        quick_draw(quick_owner);
+    }
 }
