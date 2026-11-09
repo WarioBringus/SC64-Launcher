@@ -253,6 +253,37 @@ int launcher_title_wrapped(int x, int y, int width, int max_lines, menu_font_sty
 /** @brief A details line, left aligned, wrapped onto up to max_lines lines rather than cut short. Returns the height. */
 int launcher_game_details_wrapped(int x, int y, int width, int max_lines, menu_font_style_t style, const char *text);
 
+/** @brief Text sizes for launcher_text_sized. */
+typedef enum {
+    LAUNCHER_SIZE_SMALL,    /**< 12 px, the button hints */
+    LAUNCHER_SIZE_BODY,     /**< 15 px */
+    LAUNCHER_SIZE_LARGE,    /**< 18 px */
+    LAUNCHER_SIZE_TITLE,    /**< 22 px, heavy */
+} launcher_text_size_t;
+
+/**
+ * @brief One line of plain text ('$' and '^' aren't text codes) in a given size, centred down a box of height h.
+ * width 0: never cut short. @return Width of the drawn text.
+ */
+int launcher_text_sized(launcher_text_size_t size, int x, int y, int width, int h, rdpq_align_t align, menu_font_style_t style,
+    const char *text);
+
+/** @brief Width of text in a given size. text must stay in memory (its width is remembered). */
+int launcher_text_sized_width(launcher_text_size_t size, const char *text);
+
+/** @brief A solid arrow head pointing left or right, centred on cx, cy, size tall. */
+void launcher_draw_arrow(int cx, int cy, int size, bool right, color_t color);
+
+/** @brief Things the Settings page can do in the library: each goes to the Library (the file browser for FILE_BROWSER). */
+typedef enum {
+    LAUNCHER_DO_RESCAN,
+    LAUNCHER_DO_FOLDERS,
+    LAUNCHER_DO_HIDDEN,
+    LAUNCHER_DO_FILE_BROWSER,
+} launcher_do_t;
+
+void launcher_settings_do(menu_t *menu, launcher_do_t what);
+
 /** @brief Draw a page title in the header (for screens opened from the launcher). */
 void launcher_draw_page_title(const char *title);
 

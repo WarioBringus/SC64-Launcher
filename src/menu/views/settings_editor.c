@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <string.h>
 #include "../sound.h"
 #include "../settings.h"
 #include "../fonts.h"
@@ -711,86 +712,190 @@ static component_context_menu_t options_context_menu = { .list = {
 
 /* ---- The launcher's Settings page (the stock page above is kept for when the launcher is off) ---- */
 
+/*
+ * Tabs across the top (L and R), one setting per row in large text with its value in a column just past the longest
+ * name, changed in place with left and right. Rows that open something (an information screen, the folders) show
+ * what A does instead of a value.
+ */
+
+static menu_mode_t settings_came_from = MENU_MODE_NONE;    /* The launcher screen Settings goes back to */
+static bool settings_child_open = false;                     /* A screen opened from here returns here */
+
+static void settings_open_screen (menu_t *menu, void *arg) {
+    settings_defer_saves(false);    // Writes what's waiting; other screens save as they always have.
+    settings_child_open = true;
+    launcher_leave(menu, (menu_mode_t)(uintptr_t)(arg));
+}
+
+static void settings_library (menu_t *menu, void *arg) {
+    settings_defer_saves(false);
+    launcher_settings_do(menu, (launcher_do_t)(uintptr_t)(arg));
+}
+
+static void settings_ask_reset (menu_t *menu, void *arg) {
+    (void)menu;
+    (void)arg;
+    show_message_reset_settings = true;
+}
+
 typedef struct {
-    const char *section;                    /**< Starts a group ("Look"); the row's other fields are unused */
     const char *label;
-    component_context_menu_t *choices;      /**< Opened with A; its current choice is shown as the value */
-    void (*action)(menu_t *menu, void *arg); /**< Or run straight away */
+    component_context_menu_t *choices;      /**< Changed with left and right; its current choice is the value */
+    void (*action)(menu_t *menu, void *arg); /**< Or run with A */
+    void *arg;
+    const char *does;                       /**< For an action: what A does, shown where a value would be */
     const char *note;                       /**< Shown under the list while the row is selected */
 } settings_row_t;
 
-static const settings_row_t settings_rows[] = {
-    { .section = "Look" },
+typedef struct {
+    const char *name;
+    const settings_row_t *rows;
+    int count;
+} settings_tab_t;
+
+#define ROWS(r)     (r), (int)(sizeof(r) / sizeof((r)[0]))
+
+static const settings_row_t look_rows[] = {
     { .label = "Theme", .choices = &set_theme_context_menu },
     { .label = "Screen", .choices = &set_launcher_widescreen_context_menu,
       .note = "16:9 suits a TV set to stretch the picture; games are stretched too" },
-    { .label = "Home style", .choices = &set_launcher_home_style_context_menu },
-    { .label = "Library layout", .choices = &set_launcher_layout_context_menu },
-    { .label = "Tile size", .choices = &set_launcher_tile_size_context_menu },
-    { .label = "Game titles", .choices = &set_launcher_titles_highlight_only_context_menu },
     { .label = "Text size", .choices = &set_launcher_large_text_context_menu,
       .note = "Large makes game titles and details easier to read from the couch" },
-    { .label = "Remove background image", .action = remove_background_image },
-    { .section = "Launcher" },
-    { .label = "Launcher", .choices = &set_launcher_enabled_context_menu,
-      .note = "Off shows the original menu and file browser" },
+    { .label = "Game titles", .choices = &set_launcher_titles_highlight_only_context_menu },
+    { .label = "Background image", .action = remove_background_image, .does = "Remove",
+      .note = "Takes away the picture behind the menu (menu/background.png on the SD card)" },
+};
+
+static const settings_row_t home_rows[] = {
+    { .label = "Home style", .choices = &set_launcher_home_style_context_menu },
     { .label = "Start in", .choices = &set_launcher_start_in_context_menu },
-    { .label = "Folder categories", .choices = &set_launcher_categories_enabled_context_menu },
-    { .label = "Duplicates", .choices = &set_launcher_one_per_game_context_menu },
-    { .label = "Quick launch", .choices = &set_launcher_quick_launch_context_menu },
-    { .label = "Attract mode", .choices = &set_launcher_attract_minutes_context_menu },
-    { .label = "Home: Resume", .choices = &set_launcher_home_resume_context_menu },
-    { .label = "Home: Recent", .choices = &set_launcher_home_recent_context_menu },
-    { .label = "Home: Favorites", .choices = &set_launcher_home_favorites_context_menu },
-    { .section = "Sound" },
-    { .label = "Sound effects", .choices = &set_soundfx_enabled_type_context_menu },
+    { .label = "Resume", .choices = &set_launcher_home_resume_context_menu,
+      .note = "The last game played, first on Home" },
+    { .label = "Recent games", .choices = &set_launcher_home_recent_context_menu },
+    { .label = "Favorites", .choices = &set_launcher_home_favorites_context_menu },
+    { .label = "Attract mode", .choices = &set_launcher_attract_minutes_context_menu,
+      .note = "After this long without a button press, covers drift across the screen" },
+};
+
+static const settings_row_t library_rows[] = {
+    { .label = "Layout", .choices = &set_launcher_layout_context_menu },
+    { .label = "Tile size", .choices = &set_launcher_tile_size_context_menu },
+    { .label = "Folder categories", .choices = &set_launcher_categories_enabled_context_menu,
+      .note = "Each folder of games is a category of its own" },
+    { .label = "Duplicates", .choices = &set_launcher_one_per_game_context_menu,
+      .note = "One per game shows a single copy of a game found in several versions" },
+    { .label = "Folders", .action = settings_library, .arg = (void *)(uintptr_t)(LAUNCHER_DO_FOLDERS), .does = "Arrange",
+      .note = "Choose which folders show and in what order" },
+    { .label = "Hidden games", .action = settings_library, .arg = (void *)(uintptr_t)(LAUNCHER_DO_HIDDEN), .does = "Show" },
+    { .label = "Rescan folders", .action = settings_library, .arg = (void *)(uintptr_t)(LAUNCHER_DO_RESCAN), .does = "Rescan",
+      .note = "Looks through the game folders again for added or removed games" },
+};
+
+static const settings_row_t sound_rows[] = {
     { .label = "Background music", .choices = &set_bgm_enabled_type_context_menu },
-    { .label = "Music order", .choices = &set_bgm_order_context_menu },
     { .label = "Music volume", .choices = &set_bgm_volume_context_menu },
-    { .label = "Next track", .action = next_bgm_track },
-    { .section = "Files and saves" },
-    { .label = "Show hidden files", .choices = &set_protected_entries_type_context_menu },
-    { .label = "Use saves folder", .choices = &set_use_saves_folder_type_context_menu },
-    { .label = "Show saves folder", .choices = &set_show_saves_folder_type_context_menu },
-    { .label = "Show save files", .choices = &set_show_save_files_type_context_menu },
-    { .label = "Show cheat files", .choices = &set_show_cheat_files_type_context_menu },
-    { .label = "Wrap file list", .choices = &set_wrap_file_list_scrolling_context_menu },
-    { .section = "System" },
-    { .label = "PAL60 mode", .choices = &set_pal60_type_context_menu,
-      .note = "May turn the screen dark; if so, turn it off in menu/config.ini on the SD card" },
+    { .label = "Music order", .choices = &set_bgm_order_context_menu },
+    { .label = "Next track", .action = next_bgm_track, .does = "Skip" },
+    { .label = "Sound effects", .choices = &set_soundfx_enabled_type_context_menu },
+};
+
+static const settings_row_t games_rows[] = {
+    { .label = "Quick launch", .choices = &set_launcher_quick_launch_context_menu,
+      .note = "A starts the game straight away instead of showing its details first" },
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     { .label = "ROM loading bar", .choices = &set_loading_progress_bar_enabled_context_menu },
 #else
-    { .label = "Fast reboot ROM", .choices = &set_use_rom_fast_reboot_context_menu,
+    { .label = "Fast reboot", .choices = &set_use_rom_fast_reboot_context_menu,
       .note = "The console's Reset button starts the game again instead of returning here" },
 #endif
+    { .label = "Use saves folder", .choices = &set_use_saves_folder_type_context_menu,
+      .note = "Keeps game saves together in a saves folder beside the games" },
+    { .label = "Controller Pak", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_CONTROLLER_PAKFS),
+      .does = "Manage", .note = "Back up, restore and look through Controller Pak saves" },
 #ifdef BETA_SETTINGS
-    { .label = "Hide ROM extensions", .choices = &set_show_browser_file_extensions_context_menu },
-    { .label = "Hide ROM tags", .choices = &set_show_browser_rom_tags_context_menu },
     { .label = "Rumble feedback", .choices = &set_rumble_enabled_type_context_menu },
 #endif
 };
 
-#define SETTINGS_ROW_COUNT      ((int)(sizeof(settings_rows) / sizeof(settings_rows[0])))
-#define SETTINGS_TOP            (LAUNCHER_CONTENT_Y - 18)
-#define SETTINGS_BOTTOM         (LAUNCHER_CONTENT_Y1 - 22)  /* Room below for a row's note */
-#define SETTINGS_ROW_H          (26)
-#define SETTINGS_SECTION_H      (34)
-#define SETTINGS_NOTE_Y         (LAUNCHER_CONTENT_Y1 - 12)
+static const settings_row_t system_rows[] = {
+    { .label = "Launcher", .choices = &set_launcher_enabled_context_menu,
+      .note = "Off shows the original menu and file browser instead" },
+    { .label = "PAL60 mode", .choices = &set_pal60_type_context_menu,
+      .note = "May turn the screen dark; if so, turn it off in menu/config.ini on the SD card" },
+    { .label = "Time and date", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_RTC), .does = "Set" },
+    { .label = "Menu information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_CREDITS), .does = "View" },
+    { .label = "Flashcart", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_FLASHCART), .does = "View" },
+    { .label = "N64 information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_SYSTEM_INFO), .does = "View" },
+    { .label = "Reset all settings", .action = settings_ask_reset, .does = "Reset",
+      .note = "Puts every setting back as it was at first (asks first)" },
+};
 
-static int settings_selected = 1;               /* Row index (never a section) */
-static float settings_scroll_pos = 0.0f;        /* Drawn scroll, gliding toward settings_scroll */
+static const settings_row_t original_rows[] = {
+    { .label = "File browser", .action = settings_library, .arg = (void *)(uintptr_t)(LAUNCHER_DO_FILE_BROWSER), .does = "Open",
+      .note = "The original menu's list of every file on the SD card" },
+    { .label = "Show hidden files", .choices = &set_protected_entries_type_context_menu },
+    { .label = "Show saves folder", .choices = &set_show_saves_folder_type_context_menu },
+    { .label = "Show save files", .choices = &set_show_save_files_type_context_menu },
+    { .label = "Show cheat files", .choices = &set_show_cheat_files_type_context_menu },
+    { .label = "Wrap file list", .choices = &set_wrap_file_list_scrolling_context_menu,
+      .note = "Moving past the end of the list goes back to the top" },
+#ifdef BETA_SETTINGS
+    { .label = "Hide ROM extensions", .choices = &set_show_browser_file_extensions_context_menu },
+    { .label = "Hide ROM tags", .choices = &set_show_browser_rom_tags_context_menu },
+#endif
+};
+
+static const settings_tab_t settings_tabs[] = {
+    { "Look", ROWS(look_rows) },
+    { "Home", ROWS(home_rows) },
+    { "Library", ROWS(library_rows) },
+    { "Sound", ROWS(sound_rows) },
+    { "Games", ROWS(games_rows) },
+    { "System", ROWS(system_rows) },
+    { "Original menu", ROWS(original_rows) },
+};
+
+#define SETTINGS_TAB_COUNT      ((int)(sizeof(settings_tabs) / sizeof(settings_tabs[0])))
+#define SETTINGS_TABS_Y         (LAUNCHER_HEADER_Y - 6)
+#define SETTINGS_TABS_H         (30)
+#define SETTINGS_UNDERLINE_Y    (SETTINGS_TABS_Y + SETTINGS_TABS_H + 1)
+#define SETTINGS_SLASH_GAP      (14)    /* Either side of the slash between tabs */
+#define SETTINGS_DIVIDER_Y      (SETTINGS_UNDERLINE_Y + 12)
+#define SETTINGS_TOP            (SETTINGS_DIVIDER_Y + 14)
+#define SETTINGS_ROW_H          (40)
+#define SETTINGS_ROW_BOX        (36)    /* The highlight, a little shorter than a row */
+#define SETTINGS_NOTE_Y         (LAUNCHER_FOOTER_Y - 32)
+#define SETTINGS_BOTTOM         (SETTINGS_NOTE_Y - 6)
+#define SETTINGS_LABEL_X        (LAUNCHER_X0 + 22)
+#define SETTINGS_VALUE_GAP      (44)    /* From the longest name to the values */
+#define SETTINGS_ARROW          (12)
+#define SETTINGS_ARROW_GAP      (22)    /* Arrow centre to the value's edge */
+#define SETTINGS_SAVE_IDLE_MS   (1500)  /* A waiting save is written once the buttons have been still this long */
+#define SETTINGS_TAB_SLIDE      (36)
+
+static int settings_tab = 0;
+static int settings_selected_in[SETTINGS_TAB_COUNT];   /* Each tab remembers its row */
+static float settings_scroll_pos = 0.0f;
 static int settings_scroll = 0;
-static float settings_highlight_y = -1.0f;      /* Drawn highlight, gliding to the selected row */
-static component_context_menu_t *settings_open = NULL;   /* A row's choices, while open */
+static float settings_highlight_y = -1.0f;
+static float settings_underline_x = -1.0f, settings_underline_w = 0.0f;
+static float settings_tabs_shift = 0.0f;
+static float settings_slide = 0.0f;                     /* Rows slide in from the side a new tab is on */
+static uint64_t settings_last_press_ms = 0;
 
-/** @brief Top of a row within the list (before scrolling). */
-static int settings_row_y (int index) {
-    int y = 0;
-    for (int i = 0; i < index; i++) {
-        y += settings_rows[i].section ? SETTINGS_SECTION_H : SETTINGS_ROW_H;
-    }
-    return y;
+static const settings_tab_t *current_tab (void) {
+    return &settings_tabs[settings_tab];
+}
+
+static const settings_row_t *current_row (void) {
+    const settings_tab_t *tab = current_tab();
+    int i = settings_selected_in[settings_tab];
+    return (i >= 0 && i < tab->count) ? &tab->rows[i] : NULL;
+}
+
+/** @brief A choice the row can be set to (theme slots without a theme are skipped). */
+static bool choice_usable (const component_context_menu_t *c, int i) {
+    return c->list[i].action && c->list[i].text[0] && strcmp(c->list[i].text, "-") != 0;
 }
 
 /** @brief A row's current value: the text of its choices' current selection. */
@@ -807,27 +912,61 @@ static const char *settings_value (menu_t *menu, const settings_row_t *row) {
     return NULL;
 }
 
+/** @brief Step a row's value to the next (or previous) choice, wrapping round, and apply it straight away. */
+static void settings_cycle (menu_t *menu, const settings_row_t *row, int step) {
+    component_context_menu_t *c = row->choices;
+    int n = 0;
+    while (c->list[n].text) {
+        n++;
+    }
+    if (n == 0) {
+        return;
+    }
+    int current = c->get_default_selection ? c->get_default_selection(menu) : 0;
+    for (int k = 1; k <= n; k++) {
+        int i = (((current + step * k) % n) + n) % n;
+        if (choice_usable(c, i)) {
+            c->list[i].action(menu, c->list[i].arg);
+            sound_play_effect(SFX_SETTING);
+            return;
+        }
+    }
+}
+
+static void settings_switch_tab (int step) {
+    int next = settings_tab + step;
+    if (next < 0 || next >= SETTINGS_TAB_COUNT) {
+        return;
+    }
+    settings_tab = next;
+    settings_scroll = 0;
+    settings_scroll_pos = 0.0f;
+    settings_highlight_y = -1.0f;
+    settings_slide = (float)(step * SETTINGS_TAB_SLIDE);
+    sound_play_effect(SFX_TICK);
+}
+
 static void settings_move (int step) {
-    int next = settings_selected;
-    do {
-        next += step;
-    } while (next >= 0 && next < SETTINGS_ROW_COUNT && settings_rows[next].section);
-    if (next >= 0 && next < SETTINGS_ROW_COUNT) {
-        settings_selected = next;
+    const settings_tab_t *tab = current_tab();
+    int next = settings_selected_in[settings_tab] + step;
+    if (next >= 0 && next < tab->count) {
+        settings_selected_in[settings_tab] = next;
         sound_play_effect(SFX_TICK);
     }
 }
 
+static void settings_go_back (menu_t *menu) {
+    settings_defer_saves(false);
+    sound_play_effect(SFX_EXIT);
+    menu->launcher_return_mode = settings_came_from;
+    launcher_transition(MENU_MODE_SETTINGS_EDITOR, menu->launcher_return_mode);
+    menu->next_mode = MENU_MODE_BROWSER;    // Back to the launcher screen it was opened from.
+}
+
 static void launcher_settings_process (menu_t *menu) {
-    if (settings_open) {
-        ui_components_context_menu_process(menu, settings_open);
-        if (settings_open->row_selected < 0) {
-            settings_open = NULL;
-        }
-        return;
-    }
     if (show_message_reset_settings) {
         if (menu->actions.enter) {
+            settings_defer_saves(false);
             settings_reset_to_defaults();
             show_message_reset_settings = false;
             sound_play_effect(SFX_SETTING);
@@ -839,32 +978,86 @@ static void launcher_settings_process (menu_t *menu) {
         return;
     }
 
-    if (menu->actions.go_up) {
+    bool pressed = menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
+        menu->actions.enter || menu->actions.back || menu->actions.shoulder_l || menu->actions.shoulder_r;
+    if (pressed) {
+        settings_last_press_ms = get_ticks_ms();
+    } else if (settings_save_waiting() && get_ticks_ms() - settings_last_press_ms > SETTINGS_SAVE_IDLE_MS) {
+        settings_flush();
+    }
+
+    const settings_row_t *row = current_row();
+    if (menu->actions.shoulder_l) {
+        settings_switch_tab(-1);
+    } else if (menu->actions.shoulder_r) {
+        settings_switch_tab(1);
+    } else if (menu->actions.go_up) {
         settings_move(-1);
     } else if (menu->actions.go_down) {
         settings_move(1);
-    } else if (menu->actions.enter) {
-        const settings_row_t *row = &settings_rows[settings_selected];
+    } else if ((menu->actions.go_left || menu->actions.go_right) && row && row->choices) {
+        settings_cycle(menu, row, menu->actions.go_left ? -1 : 1);
+    } else if (menu->actions.enter && row) {
         if (row->choices) {
-            ui_components_context_menu_init(row->choices);
-            ui_components_context_menu_show(row->choices);
-            if (row->choices->get_default_selection) {
-                row->choices->row_selected = row->choices->get_default_selection(menu);
-            }
-            settings_open = row->choices;
-            sound_play_effect(SFX_POP);
+            settings_cycle(menu, row, 1);
         } else if (row->action) {
-            row->action(menu, NULL);
             sound_play_effect(SFX_SETTING);
+            row->action(menu, row->arg);
         }
     } else if (menu->actions.back) {
-        sound_play_effect(SFX_EXIT);
-        launcher_transition(MENU_MODE_SETTINGS_EDITOR, menu->launcher_return_mode);
-        menu->next_mode = MENU_MODE_BROWSER;    // Back to the launcher screen it was opened from.
-    } else if (menu->actions.options) {
-        show_message_reset_settings = true;
-        sound_play_effect(SFX_POP);
+        settings_go_back(menu);
     }
+}
+
+/** @brief The tabs: names with slashes between them, the current one bright with the accent line under it. */
+static void settings_draw_tabs (void) {
+    int widths[SETTINGS_TAB_COUNT];
+    int slash_w = launcher_text_sized_width(LAUNCHER_SIZE_LARGE, "/");
+    int total = 0, active_x = 0;
+    for (int i = 0; i < SETTINGS_TAB_COUNT; i++) {
+        widths[i] = launcher_text_sized_width(LAUNCHER_SIZE_LARGE, settings_tabs[i].name);
+        if (i == settings_tab) {
+            active_x = total;
+        }
+        total += widths[i] + ((i + 1 < SETTINGS_TAB_COUNT) ? SETTINGS_SLASH_GAP * 2 + slash_w : 0);
+    }
+    // Too wide for the screen: the row shifts so the current tab stays in view.
+    float shift = 0.0f;
+    if (total > LAUNCHER_WIDTH) {
+        int want = active_x + widths[settings_tab] / 2 - LAUNCHER_WIDTH / 2;
+        want = (want < 0) ? 0 : (want > total - LAUNCHER_WIDTH) ? total - LAUNCHER_WIDTH : want;
+        shift = (float)want;
+    }
+    settings_tabs_shift = launcher_ease(settings_tabs_shift, shift);
+    int x = LAUNCHER_X0 - (int)(settings_tabs_shift + 0.5f);
+    for (int i = 0; i < SETTINGS_TAB_COUNT; i++) {
+        bool visible = x >= LAUNCHER_X0 - 2 && x + widths[i] <= LAUNCHER_X1 + 2;
+        if (visible) {
+            launcher_text_sized(LAUNCHER_SIZE_LARGE, x, SETTINGS_TABS_Y, 0, SETTINGS_TABS_H, ALIGN_LEFT,
+                (i == settings_tab) ? STL_DEFAULT : STL_GRAY, settings_tabs[i].name);
+        }
+        x += widths[i];
+        if (i + 1 < SETTINGS_TAB_COUNT) {
+            x += SETTINGS_SLASH_GAP;
+            if (x >= LAUNCHER_X0 && x + slash_w <= LAUNCHER_X1) {
+                launcher_text_sized(LAUNCHER_SIZE_LARGE, x, SETTINGS_TABS_Y, 0, SETTINGS_TABS_H, ALIGN_LEFT, STL_GRAY, "/");
+            }
+            x += slash_w + SETTINGS_SLASH_GAP;
+        }
+    }
+    // The accent line glides to the new tab and takes its width.
+    float target_x = (float)(LAUNCHER_X0 + active_x) - settings_tabs_shift;
+    if (settings_underline_x < 0.0f) {
+        settings_underline_x = target_x;
+        settings_underline_w = (float)widths[settings_tab];
+    }
+    settings_underline_x = launcher_ease(settings_underline_x, target_x);
+    settings_underline_w = launcher_ease(settings_underline_w, (float)widths[settings_tab]);
+    int ux = (int)(settings_underline_x + 0.5f);
+    launcher_fill_rounded(ux, SETTINGS_UNDERLINE_Y, ux + (int)(settings_underline_w + 0.5f), SETTINGS_UNDERLINE_Y + 3, 1,
+        theme_current()->accent2);
+    ui_components_box_draw(launcher_px(LAUNCHER_X0), SETTINGS_DIVIDER_Y, launcher_px(LAUNCHER_X1), SETTINGS_DIVIDER_Y + 1,
+        theme_current()->line);
 }
 
 static void launcher_settings_draw (menu_t *menu, surface_t *d) {
@@ -872,70 +1065,94 @@ static void launcher_settings_draw (menu_t *menu, surface_t *d) {
     launcher_set_widescreen(menu->settings.launcher_widescreen);
 
     launcher_draw_background();
-    launcher_draw_page_title("Settings");
-    launcher_transition_content_begin(SETTINGS_TOP - 8);
+    settings_draw_tabs();
+    launcher_transition_content_begin(SETTINGS_DIVIDER_Y + 2);
+
+    const settings_tab_t *tab = current_tab();
+    int selected = settings_selected_in[settings_tab];
 
     // Keep the selected row in view; the list glides there.
     int view_h = SETTINGS_BOTTOM - SETTINGS_TOP;
-    int sel_y = settings_row_y(settings_selected);
-    int sel_top = sel_y;
-    if (settings_selected > 0 && settings_rows[settings_selected - 1].section) {
-        sel_top -= SETTINGS_SECTION_H;      // Show a group's heading with its first row.
-    }
-    if (sel_top < settings_scroll) {
-        settings_scroll = sel_top;
+    int sel_y = selected * SETTINGS_ROW_H;
+    if (sel_y < settings_scroll) {
+        settings_scroll = sel_y;
     }
     if (sel_y + SETTINGS_ROW_H > settings_scroll + view_h) {
         settings_scroll = sel_y + SETTINGS_ROW_H - view_h;
     }
     settings_scroll_pos = launcher_ease(settings_scroll_pos, (float)settings_scroll);
     int scroll = (int)(settings_scroll_pos + 0.5f);
+    settings_slide = launcher_ease(settings_slide, 0.0f);
+    int dx = (int)(settings_slide + (settings_slide < 0 ? -0.5f : 0.5f));
+
+    // Values line up just past this tab's longest name.
+    int longest = 0;
+    for (int i = 0; i < tab->count; i++) {
+        int w = launcher_text_sized_width(LAUNCHER_SIZE_TITLE, tab->rows[i].label);
+        longest = (w > longest) ? w : longest;
+    }
+    int value_x = SETTINGS_LABEL_X + longest + SETTINGS_VALUE_GAP + dx;
 
     // Left edge at 0, as everywhere in the launcher: COPY mode hangs the RDP with any other.
     rdpq_set_scissor(0, SETTINGS_TOP - 4, display_get_width(), SETTINGS_BOTTOM + 4);
 
-    // The highlight glides from row to row.
+    // The highlight glides from row to row, with the accent bar on its left.
     float target = (float)(SETTINGS_TOP + sel_y - scroll);
     settings_highlight_y = (settings_highlight_y < 0.0f) ? target : launcher_ease(settings_highlight_y, target);
     int hy = (int)(settings_highlight_y + 0.5f);
-    launcher_fill_rounded(LAUNCHER_X0 + 8, hy - 3, LAUNCHER_X1 - 8, hy + SETTINGS_ROW_H - 3, 6, theme_current()->highlight);
+    int box_y = hy + (SETTINGS_ROW_H - SETTINGS_ROW_BOX) / 2;
+    launcher_fill_rounded(LAUNCHER_X0 + dx, box_y, LAUNCHER_X1 + dx, box_y + SETTINGS_ROW_BOX, 6, theme_current()->highlight);
+    launcher_fill_rounded(LAUNCHER_X0 + dx, box_y + 4, LAUNCHER_X0 + 4 + dx, box_y + SETTINGS_ROW_BOX - 4, 2,
+        theme_current()->accent2);
 
-    int y = SETTINGS_TOP - scroll;
-    for (int i = 0; i < SETTINGS_ROW_COUNT; i++) {
-        const settings_row_t *row = &settings_rows[i];
-        int h = row->section ? SETTINGS_SECTION_H : SETTINGS_ROW_H;
-        if (y + h >= SETTINGS_TOP - 4 && y <= SETTINGS_BOTTOM) {
-            if (row->section) {
-                launcher_name(LAUNCHER_X0 + 8, y + 8, LAUNCHER_WIDTH - 16, ALIGN_LEFT, STL_ACCENT, row->section);
-            } else {
-                bool selected = (i == settings_selected);
-                launcher_name(LAUNCHER_X0 + 20, y, LAUNCHER_WIDTH / 2, ALIGN_LEFT, selected ? STL_DEFAULT : STL_GRAY, row->label);
-                const char *value = settings_value(menu, row);
-                if (value) {
-                    launcher_name(LAUNCHER_X0 + LAUNCHER_WIDTH / 2, y, LAUNCHER_WIDTH / 2 - 20, ALIGN_RIGHT,
-                        selected ? STL_ACCENT : STL_GRAY, value);
-                }
-            }
+    for (int i = 0; i < tab->count; i++) {
+        const settings_row_t *row = &tab->rows[i];
+        int y = SETTINGS_TOP + i * SETTINGS_ROW_H - scroll;
+        if (y + SETTINGS_ROW_H < SETTINGS_TOP - 4 || y > SETTINGS_BOTTOM) {
+            continue;
         }
-        y += h;
+        bool on = (i == selected);
+        launcher_text_sized(LAUNCHER_SIZE_TITLE, SETTINGS_LABEL_X + dx, y, 0, SETTINGS_ROW_H, ALIGN_LEFT,
+            on ? STL_DEFAULT : STL_GRAY, row->label);
+        const char *value = row->choices ? settings_value(menu, row) : row->does;
+        if (!value) {
+            continue;
+        }
+        if (row->choices && on) {
+            // Arrows either side: left and right change it.
+            int vx = value_x + SETTINGS_ARROW_GAP;
+            int w = launcher_text_sized(LAUNCHER_SIZE_TITLE, vx, y, LAUNCHER_X1 - 40 - vx, SETTINGS_ROW_H, ALIGN_LEFT,
+                STL_ACCENT, value);
+            int cy = y + SETTINGS_ROW_H / 2;
+            launcher_draw_arrow(value_x + 6, cy, SETTINGS_ARROW, false, theme_current()->accent);
+            launcher_draw_arrow(vx + w + SETTINGS_ARROW_GAP - 6, cy, SETTINGS_ARROW, true, theme_current()->accent);
+        } else {
+            launcher_text_sized(LAUNCHER_SIZE_TITLE, value_x + SETTINGS_ARROW_GAP, y, LAUNCHER_X1 - 40 - value_x, SETTINGS_ROW_H,
+                ALIGN_LEFT, on ? STL_ACCENT : STL_GRAY, value);
+        }
     }
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
-    const char *note = settings_rows[settings_selected].note;
-    if (note) {
-        launcher_small(LAUNCHER_X0 + 20, SETTINGS_NOTE_Y, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_GRAY, note);
+    const settings_row_t *row = current_row();
+    if (row && row->note) {
+        launcher_text_sized(LAUNCHER_SIZE_BODY, SETTINGS_LABEL_X + dx, SETTINGS_NOTE_Y, LAUNCHER_X1 - SETTINGS_LABEL_X - 8,
+            24, ALIGN_LEFT, STL_GRAY, row->note);
     }
+    launcher_draw_now_playing(LAUNCHER_X0, LAUNCHER_FOOTER_Y + 12, LAUNCHER_WIDTH / 2, ALIGN_LEFT);
 
-    static const launcher_hint_t hints[] = {
+    // Each hint keeps its button beside it; A says what it does on this row.
+    static const launcher_hint_t change_hints[] = {
+        { LAUNCHER_BUTTON_OTHER, "L R", "Tabs" },
         { LAUNCHER_BUTTON_A, "A", "Change" },
         { LAUNCHER_BUTTON_B, "B", "Back" },
-        { LAUNCHER_BUTTON_OTHER, "R", "Reset" },
     };
-    launcher_draw_footer(hints, (int)(sizeof(hints) / sizeof(hints[0])));
-
-    if (settings_open) {
-        ui_components_context_menu_draw(settings_open);
+    launcher_hint_t hints[3];
+    memcpy(hints, change_hints, sizeof(hints));
+    if (row && !row->choices) {
+        hints[1].label = row->does ? row->does : "Select";
     }
+    launcher_draw_footer(hints, 3);
+
     if (show_message_reset_settings) {
         ui_components_messagebox_draw(
             "Reset all settings?\n\n"
@@ -1090,10 +1307,20 @@ void view_settings_init (menu_t *menu) {
         set_theme_context_menu.list[i].text = theme ? theme->name : "-";
     }
     ui_components_context_menu_init(&options_context_menu);
-    settings_open = NULL;
     settings_highlight_y = -1.0f;
+    settings_underline_x = -1.0f;
+    settings_slide = 0.0f;
     settings_scroll_pos = (float)settings_scroll;
     show_message_reset_settings = false;
+    // Back from a screen opened here: Settings still returns to where it was opened from.
+    if (settings_child_open) {
+        menu->launcher_return_mode = settings_came_from;
+        settings_child_open = false;
+    } else {
+        settings_came_from = menu->launcher_return_mode;
+    }
+    settings_last_press_ms = get_ticks_ms();
+    settings_defer_saves(menu->settings.launcher_enabled);
 }
 
 void view_settings_display (menu_t *menu, surface_t *display) {
@@ -1102,6 +1329,7 @@ void view_settings_display (menu_t *menu, surface_t *display) {
         launcher_settings_draw(menu, display);
         return;
     }
+    settings_defer_saves(false);    // The launcher was turned off here: the original page saves as it goes.
     process(menu);
     
     draw(menu, display);

@@ -158,7 +158,39 @@ void settings_load (settings_t *settings) {
     ini_free(ini);
 }
 
+static bool saves_deferred = false;
+static settings_t *save_waiting = NULL;
+
+static void settings_write(settings_t *settings);
+
 void settings_save (settings_t *settings) {
+    if (saves_deferred) {
+        save_waiting = settings;
+        return;
+    }
+    settings_write(settings);
+}
+
+void settings_defer_saves (bool defer) {
+    saves_deferred = defer;
+    if (!defer) {
+        settings_flush();
+    }
+}
+
+bool settings_save_waiting (void) {
+    return save_waiting != NULL;
+}
+
+void settings_flush (void) {
+    if (save_waiting) {
+        settings_t *settings = save_waiting;
+        save_waiting = NULL;
+        settings_write(settings);
+    }
+}
+
+static void settings_write (settings_t *settings) {
     ini_t *ini = ini_create();
 
     ini_set_int(ini, "menu", "schema_revision", settings->schema_revision);

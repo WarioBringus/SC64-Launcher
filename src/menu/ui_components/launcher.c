@@ -573,6 +573,26 @@ int launcher_title (int x, int y, int width, rdpq_align_t align, menu_font_style
     return text_box_font(font_for(escaped, FNT_TITLE), x, y, width, TITLE_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
+static uint8_t sized_font (launcher_text_size_t size) {
+    switch (size) {
+        case LAUNCHER_SIZE_SMALL: return FNT_SMALL;
+        case LAUNCHER_SIZE_LARGE: return FNT_LARGE;
+        case LAUNCHER_SIZE_TITLE: return FNT_TITLE;
+        default: return FNT_LAUNCHER;
+    }
+}
+
+int launcher_text_sized (launcher_text_size_t size, int x, int y, int width, int h, rdpq_align_t align, menu_font_style_t style,
+    const char *text) {
+    char escaped[256];
+    escape_text_codes(text, escaped, sizeof(escaped));
+    return text_box_font(font_for(escaped, sized_font(size)), x, y, width, h, align, VALIGN_CENTER, style, escaped);
+}
+
+int launcher_text_sized_width (launcher_text_size_t size, const char *text) {
+    return text_width_font(font_for(text, sized_font(size)), text);
+}
+
 /** @brief Horizontal inset of row i (from the top or bottom edge) of a rounded corner. */
 #define INSET_MAX_RADIUS    (24)
 
@@ -1233,6 +1253,20 @@ void launcher_clock_text (menu_t *menu, char *buffer, size_t size) {
         strftime(clock, sizeof(clock), "%I:%M %p", t);
         snprintf(buffer, size, "%s", clock[0] == '0' ? clock + 1 : clock);
     }
+}
+
+void launcher_draw_arrow (int cx, int cy, int size, bool right, color_t color) {
+    float half = size / 2.0f;
+    float depth = size * 0.55f;     /* Across: a little over half its height */
+    float back = right ? cx - depth / 2.0f : cx + depth / 2.0f;
+    float tip = right ? cx + depth / 2.0f : cx - depth / 2.0f;
+    // In real pixels: px() squeezes x in 16:9, so the arrow keeps the same look as the squeezed text.
+    float rb = widescreen ? back * 0.75f + slide_dx : back + slide_dx;
+    float rt = widescreen ? tip * 0.75f + slide_dx : tip + slide_dx;
+    float a[] = { rb, cy - half }, b[] = { rt, (float)cy }, c[] = { rb, cy + half };
+    flat_begin(color);
+    rdpq_triangle(&TRIFMT_FILL, a, b, c);
+    flat_end();
 }
 
 void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t color) {
@@ -2204,6 +2238,21 @@ static void rescan_folders (menu_t *menu, void *arg) {
     (void)arg;
     launcher_covers_reset();
     library_rescan(menu);
+}
+
+void launcher_settings_do (menu_t *menu, launcher_do_t what) {
+    settings_save(&menu->settings);
+    launcher_transition(menu->mode, (what == LAUNCHER_DO_FILE_BROWSER) ? MENU_MODE_BROWSER : MENU_MODE_LIBRARY);
+    menu->launcher_return_mode = MENU_MODE_NONE;
+    switch (what) {
+        case LAUNCHER_DO_FILE_BROWSER:
+            menu->next_mode = MENU_MODE_BROWSER;    // The file browser itself (no launcher screen to return to).
+            return;
+        case LAUNCHER_DO_RESCAN: rescan_folders(menu, NULL); break;
+        case LAUNCHER_DO_FOLDERS: pending_request = LAUNCHER_REQUEST_FOLDERS; break;
+        case LAUNCHER_DO_HIDDEN: pending_request = LAUNCHER_REQUEST_HIDDEN; break;
+    }
+    menu->next_mode = MENU_MODE_LIBRARY;
 }
 
 /* Z: things to do with the highlighted game. */

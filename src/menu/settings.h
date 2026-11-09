@@ -187,6 +187,15 @@ void settings_init (char *path);
 void settings_load (settings_t *settings);
 /** @brief The settings to save */
 void settings_save (settings_t *settings);
+/**
+ * @brief While deferred, settings_save only notes that a write is waiting (an SD card write is a visible stall, so
+ * the Settings page writes once rather than on every press). Turning it off writes what's waiting.
+ */
+void settings_defer_saves (bool defer);
+/** @brief Whether a deferred write is waiting. */
+bool settings_save_waiting (void);
+/** @brief Write a waiting deferred save now. */
+void settings_flush (void);
 /** @brief Reset settings to defaults */
 void settings_reset_to_defaults();
 
