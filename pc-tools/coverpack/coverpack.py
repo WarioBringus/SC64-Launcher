@@ -229,10 +229,13 @@ def main():
     failed = scaled = 0
     try:
         for i, cover in enumerate(covers):
-            full = os.path.join(menu_dir, cover)
-            st = os.stat(full)
             box_art = not cover.endswith('/gamepak_front.png')    # Cartridge art keeps its see-through outline
-            signature = '%s|%d|%d|%s' % (cover, st.st_size, int(st.st_mtime), tool_print) + ('|fill' if box_art else '')
+            # Every size from the hi-res front when there is one (the same box: launchbox.py --fronts), shrunk
+            # rather than enlarged from the card's small scan.
+            hi = os.path.join(args.hires, cover) if args.hires and box_art else ''
+            full = hi if hi and os.path.isfile(hi) else os.path.join(menu_dir, cover)
+            st = os.stat(full)
+            signature = '%s|%d|%d|%s' % (cover, st.st_size, int(st.st_mtime), tool_print) + ('|fill' if box_art else '') +                 ('|hi' if full == hi else '')
             signatures.append(signature)
             cached = thumb_cache.get(signature)
             if cached is None:
