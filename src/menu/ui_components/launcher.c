@@ -245,6 +245,7 @@ static void layout_build (layout_entry_t *e, const char *text) {
  * @return Logical width of the drawn text.
  */
 static int text_box_wrap_untimed (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, rdpq_textwrap_t wrap, const char *text);
+static int last_layout_lines = 1;   /* Lines of the text last drawn */
 
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     uint64_t started = get_ticks_us();
@@ -302,6 +303,7 @@ static int text_box_wrap_untimed (uint8_t font, int x, int y, int w, int h, rdpq
         perf_log_add(PERF_LAYOUTS, 1);
     }
     e->last_used = ++layout_clock;
+    last_layout_lines = (e->layout->nlines > 0) ? e->layout->nlines : 1;
     rdpq_paragraph_render(e->layout, px(x) + e->dx, y);
     return logical_width(e->advance);
 }
@@ -449,6 +451,22 @@ int launcher_small (int x, int y, int width, rdpq_align_t align, menu_font_style
     char escaped[256];
     escape_text_codes(text, escaped, sizeof(escaped));
     return text_box_font(font_for(escaped, FNT_SMALL), x, y, width, HINT_TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
+}
+
+int launcher_title_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *name) {
+    char escaped[256];
+    escape_text_codes(name, escaped, sizeof(escaped));
+    text_box_wrapped(font_for(escaped, FNT_TITLE), x, y, width, TITLE_HEIGHT * max_lines, ALIGN_LEFT, VALIGN_TOP, style, escaped);
+    return last_layout_lines * TITLE_HEIGHT;
+}
+
+int launcher_game_details_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *text) {
+    char escaped[256];
+    escape_text_codes(text, escaped, sizeof(escaped));
+    int line_h = large_text ? TEXT_HEIGHT : HINT_TEXT_HEIGHT;
+    text_box_wrapped(font_for(escaped, large_text ? FNT_LAUNCHER : FNT_SMALL), x, y, width, line_h * max_lines, ALIGN_LEFT,
+        VALIGN_TOP, style, escaped);
+    return last_layout_lines * line_h;
 }
 
 int launcher_title (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name) {

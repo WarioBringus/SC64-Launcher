@@ -240,6 +240,15 @@ int launcher_game_details(int x, int y, int width, rdpq_align_t align, menu_font
  */
 int launcher_title(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name);
 
+/**
+ * @brief A game title in the title font, left aligned, wrapped onto up to max_lines lines rather than cut short.
+ * @return Height used.
+ */
+int launcher_title_wrapped(int x, int y, int width, int max_lines, menu_font_style_t style, const char *name);
+
+/** @brief A details line, left aligned, wrapped onto up to max_lines lines rather than cut short. Returns the height. */
+int launcher_game_details_wrapped(int x, int y, int width, int max_lines, menu_font_style_t style, const char *text);
+
 /** @brief Draw a page title in the header (for screens opened from the launcher). */
 void launcher_draw_page_title(const char *title);
 

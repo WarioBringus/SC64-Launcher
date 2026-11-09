@@ -649,12 +649,11 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         int text_y = cover_y + cover_h + 14;
         if (details[0]) {
-            launcher_game_details(cover_x - 60, text_y, cover_w + 60, ALIGN_RIGHT, STL_GRAY, details);
-            text_y += 24;
+            text_y += launcher_game_details_wrapped(cover_x, text_y, cover_w, 2, STL_GRAY, details) + 2;
         }
         char folder[64];
         item_folder(f, folder, sizeof(folder));
-        launcher_name(cover_x - 60, text_y, cover_w + 60, ALIGN_RIGHT, STL_GRAY, folder);
+        launcher_name(cover_x, text_y, cover_w, ALIGN_LEFT, STL_GRAY, folder);
     }
     // The clock at the bottom left, across from the hints; the music note above the cover.
     char clock[16];
@@ -720,13 +719,11 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
 
         int tw = bottom_x - cx - 20;
         int y = cy + box_h + 18;
-        launcher_title(cx, y, tw, ALIGN_LEFT, STL_ON_FEATURE, f->title);
-        y += 34;
+        y += launcher_title_wrapped(cx, y, tw, 2, STL_ON_FEATURE, f->title) + 4;
         char details[160], line[200];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
-        launcher_game_details(cx, y, tw, ALIGN_LEFT, STL_ON_FEATURE, line);
-        y += 32;
+        y += launcher_game_details_wrapped(cx, y, tw, 2, STL_ON_FEATURE, line) + 10;
         // The A button and what it does, on a pill in the background color.
         launcher_draw_prompt(cx, y, LAUNCHER_BUTTON_A, "A", on_panel ? "Resume" : "Play", t->bg);
     }
@@ -975,18 +972,20 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
 
     // The focused game's name and where it's from, under the band.
     home_item_t *f = focused_item();
+    int text_end = y1 + 76;
     if (f) {
         int ty = y1 + 12;
-        launcher_title(LAUNCHER_X0 + 24, ty, LAUNCHER_WIDTH - 48, ALIGN_LEFT, STL_DEFAULT, f->title);
+        ty += launcher_title_wrapped(LAUNCHER_X0 + 24, ty, LAUNCHER_WIDTH - 48, 2, STL_DEFAULT, f->title) + 4;
         char line[200], details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
-        launcher_game_details(LAUNCHER_X0 + 24, ty + 38, LAUNCHER_WIDTH - 48, ALIGN_LEFT, STL_GRAY, line);
+        ty += launcher_game_details_wrapped(LAUNCHER_X0 + 24, ty, LAUNCHER_WIDTH - 48, 2, STL_GRAY, line);
+        text_end = (ty + 8 > text_end) ? ty + 8 : text_end;
     }
 
     int fav = row_of_kind(ROW_FAVORITES);
     if (fav >= 0) {
-        int ly = y1 + 80;
+        int ly = text_end;
         game_ref_t refs[MAX_ROW_ITEMS];
         int n = refs_add(refs, 0, MAX_ROW_ITEMS, fav);
         launcher_text(LAUNCHER_X0, ly, 0, ALIGN_LEFT, refs_focus(refs, n) >= 0 ? STL_DEFAULT : STL_GRAY, "Favorites");
