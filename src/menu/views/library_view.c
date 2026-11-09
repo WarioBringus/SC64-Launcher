@@ -1661,6 +1661,8 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
 
 #define OPEN_AHEAD_IDLE_MS  (1000)
 
+#define LAUNCH_AHEAD_IDLE_MS (300)  /* The focused game's hi-res cover is read once the controller rests this long */
+
 static void draw (menu_t *menu, surface_t *d) {
     other_folder_sorted_this_frame = false;
     // Cover packs not opened yet (Home opens them when idle; a button press there can leave some) are
@@ -1764,6 +1766,11 @@ static void draw (menu_t *menu, surface_t *d) {
             launcher_fill_rounded(x0, y0, x0 + w, y0 + GROUP_BADGE_HEIGHT, 16, theme_current()->accent);
             launcher_title(x0 + 8, y0 + (GROUP_BADGE_HEIGHT - 30) / 2, w - 16, ALIGN_CENTER, STL_ON_ACCENT, group_badge);
         }
+    }
+
+    // The focused game's hi-res cover, read while the controller rests, so a launch needn't wait for the card.
+    if (idle_for(LAUNCH_AHEAD_IDLE_MS) && !launcher_transition_running()) {
+        launcher_covers_read_ahead_launch();
     }
 
     launcher_menu_draw();

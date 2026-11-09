@@ -413,7 +413,12 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
 }
 
 /** @brief Work done while Home is on screen: the library's covers and the cover packs, read ahead. */
+#define LAUNCH_AHEAD_IDLE_MS (300)  /* The focused game's hi-res cover is read once the controller rests this long */
+
 static void home_background_work (menu_t *menu, int *lookups_left) {
+    if (reveal == REVEAL_SHOWN && get_ticks_ms() - home_last_input_ms >= LAUNCH_AHEAD_IDLE_MS) {
+        launcher_covers_read_ahead_launch();    // So a launch needn't wait for the card.
+    }
     // Home's own covers come first, and the library's wait until the fade-in is over: their card
     // reads would make its frames uneven.
     if (*lookups_left > 0 && reveal == REVEAL_SHOWN) {

@@ -581,6 +581,62 @@ static void even_size (surface_t *image) {
     }
 }
 
+static cover_slot_t *slot_for_image (surface_t *image) {
+    for (int i = 0; image && i < slot_count; i++) {
+        if (slots[i].image == image && slots[i].path) {
+            return &slots[i];
+        }
+    }
+    return NULL;
+}
+
+static surface_t *cover_get(const char *path, int max_w, int max_h, bool *pending, bool spine);
+
+surface_t *launcher_cover_launch_copy (surface_t *shown, int *logical_w) {
+    cover_slot_t *s = slot_for_image(shown);
+    if (!s || !launcher_is_widescreen()) {
+        return NULL;
+    }
+    // Held already (Spotlight's own cover, or read ahead): copy its pixels.
+    for (int i = 0; i < slot_count; i++) {
+        cover_slot_t *t = &slots[i];
+        if (t->path && t->wide && !t->loading && t->for_wide && t->max_w == LAUNCHER_HIRES_W && t->max_h == LAUNCHER_HIRES_H &&
+            t->path_hash == s->path_hash && strcmp(t->path, s->path) == 0) {
+            surface_t *copy = calloc(1, sizeof(surface_t));
+            if (!copy) {
+                return NULL;
+            }
+            *copy = surface_alloc(FMT_RGBA16, t->wide->width, t->wide->height);
+            if (!copy->buffer) {
+                free(copy);
+                return NULL;
+            }
+            for (int y = 0; y < t->wide->height; y++) {
+                memcpy((uint8_t *)copy->buffer + y * copy->stride, (uint8_t *)t->wide->buffer + y * t->wide->stride,
+                       (size_t)t->wide->width * 2);
+            }
+            *logical_w = t->image->width;
+            return copy;
+        }
+    }
+    // Else one read from its pack.
+    int id = -1;
+    cover_pack_t *pack = pack_lookup_kind(s->path, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, true, &id);
+    return pack ? pack_read_wide(pack, id, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, logical_w) : NULL;
+}
+
+void launcher_covers_read_ahead_launch (void) {
+    cover_slot_t *s = slot_for_image(launcher_focused_cover());
+    if (!s || !launcher_is_widescreen() || s->max_w >= LAUNCHER_HIRES_W) {
+        return;     // Nothing focused, or it is the hi-res cover already.
+    }
+    char path[256];
+    snprintf(path, sizeof(path), "%s", s->path);   // cover_get may free this slot to make room.
+    launcher_covers_background(true);
+    cover_get(path, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H, NULL, false);
+    launcher_covers_background(false);
+}
+
 surface_t *launcher_cover_larger (surface_t *shown, int max_w, int max_h) {
     for (int i = 0; i < slot_count; i++) {
         cover_slot_t *s = &slots[i];

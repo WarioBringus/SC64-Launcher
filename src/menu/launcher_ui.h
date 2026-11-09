@@ -45,6 +45,22 @@
 #define LAUNCHER_HIRES_W        (294)
 #define LAUNCHER_HIRES_H        (210)
 
+/**
+ * @brief For a launch, in 16:9: a copy of the cover's hi-res version (LAUNCHER_HIRES_W x H) as squeezed pixels, with
+ * the width they stand for in *logical_w; from memory when it is held, else read from its pack. The caller frees it.
+ * NULL when there is none.
+ */
+surface_t *launcher_cover_launch_copy(surface_t *shown, int *logical_w);
+
+/**
+ * @brief Read ahead the hi-res version of the cover focused this frame, so a launch needn't wait for the card.
+ * Call after drawing, while the controller rests.
+ */
+void launcher_covers_read_ahead_launch(void);
+
+/** @brief The cover in the focused tile this frame (NULL when none). */
+surface_t *launcher_focused_cover(void);
+
 /** @brief Whether the cover packs have this size for the screen in use (storage_prefix is the card's, "sd:/"). */
 bool launcher_covers_have_pack(const char *storage_prefix, int w, int h);
 

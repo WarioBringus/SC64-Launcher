@@ -748,6 +748,10 @@ void launcher_note_focused_cover (surface_t *image, int x, int y, int w, int h) 
     launcher_note_focused_cover_zoomed(image, x, y, w, h, 1.0f);
 }
 
+surface_t *launcher_focused_cover (void) {
+    return focused_image;
+}
+
 void launcher_clear_focused_cover (void) {
     focused_image = NULL;
 }
@@ -771,23 +775,22 @@ static void launch_cover_take (void) {
     launch_from_h = focused_h;
     launch_grow_start_ms = 0;   // The clock starts with the loading card's first frame.
 
-    // A cover already shown at least at the Large size from a 16:9 pack (Home's hi-res covers) is in memory at that
-    // size: its squeezed pixels are copied as they are (no read from the card, a 140 ms stall on A), and the loading
-    // card shows them 1:1 at that size, as sharp as on Home. Widening them first and squeezing them again for the
-    // screen had softened the cover.
-    surface_t *squeezed = launcher_cover_physical(focused_image);
-    if (squeezed && focused_image->width > LAUNCH_LARGE_W + 2 && surface_get_format(squeezed) == FMT_RGBA16) {
-        launch_cover = surface_alloc(FMT_RGBA16, squeezed->width, squeezed->height);
-        if (launch_cover.buffer) {
-            for (int y = 0; y < squeezed->height; y++) {
-                memcpy((uint8_t *)launch_cover.buffer + y * launch_cover.stride,
-                       (uint8_t *)squeezed->buffer + y * squeezed->stride, (size_t)squeezed->width * 2);
-            }
-            launch_cover_valid = true;
-            launch_cover_large = true;
-            launch_cover_logical_w = focused_image->width;
-            return;
-        }
+    // Every launch shows the hi-res cover, grown to Spotlight's size: its squeezed pixels, from memory when held
+    // (Spotlight's own, or read ahead while the controller rested) or else read from the pack, are shown 1:1 once
+    // the cover reaches that size. Widening them and squeezing them again for the screen had softened the cover.
+    int logical_w = 0;
+    surface_t *hires = launcher_cover_launch_copy(focused_image, &logical_w);
+    if (hires && logical_w > 0) {
+        launch_cover = *hires;
+        free(hires);
+        launch_cover_valid = true;
+        launch_cover_large = true;
+        launch_cover_logical_w = logical_w;
+        return;
+    }
+    if (hires) {
+        surface_free(hires);
+        free(hires);
     }
 
     // The Large cover from the pack ends the animation sharp; a thumbnail would have to be enlarged.
