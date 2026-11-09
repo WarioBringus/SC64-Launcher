@@ -401,9 +401,24 @@ int launcher_title (int x, int y, int width, rdpq_align_t align, menu_font_style
 }
 
 /** @brief Horizontal inset of row i (from the top or bottom edge) of a rounded corner. */
+#define INSET_MAX_RADIUS    (24)
+
+/** @brief How far row i of a corner of this radius sits in from the straight edge (worked out once). */
 static int corner_inset (int radius, int i) {
-    float dy = radius - i - 0.5f;
-    return (int)(radius - sqrtf((float)(radius * radius) - dy * dy) + 0.5f);
+    static int8_t table[INSET_MAX_RADIUS + 1][INSET_MAX_RADIUS];
+    static bool filled[INSET_MAX_RADIUS + 1];
+    if (radius > INSET_MAX_RADIUS) {
+        float dy = radius - i - 0.5f;
+        return (int)(radius - sqrtf((float)(radius * radius) - dy * dy) + 0.5f);
+    }
+    if (!filled[radius]) {
+        for (int r = 0; r < radius; r++) {
+            float dy = radius - r - 0.5f;
+            table[radius][r] = (int8_t)(radius - sqrtf((float)(radius * radius) - dy * dy) + 0.5f);
+        }
+        filled[radius] = true;
+    }
+    return table[radius][i];
 }
 
 /* Small shapes are drawn in 1-cycle mode with a flat color, which handles any pixel edge. */
@@ -431,10 +446,15 @@ static void fill_rounded_real (int x0, int y0, int x1, int y1, int radius, float
     }
     flat_begin(color);
     rdpq_fill_rectangle(x0, y0 + radius, x1, y1 - radius);
-    for (int i = 0; i < radius; i++) {
+    for (int i = 0; i < radius; ) {
         int inset = (int)(corner_inset(radius, i) * squeeze + 0.5f);
-        rdpq_fill_rectangle(x0 + inset, y0 + i, x1 - inset, y0 + i + 1);
-        rdpq_fill_rectangle(x0 + inset, y1 - 1 - i, x1 - inset, y1 - i);
+        int run = 1;
+        while (i + run < radius && (int)(corner_inset(radius, i + run) * squeeze + 0.5f) == inset) {
+            run++;
+        }
+        rdpq_fill_rectangle(x0 + inset, y0 + i, x1 - inset, y0 + i + run);
+        rdpq_fill_rectangle(x0 + inset, y1 - i - run, x1 - inset, y1 - i);
+        i += run;
     }
     flat_end();
     perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
@@ -466,15 +486,20 @@ static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t be
     int rx0 = px(x0);
     int rx1 = rx0 + real_cover_width(x1 - x0);
     flat_begin(behind);
-    for (int i = 0; i < radius; i++) {
+    // Rows with the same inset are painted together (four rectangles for each run of rows).
+    for (int i = 0; i < radius; ) {
         int inset = (int)(corner_inset(radius, i) * squeeze + 0.5f);
-        if (inset <= 0) {
-            continue;
+        int run = 1;
+        while (i + run < radius && (int)(corner_inset(radius, i + run) * squeeze + 0.5f) == inset) {
+            run++;
         }
-        rdpq_fill_rectangle(rx0, y0 + i, rx0 + inset, y0 + i + 1);
-        rdpq_fill_rectangle(rx1 - inset, y0 + i, rx1, y0 + i + 1);
-        rdpq_fill_rectangle(rx0, y1 - 1 - i, rx0 + inset, y1 - i);
-        rdpq_fill_rectangle(rx1 - inset, y1 - 1 - i, rx1, y1 - i);
+        if (inset > 0) {
+            rdpq_fill_rectangle(rx0, y0 + i, rx0 + inset, y0 + i + run);
+            rdpq_fill_rectangle(rx1 - inset, y0 + i, rx1, y0 + i + run);
+            rdpq_fill_rectangle(rx0, y1 - i - run, rx0 + inset, y1 - i);
+            rdpq_fill_rectangle(rx1 - inset, y1 - i - run, rx1, y1 - i);
+        }
+        i += run;
     }
     flat_end();
     perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
@@ -995,11 +1020,23 @@ static void outline_rounded_real (int x0, int y0, int x1, int y1, int radius, in
     uint64_t perf_started = get_ticks_us();
     int inner_radius = radius - thickness;
     int t = (int)(thickness * squeeze + 0.5f);
+    // Rows within the corners differ; between them both sides are straight and drawn in one piece each.
+    int corner = (radius > thickness) ? radius : thickness;
+    if (corner * 2 > y1 - y0) {
+        corner = (y1 - y0) / 2;
+    }
     flat_begin(color);
     for (int y = y0; y < y1; y++) {
         int from_top = y - y0;
         int from_bottom = y1 - 1 - y;
         int edge = from_top < from_bottom ? from_top : from_bottom;
+        if (edge >= corner) {
+            int straight_end = y1 - corner;
+            rdpq_fill_rectangle(x0, y, x0 + t, straight_end);
+            rdpq_fill_rectangle(x1 - t, y, x1, straight_end);
+            y = straight_end - 1;
+            continue;
+        }
         int outer = (edge < radius) ? (int)(corner_inset(radius, edge) * squeeze + 0.5f) : 0;
         if (edge < thickness) {
             rdpq_fill_rectangle(x0 + outer, y, x1 - outer, y + 1);
