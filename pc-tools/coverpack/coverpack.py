@@ -170,6 +170,18 @@ class ThumbCache:
         os.makedirs(self.folder, exist_ok=True)
         json.dump(self.index, open(self.index_path, 'w', encoding='utf-8'))
 
+    def prune(self, keep):
+        """Forget and delete every entry but these signatures (a new tool or box list leaves the old ones unused)."""
+        self.index = {s: n for s, n in self.index.items() if s in keep}
+        names = set(self.index.values())
+        removed = 0
+        for f in os.listdir(self.folder):
+            if f.endswith('.bin') and f not in names:
+                os.remove(os.path.join(self.folder, f))
+                removed += 1
+        self.save()
+        return removed
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -350,6 +362,10 @@ def main():
     finally:
         shutil.rmtree(work, ignore_errors=True)
     thumb_cache.save()
+    if failed == 0:
+        removed = thumb_cache.prune(set(signatures + spine_signatures + hires_signatures))
+        if removed:
+            print('Thumbnail cache: %d unused entries removed' % removed)
     print('%d covers scaled, %d reused from the cache' % (scaled, len(covers) - scaled - failed))
     print('%d large covers from hi-res art, %d enlarged from the card\'s' % (from_hires, len(hires_signatures) - from_hires))
     print('%d spines from the box top, %d from spine scans, %d made from a slice of the front' %
