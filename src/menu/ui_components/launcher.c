@@ -1362,6 +1362,22 @@ void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
 }
 
 /**
+ * @brief Draw a cover resized (bilinear) to exactly real_w x h framebuffer pixels at real x rx. The filter blends
+ * each pixel with the next texel, so the last column and row would read past the image (a ragged line along the
+ * right edge): the blit stops at the last texel, and the size is set exactly so the corner masks line up.
+ */
+static void blit_filtered (surface_t *source, int rx, int y, int real_w, int h) {
+    int sw = (source->width > 1) ? source->width - 1 : source->width;
+    int sh = (source->height > 1) ? source->height - 1 : source->height;
+    rdpq_tex_blit(source, rx, y, &(rdpq_blitparms_t) {
+        .width = sw,
+        .height = sh,
+        .scale_x = (float)real_w / sw,
+        .scale_y = (float)h / sh,
+    });
+}
+
+/**
  * @brief Draw a cover at logical (x, y) at its own size: copied 1:1 in 4:3, squeezed to 3/4 width in 16:9.
  */
 static void blit_cover (surface_t *image, int x, int y) {
@@ -1375,7 +1391,7 @@ static void blit_cover (surface_t *image, int x, int y) {
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
         rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
-        rdpq_tex_blit(image, px(x), y, &(rdpq_blitparms_t) { .scale_x = WIDE_SQUEEZE, .scale_y = 1.0f });
+        blit_filtered(image, px(x), y, real_cover_width(image->width), image->height);
     } else {
         rdpq_set_mode_copy(true);
         rdpq_tex_blit(image, px(x), y, NULL);
@@ -1395,10 +1411,7 @@ static void blit_cover_resized (surface_t *image, int x, int y, int w, int h) {
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
         rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
-        rdpq_tex_blit(source, px(x), y, &(rdpq_blitparms_t) {
-            .scale_x = (float)real_w / source->width,
-            .scale_y = (float)h / source->height,
-        });
+        blit_filtered(source, px(x), y, real_w, h);
     rdpq_mode_pop();
 }
 
@@ -1469,12 +1482,10 @@ void launcher_draw_cover_scaled (surface_t *image, int x, int y, int w, int h, c
         rdpq_set_mode_standard();
         rdpq_mode_filter(FILTER_BILINEAR);
         rdpq_mode_alphacompare(COVER_ALPHA_THRESHOLD);
-        // A cover from a 16:9 pack is squeezed already: resize it as is.
+        // A cover from a 16:9 pack is squeezed already: resize it as is. Its width is the one the corner
+        // masks below use, so they meet its edges.
         surface_t *squeezed = widescreen ? launcher_cover_physical(image) : NULL;
-        rdpq_tex_blit(squeezed ? squeezed : image, px(dx), dy, &(rdpq_blitparms_t) {
-            .scale_x = scale * ((widescreen && !squeezed) ? WIDE_SQUEEZE : 1.0f),
-            .scale_y = scale,
-        });
+        blit_filtered(squeezed ? squeezed : image, px(dx), dy, real_cover_width(dw), dh);
     rdpq_mode_pop();
     mask_corners(dx, dy, dx + dw, dy + dh, (int)(TILE_RADIUS * scale + 0.5f), behind);
     perf_log_add(PERF_COVERS, (uint32_t)(get_ticks_us() - started));
