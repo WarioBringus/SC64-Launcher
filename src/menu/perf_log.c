@@ -191,6 +191,22 @@ void perf_log_read (uint32_t bytes, uint32_t us) {
     read_total_us += us;
 }
 
+#define MAX_EVENTS          (40)
+
+void perf_log_event (const char *fmt, ...) {
+    static int events = 0;
+    if (!enabled || events >= MAX_EVENTS) {
+        return;
+    }
+    events++;
+    char line[200];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+    add_line("# %.1f s: %s%s\n", (get_ticks_us() - start_us) / 1e6, line, events == MAX_EVENTS ? " (no more events noted)" : "");
+}
+
 void perf_log_leave (void) {
     if (!enabled) {
         return;

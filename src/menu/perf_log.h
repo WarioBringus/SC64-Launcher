@@ -38,6 +38,9 @@ void perf_log_add(perf_part_t part, uint32_t us);
 /** @brief A cover or spine read from the SD card. */
 void perf_log_read(uint32_t bytes, uint32_t us);
 
+/** @brief Note something unusual on its own line (at most a few dozen per run). */
+void perf_log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
 /** @brief Leaving the launcher (e.g. to start a game): write what's kept. */
 void perf_log_leave(void);
 

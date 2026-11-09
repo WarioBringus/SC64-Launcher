@@ -5,6 +5,7 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 
 #include "launcher_ui.h"
 #include "library.h"
+#include "perf_log.h"
 #include "sound.h"
 #include "utils/fs.h"
 
@@ -508,6 +510,7 @@ static void index_load (void) {
     FILE *f = fopen(path_get(path), "rb");
     path_free(path);
     if (!f) {
+        perf_log_event("cover index did not open (errno %d)", errno);
         return;
     }
     setvbuf(f, NULL, _IONBF, 0);    // Read whole in one go, not 1 KB at a time.

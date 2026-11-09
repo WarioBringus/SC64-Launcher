@@ -4,6 +4,7 @@
  * @ingroup ui_components
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,7 @@ typedef struct {
     int h;
     bool wide;                  /**< Squeezed for 16:9 (covers_WxH_w.pak) */
     bool tried;
+    uint32_t tried_frame;       /**< When it was last opened; one that failed is tried again later */
     FILE *f;
     uint32_t count;
     uint32_t *offsets;
@@ -80,7 +82,16 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     cover_pack_t *free_entry = NULL;
     for (int i = 0; i < MAX_PACKS; i++) {
         if (packs[i].tried && packs[i].w == w && packs[i].h == h && packs[i].wide == wide) {
-            return packs[i].f ? &packs[i] : NULL;
+            if (packs[i].f) {
+                return &packs[i];
+            }
+            // It didn't open (once a card read failed at startup and covers fell back to slow PNG
+            // decoding for good): try again now and then.
+            if (frame - packs[i].tried_frame < FAILED_RETRY_FRAMES) {
+                return NULL;
+            }
+            free_entry = &packs[i];
+            break;
         }
         if (!packs[i].tried && !free_entry) {
             free_entry = &packs[i];
@@ -93,6 +104,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     cover_pack_t *p = free_entry;
     memset(p, 0, sizeof(*p));
     p->tried = true;
+    p->tried_frame = frame;
     p->w = w;
     p->h = h;
     p->wide = wide;
@@ -105,6 +117,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     snprintf(file, sizeof(file), PACK_FILE_FORMAT, (int)(colon - path + 1), path, w, h, wide ? "_w" : "");
     p->f = fopen(file, "rb");
     if (!p->f) {
+        perf_log_event("cover pack %dx%d%s did not open (errno %d)", w, h, wide ? "_w" : "", errno);
         return NULL;
     }
     // Unbuffered: a cover is then one large read straight into its surface, rather than many small
@@ -112,6 +125,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     setvbuf(p->f, NULL, _IONBF, 0);
     uint8_t head[8];
     if (fread(head, 1, sizeof(head), p->f) != sizeof(head) || memcmp(head, "CVP1", 4) != 0) {
+        perf_log_event("cover pack %dx%d%s: bad header", w, h, wide ? "_w" : "");
         fclose(p->f);
         p->f = NULL;
         return NULL;
@@ -120,6 +134,7 @@ static cover_pack_t *pack_for (const char *path, int w, int h, bool wide) {
     p->offsets = malloc(p->count * sizeof(uint32_t));
     uint8_t *raw = malloc(p->count * 4);
     if (!p->offsets || !raw || fread(raw, 4, p->count, p->f) != p->count) {
+        perf_log_event("cover pack %dx%d%s: table unreadable (errno %d)", w, h, wide ? "_w" : "", errno);
         free(raw);
         free(p->offsets);
         p->offsets = NULL;
@@ -562,6 +577,7 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
 
     victim->loading = true;
 
+    perf_log_event("no pack cover, decoding the PNG: %s (%dx%d)", victim->path, max_w, max_h);
     png_err_t err = png_decoder_start(victim->path, max_w, max_h, decode_done, victim);
     if (err == PNG_OK) {
         decoding = true;
