@@ -495,6 +495,80 @@ void launcher_fill_rounded (int x0, int y0, int x1, int y1, int radius, color_t 
     fill_rounded_real(px(x0), y0, px(x1), y1, radius, widescreen ? WIDE_SQUEEZE : 1.0f, color);
 }
 
+/*
+ * Smooth curves: launcher_fill_rounded builds corners from rows of pixels with hard edges, which shows as steps on
+ * small circles (button icons, pills), more so in 16:9 where the TV widens every pixel. These corners are quarters of
+ * an anti-aliased circle texture instead, tinted to the color and blended over what's behind.
+ */
+#define SMOOTH_TEX          (32)
+
+static surface_t smooth_circle;
+static bool smooth_ready = false;
+
+static void smooth_init (void) {
+    if (smooth_ready) {
+        return;
+    }
+    smooth_circle = surface_alloc(FMT_IA8, SMOOTH_TEX, SMOOTH_TEX);
+    uint8_t *pixels = smooth_circle.buffer;
+    float r = SMOOTH_TEX / 2.0f;
+    for (int y = 0; y < SMOOTH_TEX; y++) {
+        for (int x = 0; x < SMOOTH_TEX; x++) {
+            int inside = 0;     // Coverage from 4x4 samples in the pixel.
+            for (int sy = 0; sy < 4; sy++) {
+                for (int sx = 0; sx < 4; sx++) {
+                    float fx = x + (sx + 0.5f) / 4.0f - r, fy = y + (sy + 0.5f) / 4.0f - r;
+                    inside += (fx * fx + fy * fy <= r * r);
+                }
+            }
+            pixels[y * smooth_circle.stride + x] = 0xF0 | (uint8_t)((inside * 15 + 8) / 16);
+        }
+    }
+    data_cache_hit_writeback(smooth_circle.buffer, smooth_circle.stride * SMOOTH_TEX);
+    smooth_ready = true;
+}
+
+/** @brief A rounded rectangle (logical coordinates) whose corners are anti-aliased. */
+static void fill_smooth_rounded (int x0, int y0, int x1, int y1, int radius, color_t color) {
+    uint64_t perf_started = get_ticks_us();
+    smooth_init();
+    if (radius * 2 > y1 - y0) {
+        radius = (y1 - y0) / 2;
+    }
+    int rx0 = px(x0), rx1 = px(x1);
+    int ry = radius;
+    int rx = widescreen ? (int)(radius * WIDE_SQUEEZE + 0.5f) : radius;
+    if (rx * 2 > rx1 - rx0) {
+        rx = (rx1 - rx0) / 2;
+    }
+    flat_begin(color);
+    if (y1 - y0 > 2 * ry) {
+        rdpq_fill_rectangle(rx0, y0 + ry, rx1, y1 - ry);
+    }
+    if (rx1 - rx0 > 2 * rx) {
+        rdpq_fill_rectangle(rx0 + rx, y0, rx1 - rx, y0 + ry);
+        rdpq_fill_rectangle(rx0 + rx, y1 - ry, rx1 - rx, y1);
+    }
+    flat_end();
+    if (rx <= 0 || ry <= 0) {
+        return;
+    }
+    rdpq_mode_push();
+    rdpq_set_mode_standard();
+    rdpq_mode_combiner(RDPQ_COMBINER1((0, 0, 0, PRIM), (TEX0, 0, PRIM, 0)));
+    rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
+    rdpq_mode_filter(FILTER_BILINEAR);
+    rdpq_set_prim_color(color);
+    int half = SMOOTH_TEX / 2;
+    float sx = (float)rx / half, sy = (float)ry / half;
+    rdpq_tex_blit(&smooth_circle, rx0, y0, &(rdpq_blitparms_t) { .s0 = 0, .t0 = 0, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
+    rdpq_tex_blit(&smooth_circle, rx1 - rx, y0, &(rdpq_blitparms_t) { .s0 = half, .t0 = 0, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
+    rdpq_tex_blit(&smooth_circle, rx0, y1 - ry, &(rdpq_blitparms_t) { .s0 = 0, .t0 = half, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
+    rdpq_tex_blit(&smooth_circle, rx1 - rx, y1 - ry, &(rdpq_blitparms_t) { .s0 = half, .t0 = half, .width = half, .height = half, .scale_x = sx, .scale_y = sy });
+    rdpq_mode_pop();
+    perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
+}
+
 void launcher_fill_rounded_px (int x0, int y0, int x1, int y1, int radius, color_t color) {
     fill_rounded_real(x0, y0, x1, y1, radius, 1.0f, color);
 }
@@ -1089,7 +1163,7 @@ int launcher_draw_pill (int x, int y, const char *name, bool active) {
     escape_text_codes(name, escaped, sizeof(escaped));
     // '$' and '^' are rare in folder names; measuring the original keeps the width cached.
     int w = text_width(strpbrk(name, "$^") ? escaped : name) + PILL_PADDING * 2;
-    launcher_fill_rounded(x, y, x + w, y + PILL_HEIGHT, PILL_HEIGHT / 2, active ? theme_current()->accent : theme_current()->panel);
+    fill_smooth_rounded(x, y, x + w, y + PILL_HEIGHT, PILL_HEIGHT / 2, active ? theme_current()->accent : theme_current()->panel);
     text_box(x, y, w, PILL_HEIGHT, ALIGN_CENTER, VALIGN_CENTER, active ? STL_ON_ACCENT : STL_GRAY, escaped);
     return w;
 }
@@ -1127,10 +1201,10 @@ int launcher_draw_prompt (int x, int y, launcher_button_t kind, const char *butt
     }
     int label_w = text_width(label) + 2;
     int w = PROMPT_PAD + PROMPT_ICON + PROMPT_PAD + label_w + PROMPT_PAD + 4;
-    launcher_fill_rounded(x, y, x + w, y + PROMPT_H, PROMPT_H / 2, pill);
+    fill_smooth_rounded(x, y, x + w, y + PROMPT_H, PROMPT_H / 2, pill);
     // The button as the hints draw it: a colored circle with its letter.
     int ix = x + PROMPT_PAD, iy = y + (PROMPT_H - PROMPT_ICON) / 2;
-    launcher_fill_rounded(ix, iy, ix + PROMPT_ICON, iy + PROMPT_ICON, PROMPT_ICON / 2, color);
+    fill_smooth_rounded(ix, iy, ix + PROMPT_ICON, iy + PROMPT_ICON, PROMPT_ICON / 2, color);
     text_box(ix, iy, PROMPT_ICON, PROMPT_ICON, ALIGN_CENTER, VALIGN_CENTER, STL_ON_BUTTON, button);
     text_box(ix + PROMPT_ICON + PROMPT_PAD, y, 0, PROMPT_H, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, label);
     return w;
@@ -1183,7 +1257,7 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             case LAUNCHER_BUTTON_C_LEFT_RIGHT: color = BUTTON_C_COLOR; break;
             default: color = theme_current()->text_muted; break;
         }
-        launcher_fill_rounded(x, y, x + button_w[i], y + HINT_BUTTON_SIZE, HINT_BUTTON_SIZE / 2, color);
+        fill_smooth_rounded(x, y, x + button_w[i], y + HINT_BUTTON_SIZE, HINT_BUTTON_SIZE / 2, color);
         if (is_c_button(hints[i].kind)) {
             // "C" on the left, a pair of arrows drawn on the right.
             int letter_w = button_w[i] - C_ARROWS_WIDTH;
