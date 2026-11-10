@@ -1951,6 +1951,17 @@ void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {
     focus_ring(x, y, x + w, y + h, TILE_RADIUS, true);
 }
 
+void launcher_draw_focus_ring_cover (int x, int y, int w, int h, surface_t *image) {
+    // A cover drawn edge to edge can be a pixel or two short of its tile (packs keep even sizes: 86x60 in an 87x61
+    // grid tile): the ring hugs the cover itself, as launcher_draw_tile places it, or the background shows through.
+    if (image && image->width >= w - 2 && image->height >= h - 2 && image->width <= w && image->height <= h) {
+        int ix = x + (w - image->width) / 2, iy = y + (h - image->height) / 2;
+        focus_ring(ix, iy, ix + image->width, iy + image->height, TILE_RADIUS, true);
+        return;
+    }
+    launcher_draw_focus_ring_tile(x, y, w, h);
+}
+
 #define FAST_SCROLL_GAP_MS  (250)   /* Two moves this close together count as fast scrolling... */
 #define FAST_SCROLL_HOLD_MS (140)   /* ...until the selection has rested this long */
 

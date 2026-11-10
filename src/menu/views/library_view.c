@@ -1210,6 +1210,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
     int sel_tx, sel_tw;
     int base_extra = highlight_only ? TITLE_EXTRA_HIGHLIGHT_ONLY : (g.gap / 2) - 1;
     launcher_title_box(c->games[sel].title, g.x0 + (sel % g.cols) * (g.w + g.gap) + g.w / 2, g.w + base_extra * 2, &sel_tx, &sel_tw);
+    surface_t *sel_image = NULL;
     for (int i = draw_first; i < draw_last; i++) {
         int col = i % g.cols;
         int x = g.x0 + col * (g.w + g.gap);
@@ -1221,6 +1222,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
         launcher_draw_tile(x, tile_y, g.w, g.h, image, pending, c->games[i].title, false, theme_current()->bg);
         if (selected) {
             launcher_note_focused_cover(image, x, tile_y, g.w, g.h);
+            sel_image = image;
         }
         if (game_is_favorite(menu, &c->games[i])) {
             launcher_draw_favorite_star(x, tile_y, g.w);
@@ -1251,7 +1253,7 @@ static void draw_grid (menu_t *menu, library_category_t *c, int sel) {
 
     // The ring glides to where the selected tile is headed.
     int sel_y = LAUNCHER_CONTENT_Y + (sel / g.cols - top_row) * g.row_h - lift;
-    launcher_draw_focus_ring_tile(g.x0 + (sel % g.cols) * (g.w + g.gap), sel_y, g.w, g.h);
+    launcher_draw_focus_ring_cover(g.x0 + (sel % g.cols) * (g.w + g.gap), sel_y, g.w, g.h, sel_image);
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
     // Preload the row below so scrolling down shows covers straight away. While the screen is
