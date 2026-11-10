@@ -53,7 +53,6 @@
 static launcher_hint_t hints_library[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },     /* "Details" without Quick launch (set as it's drawn) */
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
@@ -594,7 +593,7 @@ static void hidden_draw (menu_t *menu) {
     page_begin("Hidden games");
     int count = library_hidden_count(menu);
     if (count == 0) {
-        page_note("No hidden games. Z on a game in the Library hides it.");
+        page_note("No hidden games. To hide one, press Start on it and choose Hide game.");
         return;
     }
     for (int r = 0; r < PAGE_ROWS; r++) {
@@ -830,14 +829,9 @@ static void process (menu_t *menu) {
         return;
     }
 
-    if (menu->actions.settings || menu->actions.trigger_z) {
+    if (menu->actions.settings) {
         int sel = *current_selection();
-        path_t *rom = (current && sel < current->shown) ? library_game_path(&current->games[sel]) : NULL;
-        if (menu->actions.settings) {
-            launcher_menu_show(menu, rom);
-        } else {
-            launcher_game_menu_show(menu, rom);
-        }
+        launcher_menu_show(menu, (current && sel < current->shown) ? library_game_path(&current->games[sel]) : NULL);
         return;
     }
     // R steps through the library's views: Grid, Carousel, Shelf.

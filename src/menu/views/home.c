@@ -39,7 +39,6 @@
 
 static launcher_hint_t hints_home[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },     /* "Details" without Quick launch (set as it's drawn) */
-    { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
@@ -302,8 +301,6 @@ static void process (menu_t *menu) {
         sound_play_effect(SFX_TICK);
     } else if (menu->actions.enter && row->count > 0) {
         launch(menu, &row->items[row->selected]);
-    } else if (menu->actions.trigger_z && row->count > 0) {
-        launcher_game_menu_show(menu, path_clone(item_path(&row->items[row->selected])));
     }
 }
 
@@ -1137,7 +1134,7 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
                 row_label(rows[refs[k].row].kind));
             ui_components_box_draw(launcher_px(list_x + w + 10), hy + 10, launcher_px(list_x + list_w), hy + 11, t->line);
         }
-        if (fabsf(d) > 4.6f) {
+        if (fabsf(d) > 3.6f) {
             continue;
         }
         home_item_t *h = &rows[refs[k].row].items[refs[k].index];
@@ -1234,8 +1231,6 @@ static void process_styled (menu_t *menu, int style) {
     home_item_t *f = focused_item();
     if (menu->actions.enter && f) {
         launch(menu, f);
-    } else if (menu->actions.trigger_z && f) {
-        launcher_game_menu_show(menu, path_clone(item_path(f)));
     }
 }
 

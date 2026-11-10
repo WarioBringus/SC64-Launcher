@@ -33,7 +33,6 @@
 
 static const launcher_hint_t hints_about[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Options" },
     { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Scroll" },
     { LAUNCHER_BUTTON_B, "B", "Back" },
 };
@@ -261,8 +260,6 @@ static void process (menu_t *menu) {
     }
     if (menu->actions.enter) {
         play(menu, menu->settings.launcher_quick_launch);
-    } else if (menu->actions.trigger_z) {
-        play(menu, false);      // Z opens a game's options, as in the lists.
     } else if (menu->actions.go_up) {
         scroll -= SCROLL_STEP * (menu->actions.go_fast ? 4 : 1);
     } else if (menu->actions.go_down) {

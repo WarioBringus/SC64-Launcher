@@ -55,7 +55,7 @@
 #define BUTTON_START_COLOR      RGBA32(0xE0, 0x30, 0x2A, 0xFF)
 #define BUTTON_C_COLOR          RGBA32(0xF5, 0xC5, 0x18, 0xFF)
 #define BUTTON_C_INK            RGBA32(0x2A, 0x22, 0x00, 0xFF)
-#define C_ARROWS_WIDTH          (9)     /* Room for the drawn arrows beside the "C" */
+#define C_ARROWS_WIDTH          (15)    /* Room for the drawn arrows beside the "C" */
 
 static bool widescreen = false;
 
@@ -399,9 +399,17 @@ static void text_centered_ink (uint8_t font, int x, int y, int w, int h, menu_fo
         text_box_font(font, left, y, 0, h, ALIGN_LEFT, VALIGN_CENTER, style, text);
         return;
     }
-    // The ink spans y0..y1 (exclusive), so its middle is (top + bottom - 1) / 2 from the baseline.
+    // The ink spans y0..y1 (exclusive), so its middle is (top + bottom - 1) / 2 from the baseline. A box with no
+    // height puts the first baseline at its top, so it is drawn (and its layout kept) like any other text.
     float baseline = (float)y + (float)(h - 1) / 2.0f - (float)(top + bottom - 1) / 2.0f;
-    rdpq_text_print(&(rdpq_textparms_t) { .style_id = style }, real_font, (float)pen, floorf(baseline + 0.5f), text);
+    int left = widescreen ? ((pen - slide_dx) * 4) / 3 : pen - slide_dx;
+    while (px(left) < pen) {
+        left++;
+    }
+    while (px(left) > pen) {
+        left--;
+    }
+    text_box_font(font, left, (int)floorf(baseline + 0.5f), 0, 0, ALIGN_LEFT, VALIGN_TOP, style, text);
 }
 
 static int text_width (const char *text) {
@@ -1760,8 +1768,9 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
                 draw_arrow(ax, cy - 3, 0, -1);
                 draw_arrow(ax, cy + 3, 0, 1);
             } else {
-                draw_arrow(ax - 2, cy, -1, 0);
-                draw_arrow(ax + 3, cy, 1, 0);
+                // Two arrow heads apart, not touching tips.
+                launcher_draw_arrow(ax + 3, cy, 8, false, BUTTON_C_INK);
+                launcher_draw_arrow(ax + 11, cy, 8, true, BUTTON_C_INK);
             }
         } else if (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) {
             // Two arrow heads, each centred on its half of the pill.
@@ -2601,16 +2610,6 @@ static bool quick_has_game (void) {
     return selected_rom != NULL;
 }
 
-/** @brief The first This game row, or -1. */
-static int quick_game_row (void) {
-    for (int r = 0; r < quick_row_count; r++) {
-        if (quick_rows[r].kind == QR_GAME_FAVORITE) {
-            return r;
-        }
-    }
-    return -1;
-}
-
 static void quick_build_rows (void) {
     int n = 0;
     quick_rows[n++] = (quick_row_t) { QR_BUTTONS, NULL };
@@ -3149,15 +3148,6 @@ void launcher_menu_show (menu_t *menu, path_t *rom) {
     sound_play_effect(SFX_POP);
 }
 
-void launcher_game_menu_show (menu_t *menu, path_t *rom) {
-    // Z: the Quick menu, on its This game section.
-    if (!rom) {
-        return;
-    }
-    launcher_menu_show(menu, rom);
-    int r = quick_game_row();
-    quick_row = (r >= 0) ? r : 0;
-}
 
 bool launcher_menu_process (menu_t *menu) {
     quick_owner = menu;
