@@ -381,6 +381,9 @@ typedef enum {
 /** @brief Use this header style for the next launcher_draw_header only. */
 void launcher_set_header_style(launcher_header_style_t style);
 
+/** @brief This frame's Home / Library tabs sit on the theme's feature colour (Spotlight): drawn in its text colour. */
+void launcher_set_header_on_feature(bool on);
+
 /** @brief Height of the bar LAUNCHER_HEADER_BAR draws. */
 #define LAUNCHER_HEADER_BAR_H   (60)
 

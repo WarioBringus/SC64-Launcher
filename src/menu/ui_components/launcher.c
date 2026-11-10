@@ -1413,6 +1413,13 @@ static void draw_header_bar (menu_t *menu, launcher_tab_t active) {
     }
 }
 
+static bool header_on_feature = false;
+static float tab_line_x = -1.0f, tab_line_w = 0.0f;
+
+void launcher_set_header_on_feature (bool on) {
+    header_on_feature = on;
+}
+
 static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     launcher_draw_background();
     launcher_header_style_t style = header_style;
@@ -1433,15 +1440,29 @@ static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     }
 
     static const char *tabs[] = { "Home", "Library" };
-    int x = LAUNCHER_X0;
+    bool on_feature = header_on_feature;
+    header_on_feature = false;      // Only for this frame's header.
+    int x = LAUNCHER_X0, line_x = x, line_w = 0;
     for (int i = 0; i < 2; i++) {
         bool on = (i == (int)active);
-        int w = launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, on ? STL_DEFAULT : STL_GRAY, "%s", tabs[i]);
+        menu_font_style_t style = on_feature ? STL_ON_FEATURE : (on ? STL_DEFAULT : STL_GRAY);
+        int w = launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, style, "%s", tabs[i]);
         if (on) {
-            launcher_fill_rounded(x, HEADER_UNDERLINE_Y, x + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
+            line_x = x;
+            line_w = w;
         }
         x += w + HEADER_TAB_SPACING;
     }
+    // The underline glides from Home to Library and back as the screens change.
+    if (tab_line_x < 0.0f) {
+        tab_line_x = (float)line_x;
+        tab_line_w = (float)line_w;
+    }
+    tab_line_x = launcher_ease(tab_line_x, (float)line_x);
+    tab_line_w = launcher_ease(tab_line_w, (float)line_w);
+    int lx = (int)lroundf(tab_line_x);
+    launcher_fill_rounded(lx, HEADER_UNDERLINE_Y, lx + (int)lroundf(tab_line_w), HEADER_UNDERLINE_Y + 3, 1,
+        on_feature ? theme_current()->on_feature : theme_current()->accent2);
 
     if (menu->current_time >= 0) {
         char clock[16];

@@ -607,7 +607,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
     int top_x = LAUNCHER_SCREEN_W * SPOT_TOP_SHARE / 100;
     int bottom_x = LAUNCHER_SCREEN_W * SPOT_BOTTOM_SHARE / 100;
-    launcher_fill_slanted(top_x, bottom_x, 0, display_get_height(), t->feature);
+    (void)t;    // The panel is drawn with the background (set_style_chrome), under the header.
     int resume_row = row_of_kind(ROW_RESUME);
     bool on_panel = (resume_row >= 0 && is_focus(resume_row, 0));
 
@@ -1003,12 +1003,23 @@ static bool process_cartridge (menu_t *menu) {
 #define TYPE_LANE_H         (80)
 #define TYPE_LANE_BAR       (8)
 #define TYPE_COVER_ZOOM     (1.4f)  /* The hi-res pack's own size */
-#define TYPE_TOP            (44)    /* The list's area, between the section label and the hints */
+#define TYPE_TOP            (60)    /* The list's area, under the header and above the hints */
+#define TYPE_SECTION_GAP    (0.9f)  /* Extra room before each list, in names */
+#define TYPE_HEADING_AT     (0.75f) /* Its heading, this far before the list's first name */
 #define TYPE_BOTTOM         (408)
 #define TYPE_LANE_TINT      (40)
 #define TYPE_GLIDE          (0.16f) /* Of the way to the focused game each frame: a slower glide than the default */
 
-static float type_pos = 0.0f;       /* Drawn place in the list, gliding toward the focused game */
+static float type_pos = 0.0f;       /* Drawn place in the list (with the room before each list), gliding */
+
+/** @brief A game's place in the list counting the room before each list (the lists are in order). */
+static float type_place (const game_ref_t *refs, int k) {
+    int lists = 0;
+    for (int r = 0; r <= refs[k].row; r++) {
+        lists += (rows[r].count > 0);
+    }
+    return (float)k + TYPE_SECTION_GAP * (float)lists;
+}
 static eased_color_t type_lane = { .set = false };
 static eased_color_t type_bar = { .set = false };
 
@@ -1030,11 +1041,12 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     if (sel < 0) {
         return;
     }
+    float target = type_place(refs, sel);
     if (motion_snap) {
-        type_pos = (float)sel;
+        type_pos = target;
     } else {
-        type_pos += ((float)sel - type_pos) * TYPE_GLIDE;
-        type_pos = (fabsf((float)sel - type_pos) < 0.005f) ? (float)sel : type_pos;
+        type_pos += (target - type_pos) * TYPE_GLIDE;
+        type_pos = (fabsf(target - type_pos) < 0.005f) ? target : type_pos;
     }
 
     int cover_w = (int)(LAUNCHER_SHOWCASE_W * TYPE_COVER_ZOOM);
@@ -1051,13 +1063,19 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     ui_components_box_draw(0, ly0, display_get_width(), ly0 + TYPE_LANE_H, lane);
     ui_components_box_draw(0, ly0, launcher_px(TYPE_LANE_BAR), ly0 + TYPE_LANE_H, bar);
 
-    launcher_text_sized(LAUNCHER_SIZE_BODY, list_x, 16, list_w, 24, ALIGN_LEFT, STL_ACCENT, row_label(rows[row_selected].kind));
-
     bool hires = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H);
     int clip_x1 = launcher_px(cover_x - 10);
     rdpq_set_scissor(0, TYPE_TOP, clip_x1 < 1 ? 1 : clip_x1, TYPE_BOTTOM);
     for (int k = 0; k < n; k++) {
-        float d = (float)k - type_pos;
+        float d = type_place(refs, k) - type_pos;
+        if (refs[k].index == 0 && fabsf(d - TYPE_HEADING_AT) < 4.6f) {
+            // Where a list starts: its name and a line, the focused game's list in the accent colour.
+            int hy = TYPE_CENTER_Y + (int)lroundf(type_offset(d - TYPE_HEADING_AT)) - 10;
+            bool here = (refs[k].row == row_selected);
+            int w = launcher_text_sized(LAUNCHER_SIZE_BODY, list_x, hy, 0, 20, ALIGN_LEFT, here ? STL_ACCENT : STL_GRAY,
+                row_label(rows[refs[k].row].kind));
+            ui_components_box_draw(launcher_px(list_x + w + 10), hy + 10, launcher_px(list_x + list_w), hy + 11, t->line);
+        }
         if (fabsf(d) > 4.6f) {
             continue;
         }
@@ -1088,8 +1106,8 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     if (f) {
         char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
-        if (details[0] && fabsf((float)sel - type_pos) < 0.5f) {
-            int dy = (int)lroundf(type_offset((float)sel - type_pos));
+        if (details[0] && fabsf(target - type_pos) < 0.5f) {
+            int dy = (int)lroundf(type_offset(target - type_pos));
             launcher_game_details_wrapped(list_x, TYPE_CENTER_Y + 12 + dy, list_w, 1, STL_DEFAULT, details);
         }
         bool pending;
@@ -1104,11 +1122,6 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         snprintf(where, sizeof(where), "%s   %d of %d", folder, sel + 1, n);
         launcher_name(cover_x, cover_y + cover_h + 10, cover_w, ALIGN_RIGHT, STL_GRAY, where);
     }
-    // The clock at the bottom left, across from the hints; the music note at the top right.
-    char clock[16];
-    launcher_clock_text(menu, clock, sizeof(clock));
-    launcher_small(LAUNCHER_X0 + 8, LAUNCHER_FOOTER_Y + 12, 200, ALIGN_LEFT, STL_GRAY, clock);
-    launcher_draw_notes(cover_x - 200, 18, cover_w + 206, ALIGN_RIGHT);
 }
 
 /** @brief Minimal's input: up/down through every game, left/right to the next or previous list. */
@@ -1182,13 +1195,17 @@ static void set_style_chrome (int style) {
             launcher_hide_footer_line();
             break;
         case LAUNCHER_HOME_MINIMAL:
-            launcher_set_header_style(LAUNCHER_HEADER_NONE);
             launcher_hide_footer_line();
             break;
-        case LAUNCHER_HOME_SPOTLIGHT:
-            launcher_set_header_style(LAUNCHER_HEADER_CORNER);
+        case LAUNCHER_HOME_SPOTLIGHT: {
+            // The panel under the header: Home / Library sit on it in its text colour.
+            const theme_t *t = theme_current();
+            launcher_set_background_band(LAUNCHER_SCREEN_W * SPOT_TOP_SHARE / 100, LAUNCHER_SCREEN_W * SPOT_BOTTOM_SHARE / 100,
+                display_get_height(), t->feature, t->feature, 0);
+            launcher_set_header_on_feature(true);
             launcher_hide_footer_line();
             break;
+        }
         default:
             break;
     }
