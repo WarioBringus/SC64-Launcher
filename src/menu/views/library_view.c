@@ -1592,7 +1592,7 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     if (game_is_favorite(menu, &c->games[sel])) {
         launcher_draw_favorite_star(open_x, open_y, cw);
     }
-    launcher_draw_focus_ring_tile(LAUNCHER_CENTER_X - cw / 2, SHELF_BASE_Y - ch - lift, cw, ch);
+    launcher_draw_focus_ring_cover_zoomed(LAUNCHER_CENTER_X - cw / 2, SHELF_BASE_Y - ch - lift, cw, ch, front, zoom);
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
     // The shelf itself.

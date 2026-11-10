@@ -1951,15 +1951,36 @@ void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {
     focus_ring(x, y, x + w, y + h, TILE_RADIUS, true);
 }
 
-void launcher_draw_focus_ring_cover (int x, int y, int w, int h, surface_t *image) {
-    // A cover drawn edge to edge can be a pixel or two short of its tile (packs keep even sizes: 86x60 in an 87x61
-    // grid tile): the ring hugs the cover itself, as launcher_draw_tile places it, or the background shows through.
-    if (image && image->width >= w - 2 && image->height >= h - 2 && image->width <= w && image->height <= h) {
-        int ix = x + (w - image->width) / 2, iy = y + (h - image->height) / 2;
-        focus_ring(ix, iy, ix + image->width, iy + image->height, TILE_RADIUS, true);
+/**
+ * @brief Where a cover drawn edge to edge sits in its tile (as launcher_draw_tile_zoomed places it); false when it
+ * doesn't fill the tile (it sits on a panel). It can be a pixel or two short (packs keep even sizes: 86x60 in an
+ * 87x61 grid tile), so a ring around the tile showed the background in between.
+ */
+static bool cover_rect_in_tile (int x, int y, int w, int h, surface_t *image, float zoom, int *ix, int *iy, int *iw, int *ih) {
+    if (!image) {
+        return false;
+    }
+    *iw = (int)(image->width * zoom);
+    *ih = (int)(image->height * zoom);
+    if (*iw < w - 2 || *ih < h - 2) {
+        return false;
+    }
+    *ix = x + (w - *iw) / 2;
+    *iy = y + (h - *ih) / 2;
+    return true;
+}
+
+void launcher_draw_focus_ring_cover_zoomed (int x, int y, int w, int h, surface_t *image, float zoom) {
+    int ix, iy, iw, ih;
+    if (cover_rect_in_tile(x, y, w, h, image, zoom, &ix, &iy, &iw, &ih)) {
+        focus_ring(ix, iy, ix + iw, iy + ih, TILE_RADIUS, true);     // Hugging the cover itself
         return;
     }
     launcher_draw_focus_ring_tile(x, y, w, h);
+}
+
+void launcher_draw_focus_ring_cover (int x, int y, int w, int h, surface_t *image) {
+    launcher_draw_focus_ring_cover_zoomed(x, y, w, h, image, 1.0f);
 }
 
 #define FAST_SCROLL_GAP_MS  (250)   /* Two moves this close together count as fast scrolling... */
@@ -2072,7 +2093,13 @@ void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bo
     uint64_t started = get_ticks_us();
     color_t edge = behind;
     if (selected) {
-        launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
+        // Around the cover itself where it fills the tile (Carousel): around the tile it left a gap.
+        int rx, ry, rw, rh;
+        if (cover_rect_in_tile(x, y, w, h, image, zoom, &rx, &ry, &rw, &rh)) {
+            launcher_draw_ring(rx, ry, rx + rw, ry + rh, TILE_RADIUS);
+        } else {
+            launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
+        }
         launcher_note_focused_cover_zoomed(image, x, y, w, h, zoom);
     }
 

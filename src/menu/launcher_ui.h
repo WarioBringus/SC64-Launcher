@@ -460,6 +460,9 @@ void launcher_draw_focus_ring_tile(int x, int y, int w, int h);
 /** @brief The focus ring around a tile's cover where it fills the tile (it may be a pixel short), else the tile. */
 void launcher_draw_focus_ring_cover(int x, int y, int w, int h, surface_t *image);
 
+/** @brief As launcher_draw_focus_ring_cover, for a cover drawn at zoom (launcher_draw_tile_zoomed). */
+void launcher_draw_focus_ring_cover_zoomed(int x, int y, int w, int h, surface_t *image, float zoom);
+
 /** @brief Make the next selection ring appear in place rather than glide (e.g. a screen opened). */
 void launcher_focus_reset(void);
 

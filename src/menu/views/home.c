@@ -379,8 +379,8 @@ static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lo
         launcher_draw_tile(x, item_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, false, theme_current()->bg);
         if (selected) {
             launcher_note_focused_cover(image, x, item_y, ROW_TILE_W, ROW_TILE_H);
-            launcher_draw_focus_ring_tile(LAUNCHER_X0 + (i - row->scroll) * ROW_TILE_STEP, item_y + scroll_y_ahead,
-                ROW_TILE_W, ROW_TILE_H);
+            launcher_draw_focus_ring_cover(LAUNCHER_X0 + (i - row->scroll) * ROW_TILE_STEP, item_y + scroll_y_ahead,
+                ROW_TILE_W, ROW_TILE_H, image);
         }
         if (row->kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
             launcher_draw_favorite_star(x, item_y, ROW_TILE_W);
@@ -724,7 +724,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
             surface_t *image = item_image(menu, h, tw, th, lookups_left, &pending);
             launcher_draw_tile(x, iy, tw, th, image, pending, h->title, false, t->bg);
             if (is_focus(r, i)) {
-                launcher_draw_focus_ring_tile(x, target_y, tw, th);
+                launcher_draw_focus_ring_cover(x, target_y, tw, th, image);
             }
             if (rows[r].kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
                 launcher_draw_favorite_star(x, iy, tw);
@@ -788,7 +788,7 @@ static void draw_strip (menu_t *menu, const game_ref_t *refs, int n, int x0, int
         launcher_draw_tile(x, y, tw, th, image, pending, h->title, false, behind);
         if (i == focus) {
             launcher_note_focused_cover(image, x, y, tw, th);
-            launcher_draw_focus_ring_tile(target_x, y, tw, th);
+            launcher_draw_focus_ring_cover(target_x, y, tw, th, image);
         }
         if (rows[refs[i].row].kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
             launcher_draw_favorite_star(x, y, tw);
