@@ -187,6 +187,11 @@ void perf_log_frame_end (void) {
             frame_part_us[PERF_CHROME] / 1000.0f);
         perf_log_event("  slowest text draw: %.2f ms, font %d: \"%s\"", slowest_text_us / 1000.0f, slowest_text_font,
             slowest_text);
+        // How long the RSP and RDP keep working on this frame after the CPU has handed it over: a large number means
+        // the frame is limited by drawing work, not by the CPU (text calls then wait on a full command queue).
+        uint64_t wait_started = get_ticks_us();
+        rspq_wait();
+        perf_log_event("  graphics still busy %.1f ms after the CPU finished", (get_ticks_us() - wait_started) / 1000.0f);
     }
     if (work_us > SLOW_FRAME_US) {
         uint32_t input_us = draw_start_us ? (uint32_t)(draw_start_us - work_start_us) : 0;
