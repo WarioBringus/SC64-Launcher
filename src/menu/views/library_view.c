@@ -437,26 +437,56 @@ static void search_process (menu_t *menu) {
     }
 }
 
-static void search_draw (library_category_t *c) {
-    int top = SEARCH_TOP;
-    int bottom = SEARCH_FIRST_KEY_Y + (SEARCH_ROWS - 1) * SEARCH_ROW_H + SEARCH_KEY_H + 12;
-    launcher_fill_rounded(LAUNCHER_X0 - 2, top - 2, LAUNCHER_X1 + 2, bottom + 2, 14, theme_current()->line);
-    launcher_fill_rounded(LAUNCHER_X0, top, LAUNCHER_X1, bottom, 12, theme_current()->panel);
+static void page_begin(const char *title);
+static surface_t *game_cover(menu_t *menu, library_game_t *game, int w, int h, int *lookups_left, bool *pending);
 
+/* Search: a full page. What's typed large, how many games match, the first matches' covers, then the keyboard. */
+#define SEARCH_PAGE_TEXT_Y          (68)
+#define SEARCH_COVERS_Y             (112)
+#define SEARCH_COVER_W              (133)
+#define SEARCH_COVER_H              (94)
+#define SEARCH_COVER_STEP           (145)
+#define SEARCH_PAGE_KEYS_Y          (226)
+#define SEARCH_PAGE_KEY_W           (48)
+#define SEARCH_PAGE_KEY_H           (36)
+#define SEARCH_PAGE_ROW_H           (44)
+
+static void search_draw (menu_t *menu, library_category_t *c) {
+    const theme_t *t = theme_current();
+    page_begin("Search");
     if (search_text[0]) {
         char typed[SEARCH_MAX + 2];
         snprintf(typed, sizeof(typed), "%s_", search_text);
-        launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_DEFAULT, typed);
+        launcher_text_sized(LAUNCHER_SIZE_TITLE, LAUNCHER_X0, SEARCH_PAGE_TEXT_Y, LAUNCHER_WIDTH - 160, 34, ALIGN_LEFT,
+            STL_DEFAULT, typed);
     } else {
-        launcher_title(LAUNCHER_X0 + 20, top + 8, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_GRAY, "Type a name, developer, genre or year");
+        launcher_text_sized(LAUNCHER_SIZE_LARGE, LAUNCHER_X0, SEARCH_PAGE_TEXT_Y, LAUNCHER_WIDTH - 160, 34, ALIGN_LEFT,
+            STL_GRAY, "Type a name, developer, genre or year");
     }
     int shown = c ? c->shown : 0;
-    launcher_text(LAUNCHER_X1 - 180, top + 14, 160, ALIGN_RIGHT, STL_GRAY, shown == 1 ? "1 game" : "%d games", shown);
+    static char count[24];
+    snprintf(count, sizeof(count), shown == 1 ? "1 game" : "%d games", shown);
+    launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X1 - 150, SEARCH_PAGE_TEXT_Y, 150, 34, ALIGN_RIGHT, STL_GRAY, count);
 
-    int keys_w = SEARCH_COLS * SEARCH_KEY_W + (SEARCH_COLS - 1) * SEARCH_KEY_GAP;
+    // The first matches, as covers (they are the first games of the folder while searching).
+    int fits = (LAUNCHER_WIDTH + SEARCH_COVER_STEP - SEARCH_COVER_W) / SEARCH_COVER_STEP;
+    int lookups = 2;
+    for (int i = 0; c && i < fits && i < c->shown; i++) {
+        bool pending;
+        surface_t *image = game_cover(menu, &c->games[i], SEARCH_COVER_W, SEARCH_COVER_H, &lookups, &pending);
+        launcher_draw_tile(LAUNCHER_X0 + i * SEARCH_COVER_STEP, SEARCH_COVERS_Y, SEARCH_COVER_W, SEARCH_COVER_H, image, pending,
+            c->games[i].title, false, t->bg);
+    }
+    if (c && c->shown == 0 && search_text[0]) {
+        launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0, SEARCH_COVERS_Y + 30, LAUNCHER_WIDTH, 24, ALIGN_LEFT, STL_GRAY,
+            "No games match yet");
+    }
+
+    // The keyboard, as before, with bigger keys.
+    int keys_w = SEARCH_COLS * SEARCH_PAGE_KEY_W + (SEARCH_COLS - 1) * SEARCH_KEY_GAP;
     int x0 = LAUNCHER_X0 + (LAUNCHER_WIDTH - keys_w) / 2;
     for (int row = 0; row < SEARCH_ROWS; row++) {
-        int y = SEARCH_FIRST_KEY_Y + row * SEARCH_ROW_H;
+        int y = SEARCH_PAGE_KEYS_Y + row * SEARCH_PAGE_ROW_H;
         for (int col = 0; col < SEARCH_COLS; col++) {
             char letter[2] = { 0, 0 };
             const char *label = letter;
@@ -472,11 +502,12 @@ static void search_draw (library_category_t *c) {
             } else {
                 continue;
             }
-            int x = x0 + col * (SEARCH_KEY_W + SEARCH_KEY_GAP);
-            int w = span * SEARCH_KEY_W + (span - 1) * SEARCH_KEY_GAP;
+            int x = x0 + col * (SEARCH_PAGE_KEY_W + SEARCH_KEY_GAP);
+            int w = span * SEARCH_PAGE_KEY_W + (span - 1) * SEARCH_KEY_GAP;
             bool on = (row == search_row && col == search_col);
-            launcher_fill_rounded(x, y, x + w, y + SEARCH_KEY_H, 6, on ? theme_current()->accent : theme_current()->highlight);
-            launcher_text(x, y + 4, w, ALIGN_CENTER, on ? STL_ON_ACCENT : STL_DEFAULT, "%s", label);
+            launcher_fill_rounded(x, y, x + w, y + SEARCH_PAGE_KEY_H, 7, on ? t->accent : t->highlight);
+            launcher_text_sized(span > 1 ? LAUNCHER_SIZE_BODY : LAUNCHER_SIZE_LARGE, x, y, w, SEARCH_PAGE_KEY_H, ALIGN_CENTER,
+                on ? STL_ON_ACCENT : STL_DEFAULT, label);
         }
     }
 }
@@ -1651,7 +1682,7 @@ static void draw (menu_t *menu, surface_t *d) {
             }
         }
         if (search_open) {
-            search_draw(c);
+            search_draw(menu, c);
             launcher_draw_footer(hints_search, HINT_COUNT(hints_search));
         } else if (hidden_open) {
             hidden_draw(menu);
