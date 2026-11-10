@@ -1159,9 +1159,19 @@ static void launcher_settings_draw (menu_t *menu, surface_t *d) {
             continue;
         }
         if (row->choices && on) {
+            // Where the value is in a long list ("3 of 17"), at the row's right end.
+            int n = 0;
+            while (row->choices->list[n].text) {
+                n++;
+            }
+            if (n > 4 && row->choices->get_default_selection) {
+                char where[16];
+                snprintf(where, sizeof(where), "%d of %d", row->choices->get_default_selection(menu) + 1, n);
+                launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X1 - 120, y, 100, SETTINGS_ROW_H, ALIGN_RIGHT, STL_GRAY, where);
+            }
             // Arrows either side: left and right change it.
             int vx = value_x + SETTINGS_ARROW_GAP;
-            int w = launcher_text_sized(LAUNCHER_SIZE_TITLE, vx, y, LAUNCHER_X1 - 40 - vx, SETTINGS_ROW_H, ALIGN_LEFT,
+            int w = launcher_text_sized(LAUNCHER_SIZE_TITLE, vx, y, LAUNCHER_X1 - (n > 4 ? 140 : 40) - vx, SETTINGS_ROW_H, ALIGN_LEFT,
                 STL_ACCENT, value);
             int cy = y + SETTINGS_ROW_H / 2;
             launcher_draw_arrow(value_x + 6, cy, SETTINGS_ARROW, false, theme_current()->accent);

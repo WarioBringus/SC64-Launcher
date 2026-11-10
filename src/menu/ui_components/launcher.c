@@ -1620,6 +1620,12 @@ void launcher_draw_dialog (const char *title, const char *body, const launcher_h
     }
 }
 
+/* The hints bar: one size up from the small text (15 px, 20 px icons), to read from the couch. */
+#define FOOTER_BUTTON_SIZE      (20)
+#define FOOTER_TEXT_H           (24)
+#define FOOTER_ICON_GAP         (6)
+#define FOOTER_GAP              (18)
+
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     uint64_t perf_started = get_ticks_us();
     transition_content_end();
@@ -1638,17 +1644,17 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     // Measured widths are glyph extents; a little slack keeps the last letter from touching the next icon.
     for (int i = 0; i < count; i++) {
         // One letter sits on a circle (wider would be an oval); more letters ("L R", "C" and arrows) on a pill.
-        int bw = (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) ? HINT_BUTTON_SIZE + 8 :
-            text_width_font(FNT_SMALL, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
+        int bw = (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) ? FOOTER_BUTTON_SIZE + 8 :
+            text_width_font(FNT_LAUNCHER, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
         bool single = strlen(hints[i].button) == 1 && !is_c_button(hints[i].kind);
-        button_w[i] = (single || bw < HINT_BUTTON_SIZE) ? HINT_BUTTON_SIZE : bw;
-        label_w[i] = text_width_font(FNT_SMALL, hints[i].label) + 2;
-        total += button_w[i] + HINT_ICON_GAP + label_w[i] + (i > 0 ? HINT_GAP : 0);
+        button_w[i] = (single || bw < FOOTER_BUTTON_SIZE) ? FOOTER_BUTTON_SIZE : bw;
+        label_w[i] = text_width_font(FNT_LAUNCHER, hints[i].label) + 2;
+        total += button_w[i] + FOOTER_ICON_GAP + label_w[i] + (i > 0 ? FOOTER_GAP : 0);
     }
 
     int x = LAUNCHER_X1 - total;
     int y = LAUNCHER_FOOTER_Y + 12;
-    int text_y = y - (HINT_TEXT_HEIGHT - HINT_BUTTON_SIZE) / 2;
+    int text_y = y - (FOOTER_TEXT_H - FOOTER_BUTTON_SIZE) / 2;
     for (int i = 0; i < count; i++) {
         color_t color;
         switch (hints[i].kind) {
@@ -1659,13 +1665,13 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             case LAUNCHER_BUTTON_C_LEFT_RIGHT: color = BUTTON_C_COLOR; break;
             default: color = theme_current()->text_muted; break;
         }
-        fill_smooth_rounded(x, y, x + button_w[i], y + HINT_BUTTON_SIZE, HINT_BUTTON_SIZE / 2, color);
+        fill_smooth_rounded(x, y, x + button_w[i], y + FOOTER_BUTTON_SIZE, FOOTER_BUTTON_SIZE / 2, color);
         if (is_c_button(hints[i].kind)) {
             // "C" on the left, a pair of arrows drawn on the right.
             int letter_w = button_w[i] - C_ARROWS_WIDTH;
-            text_centered_ink(FNT_SMALL, x + 1, text_y, letter_w, HINT_TEXT_HEIGHT, STL_ON_C_BUTTON, hints[i].button);
+            text_centered_ink(FNT_LAUNCHER, x + 1, text_y, letter_w, FOOTER_TEXT_H, STL_ON_C_BUTTON, hints[i].button);
             int ax = x + letter_w + 1;
-            int cy = y + HINT_BUTTON_SIZE / 2;
+            int cy = y + FOOTER_BUTTON_SIZE / 2;
             if (hints[i].kind == LAUNCHER_BUTTON_C_UP_DOWN) {
                 draw_arrow(ax, cy - 3, 0, -1);
                 draw_arrow(ax, cy + 3, 0, 1);
@@ -1674,16 +1680,16 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
                 draw_arrow(ax + 3, cy, 1, 0);
             }
         } else if (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) {
-            int cx = x + button_w[i] / 2, cy = y + HINT_BUTTON_SIZE / 2;
+            int cx = x + button_w[i] / 2, cy = y + FOOTER_BUTTON_SIZE / 2;
             draw_arrow(cx - 4, cy, -1, 0);
             draw_arrow(cx + 4, cy, 1, 0);
         } else {
-            text_centered_ink(FNT_SMALL, x, text_y, button_w[i], HINT_TEXT_HEIGHT, STL_ON_BUTTON, hints[i].button);
+            text_centered_ink(FNT_LAUNCHER, x, text_y, button_w[i], FOOTER_TEXT_H, STL_ON_BUTTON, hints[i].button);
         }
-        x += button_w[i] + HINT_ICON_GAP;
+        x += button_w[i] + FOOTER_ICON_GAP;
         // No width: the label is never cut short, whatever the measurement said.
-        text_box_font(FNT_SMALL, x, text_y, 0, HINT_TEXT_HEIGHT, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
-        x += label_w[i] + HINT_GAP;
+        text_box_font(FNT_LAUNCHER, x, text_y, 0, FOOTER_TEXT_H, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, hints[i].label);
+        x += label_w[i] + FOOTER_GAP;
     }
     perf_log_add(PERF_CHROME, (uint32_t)(get_ticks_us() - perf_started));
 }
