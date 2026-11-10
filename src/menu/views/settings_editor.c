@@ -5,9 +5,11 @@
 #include "../fonts.h"
 #include "../launcher_ui.h"
 #include "../theme.h"
+#include "../tour.h"
 #include "views.h"
 
 static bool show_message_reset_settings = false;
+static bool show_message_tour = false;
 
 static const char *format_switch (bool state) {
     switch (state) {
@@ -766,6 +768,12 @@ static void settings_library (menu_t *menu, void *arg) {
     launcher_settings_do(menu, (launcher_do_t)(uintptr_t)(arg));
 }
 
+static void settings_ask_tour (menu_t *menu, void *arg) {
+    (void)menu;
+    (void)arg;
+    show_message_tour = true;
+}
+
 static void settings_ask_reset (menu_t *menu, void *arg) {
     (void)menu;
     (void)arg;
@@ -861,6 +869,8 @@ static const settings_row_t system_rows[] = {
     { .label = "Menu information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_CREDITS), .does = "View" },
     { .label = "Flashcart", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_FLASHCART), .does = "View" },
     { .label = "N64 information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_SYSTEM_INFO), .does = "View" },
+    { .label = "Screenshot tour", .action = settings_ask_tour, .does = "Start",
+      .note = "Shows every theme and style by itself, saving each screen to the SD card (about 15 minutes)" },
     { .label = "Reset all settings", .action = settings_ask_reset, .does = "Reset",
       .note = "Puts every setting back as it was at first (asks first)" },
 };
@@ -1020,6 +1030,17 @@ static void settings_go_back (menu_t *menu) {
 }
 
 static void launcher_settings_process (menu_t *menu) {
+    if (show_message_tour) {
+        if (menu->actions.enter) {
+            show_message_tour = false;
+            settings_go_back(menu);
+            tour_begin(menu);   // Starts once the screen Settings was opened from is back.
+        } else if (menu->actions.back) {
+            show_message_tour = false;
+            sound_play_effect(SFX_EXIT);
+        }
+        return;
+    }
     if (show_message_reset_settings) {
         if (menu->actions.enter) {
             settings_defer_saves(false);
@@ -1228,6 +1249,15 @@ static void launcher_settings_draw (menu_t *menu, surface_t *d) {
     }
     launcher_draw_footer(hints, 3);
 
+    if (show_message_tour) {
+        static const launcher_hint_t answers[] = {
+            { LAUNCHER_BUTTON_A, "A", "Start" },
+            { LAUNCHER_BUTTON_B, "B", "Not now" },
+        };
+        launcher_draw_dialog("Start the screenshot tour?", "The launcher goes through every theme and style by itself, "
+            "saving each screen to the SD card. It takes about 15 minutes: leave the controller alone until Home comes "
+            "back.", answers, 2);
+    }
     if (show_message_reset_settings) {
         static const launcher_hint_t answers[] = {
             { LAUNCHER_BUTTON_A, "A", "Reset" },

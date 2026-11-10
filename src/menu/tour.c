@@ -16,7 +16,6 @@
 #include "tour.h"
 #include "utils/fs.h"
 
-#define TOUR_TRIGGER        "menu/screenshot-tour.txt"
 #define TOUR_DIR            "menu/tour"
 #define SETTLE_FRAMES       (75)    /* A scene's frames before it's saved: glides finished, covers in */
 #define FIRST_FRAMES        (200)   /* ...for a screen just entered or resized (covers read from the card) */
@@ -100,14 +99,12 @@ static void build_scenes (void) {
     assert(scene_count <= max);
 }
 
-void tour_start (menu_t *menu) {
+void tour_begin (menu_t *menu) {
     char path[256];
-    prefix = menu->storage_prefix;
-    snprintf(path, sizeof(path), "%s%s", prefix, TOUR_TRIGGER);
-    if (!file_exists(path)) {
+    if (active) {
         return;
     }
-    remove(path);   // Runs once, even if it's cut short.
+    prefix = menu->storage_prefix;
     snprintf(path, sizeof(path), "%s%s", prefix, TOUR_DIR);
     directory_create(path);
     snprintf(path, sizeof(path), "%s%s/index.txt", prefix, TOUR_DIR);
@@ -176,8 +173,9 @@ bool tour_before_frame (menu_t *menu) {
         return false;
     }
 
-    // The next scene, once startup is over and Home is up.
-    if (scene_at < 0 && (menu->mode != MENU_MODE_HOME || menu->next_mode != MENU_MODE_HOME)) {
+    // The next scene, once startup is over and Home or the Library is up.
+    if (scene_at < 0 && (menu->mode != menu->next_mode ||
+        (menu->mode != MENU_MODE_HOME && menu->mode != MENU_MODE_LIBRARY))) {
         return false;
     }
     scene_at++;

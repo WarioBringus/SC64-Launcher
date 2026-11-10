@@ -321,7 +321,6 @@ static bool perf_input (menu_t *menu) {
  */
 void menu_run (boot_params_t *boot_params) {
     menu_init(boot_params);
-    tour_start(menu);
 
     bool held_input = false;     // Input read while the picture was held, for the frame it starts
     uint64_t held_poll_ms = 0;

@@ -1,7 +1,7 @@
 /**
  * @file tour.h
- * @brief Screenshot tour: with menu/screenshot-tour.txt on the SD card, the launcher steps through every theme,
- * Home style, list combination, Library layout and screen size by itself and saves each screen to menu/tour/.
+ * @brief Screenshot tour (Settings > System): the launcher steps through every theme, Home style, list combination,
+ * Library layout and screen size by itself and saves each screen to menu/tour/ on the SD card.
  * @ingroup menu
  */
 
@@ -13,8 +13,8 @@
 
 #include "menu_state.h"
 
-/** @brief At startup: begins the tour if its file is on the card (and removes the file, so it runs once). */
-void tour_start(menu_t *menu);
+/** @brief Begin the tour now (Settings > System > Screenshot tour); it starts once the launcher's screen is up. */
+void tour_begin(menu_t *menu);
 
 /** @brief Whether the tour is running (the controller is ignored meanwhile). */
 bool tour_active(void);
