@@ -599,7 +599,8 @@ static const char *row_label (row_kind_t kind) {
 #define SPOT_OUTLINE        (3)
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
-#define SPOT_RESUME_H       (84)    /* The Resume card pinned at the top of the column */
+#define SPOT_RESUME_H       (LAUNCHER_SCREEN_W > 640 ? 84 : 108)   /* The Resume card at the top of the column; at
+                                                                  4:3 it is narrow, so its name gets a third line */
 
 static int spot_scroll = 0;
 static float spot_scroll_pos = 0.0f;
@@ -677,8 +678,8 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         int text_x = gx0 + 8 + 87 + 12;
         launcher_text(text_x, ry0 + 6, LAUNCHER_X1 - 8 - text_x, ALIGN_LEFT, STL_ACCENT, "Resume");
         // The whole name, over two lines when it needs them (one was cut short: "Super Smash Br...").
-        launcher_game_name_wrapped(text_x, ry0 + 28, LAUNCHER_X1 - 8 - text_x, 2, on_panel ? STL_DEFAULT : STL_GRAY,
-            h->title);
+        launcher_game_name_wrapped(text_x, ry0 + 28, LAUNCHER_X1 - 8 - text_x, LAUNCHER_SCREEN_W > 640 ? 2 : 3,
+            on_panel ? STL_DEFAULT : STL_GRAY, h->title);
         grid_top = ry1 + 6;
     }
 
@@ -944,16 +945,23 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
         int tx = bx + bw + 26, tw = LAUNCHER_X1 - tx;
         tw = (tw > 250) ? 250 : tw;     // A column, not the rest of the screen: the band reaches just past it.
         int y = by + 4;
-        launcher_text_sized(LAUNCHER_SIZE_BODY, tx, y, tw, 22, ALIGN_LEFT, STL_DEFAULT, row_label(rows[row_selected].kind));
+        // The text sits on the band, which is the label's colour: it takes whichever theme colour stands out most there.
+        color_t band = cart_band.set ? RGBA32((int)cart_band.c[0], (int)cart_band.c[1], (int)cart_band.c[2], 0xFF) :
+            color_mix(t->bg, t->feature, CART_BAND_TINT);
+        color_t ink = launcher_standout_color(band);
+        fonts_set_fade_color(ink);
+        launcher_text_sized(LAUNCHER_SIZE_BODY, tx, y, tw, 22, ALIGN_LEFT, STL_FADE, row_label(rows[row_selected].kind));
         y += 26;
         int title_w = launcher_text_sized_width(LAUNCHER_SIZE_TITLE, f->title);
-        y += launcher_title_wrapped(tx, y, tw, 3, STL_DEFAULT, f->title) + 6;
+        fonts_set_fade_color(ink);
+        y += launcher_title_wrapped(tx, y, tw, 3, STL_FADE, f->title) + 6;
         char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
         int details_w = 0;
         if (details[0]) {
             details_w = tw;     // Wrapped to the column
-            y += launcher_game_details_wrapped(tx, y, tw, 3, STL_DEFAULT, details) + 12;
+            fonts_set_fade_color(ink);
+            y += launcher_game_details_wrapped(tx, y, tw, 3, STL_FADE, details) + 12;
         }
         bool resume = (rows[row_selected].kind == ROW_RESUME);
         int pill_w = launcher_draw_prompt(tx, y, LAUNCHER_BUTTON_A, "A", resume ? "Resume" : "Play", t->bg);
@@ -1491,8 +1499,8 @@ static void binder_draw_tabs (binder_tab_t *tabs, int n, int cur, int page_x0) {
             // Too wide for the tab: its two words on two lines, rather than cut short ("Recently pla...").
             char first[32];
             snprintf(first, sizeof(first), "%.*s", (int)(space - label), label);
-            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + 2, lw, 18, ALIGN_LEFT, style, first);
-            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + 20, lw, 18, ALIGN_LEFT, style, space + 1);
+            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + 1, lw, 20, ALIGN_LEFT, style, first);
+            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + 19, lw, 20, ALIGN_LEFT, style, space + 1);
         } else {
             launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + (BINDER_TAB_H - 20) / 2 + 1, lw, 20,
                 ALIGN_LEFT, style, label);
