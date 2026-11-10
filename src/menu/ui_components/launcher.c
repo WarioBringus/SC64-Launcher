@@ -2202,16 +2202,6 @@ void launcher_settings_do (menu_t *menu, launcher_do_t what) {
     menu->next_mode = MENU_MODE_LIBRARY;
 }
 
-/* Z: things to do with the highlighted game. */
-static component_context_menu_t game_menu = {
-    .list = {
-        { .text = favorite_label, .action = toggle_favorite },
-        { .text = "About this game", .action = about_game },
-        { .text = "Game options", .action = game_options },
-        { .text = "Hide game", .action = hide_game },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
 
 
 
@@ -2274,6 +2264,10 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
  */
 typedef enum {
     QR_BUTTONS,         /* Search | Surprise me */
+    QR_GAME_FAVORITE,   /* This game: the highlighted one (Z opens the panel here) */
+    QR_GAME_ABOUT,
+    QR_GAME_OPTIONS,
+    QR_GAME_HIDE,
     QR_FOLDER,
     QR_FILTER_BY,
     QR_FILTER_SHOW,     /* Only with a field to filter by */
@@ -2371,9 +2365,32 @@ static void quick_need_groups (void) {
     quick_groups_folder = quick_folder;
 }
 
+/** @brief Whether the panel has a game to act on (none on an empty Home or a filter that matches nothing). */
+static bool quick_has_game (void) {
+    return selected_rom != NULL;
+}
+
+/** @brief The first This game row, or -1. */
+static int quick_game_row (void) {
+    for (int r = 0; r < quick_row_count; r++) {
+        if (quick_rows[r].kind == QR_GAME_FAVORITE) {
+            return r;
+        }
+    }
+    return -1;
+}
+
 static void quick_build_rows (void) {
     int n = 0;
     quick_rows[n++] = (quick_row_t) { QR_BUTTONS, NULL };
+    if (quick_has_game()) {
+        quick_rows[n++] = (quick_row_t) { QR_GAME_FAVORITE, "This game" };
+        if (selected_is_rom()) {
+            quick_rows[n++] = (quick_row_t) { QR_GAME_ABOUT, NULL };
+            quick_rows[n++] = (quick_row_t) { QR_GAME_OPTIONS, NULL };
+        }
+        quick_rows[n++] = (quick_row_t) { QR_GAME_HIDE, NULL };
+    }
     if (quick_mode == MENU_MODE_HOME) {
         quick_rows[n++] = (quick_row_t) { QR_HOME_STYLE, "Home" };
         quick_rows[n++] = (quick_row_t) { QR_THEME, NULL };
@@ -2432,7 +2449,8 @@ static bool quick_is_pair (quick_kind_t kind) {
 }
 
 static bool quick_is_value (quick_kind_t kind) {
-    return !quick_is_pair(kind) && kind != QR_SETTINGS;
+    return !quick_is_pair(kind) && kind != QR_SETTINGS && kind != QR_GAME_FAVORITE && kind != QR_GAME_ABOUT &&
+        kind != QR_GAME_OPTIONS && kind != QR_GAME_HIDE;
 }
 
 static const char *quick_label (quick_kind_t kind) {
@@ -2447,6 +2465,10 @@ static const char *quick_label (quick_kind_t kind) {
         case QR_HOME_STYLE: return "Home style";
         case QR_THEME: return "Theme";
         case QR_SETTINGS: return "Settings";
+        case QR_GAME_FAVORITE: return favorite_label;
+        case QR_GAME_ABOUT: return "About this game";
+        case QR_GAME_OPTIONS: return "Game options";
+        case QR_GAME_HIDE: return "Hide game";
         default: return "";
     }
 }
@@ -2601,6 +2623,20 @@ static void quick_run (menu_t *menu, const quick_row_t *row) {
     } else if (row->kind == QR_SETTINGS) {
         quick_close(false);
         open_screen(menu, (void *)(MENU_MODE_SETTINGS_EDITOR));
+    } else if (row->kind == QR_GAME_FAVORITE) {
+        // Stays open: the row says what it does now.
+        toggle_favorite(menu, NULL);
+        snprintf(favorite_label, sizeof(favorite_label), "%s",
+            launcher_is_favorite(menu, selected_rom) ? "Remove from favorites" : "Add to favorites");
+    } else if (row->kind == QR_GAME_ABOUT) {
+        quick_close(false);
+        about_game(menu, NULL);
+    } else if (row->kind == QR_GAME_OPTIONS) {
+        quick_close(false);
+        game_options(menu, NULL);
+    } else if (row->kind == QR_GAME_HIDE) {
+        quick_close(true);
+        hide_game(menu, NULL);
     }
 }
 
@@ -2691,6 +2727,13 @@ static void quick_draw_rows (menu_t *menu, int left, int right) {
         if (row->heading) {
             int hy = y - QUICK_HEADING_H;
             int w = launcher_text_sized(LAUNCHER_SIZE_BODY, left, hy, 0, QUICK_HEADING_H, ALIGN_LEFT, STL_ACCENT, row->heading);
+            if (row->kind == QR_GAME_FAVORITE) {
+                // Which game, beside its heading.
+                char *title = library_title_from_path(menu, selected_rom);
+                launcher_text_sized(LAUNCHER_SIZE_BODY, left + w + 12, hy, right - left - w - 12, QUICK_HEADING_H, ALIGN_LEFT,
+                    STL_GRAY, title ? title : "");
+                free(title);
+            }
             if (row->kind == QR_MUSIC) {
                 // What's playing, beside its heading.
                 const char *name = sound_bgm_track_name();
@@ -2800,7 +2843,6 @@ static void quick_draw (menu_t *menu) {
 }
 
 void launcher_menu_init (void) {
-    ui_components_context_menu_init(&game_menu);
 }
 
 static menu_t *quick_owner = NULL;
@@ -2818,41 +2860,32 @@ void launcher_menu_show (menu_t *menu, path_t *rom) {
     quick_filter_field = launcher_filter_field();
     quick_scroll = 0;
     quick_scroll_pos = 0.0f;
+    quick_row = 0;
+    quick_col = 0;
     quick_build_rows();
     settings_defer_saves(true);
     sound_play_effect(SFX_POP);
 }
 
 void launcher_game_menu_show (menu_t *menu, path_t *rom) {
+    // Z: the Quick menu, on its This game section.
     if (!rom) {
         return;
     }
-    prepare_menus(menu, rom);
-    ui_components_context_menu_show(&game_menu);
-    sound_play_effect(SFX_POP);
+    launcher_menu_show(menu, rom);
+    int r = quick_game_row();
+    quick_row = (r >= 0) ? r : 0;
 }
 
 bool launcher_menu_process (menu_t *menu) {
     quick_owner = menu;
-    return quick_process(menu) || ui_components_context_menu_process(menu, &game_menu);
+    return quick_process(menu);
 }
 
 void launcher_menu_draw (void) {
     if (quick_owner && quick_owner->mode != quick_mode) {
         quick_close(false);
     }
-    static bool was_open = false;
-    static uint64_t opened_ms = 0;
-    bool open = (game_menu.row_selected >= 0);
-    if (open && !was_open) {
-        opened_ms = get_ticks_ms();
-    }
-    was_open = open;
-    if (open) {
-        float t = fminf(1.0f, (float)(get_ticks_ms() - opened_ms) / MENU_FADE_MS);
-        fade_band(0, display_get_height(), theme_current()->bg, (int)(MENU_BACKDROP_ALPHA * t));
-    }
-    ui_components_context_menu_draw(&game_menu);
     if (quick_owner) {
         quick_draw(quick_owner);
     }
