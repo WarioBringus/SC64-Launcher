@@ -405,43 +405,6 @@ static void process (menu_t *menu) {
     }
 }
 
-static int draw_resume (menu_t *menu, home_row_t *row, int y, bool focused, int *lookups_left) {
-    home_item_t *h = &row->items[0];
-    if (focused) {
-        launcher_draw_focus_ring(LAUNCHER_X0, y + scroll_y_ahead, LAUNCHER_X1, y + scroll_y_ahead + RESUME_CARD_H, CARD_RADIUS);
-    }
-    launcher_fill_rounded(LAUNCHER_X0, y, LAUNCHER_X1, y + RESUME_CARD_H, CARD_RADIUS, theme_current()->panel);
-
-    bool pending;
-    int cover_y = y + (RESUME_CARD_H - LAUNCHER_COVER_H) / 2;
-    surface_t *image = item_image(menu, h, LAUNCHER_COVER_W, LAUNCHER_COVER_H, lookups_left, &pending);
-    launcher_draw_tile(RESUME_COVER_X, cover_y, LAUNCHER_COVER_W, LAUNCHER_COVER_H, image, pending, h->title, false, theme_current()->panel);
-    if (focused) {
-        launcher_note_focused_cover(image, RESUME_COVER_X, cover_y, LAUNCHER_COVER_W, LAUNCHER_COVER_H);
-    }
-
-    // The folder the game lives in, e.g. "N64 USA".
-    char folder[64] = "";
-    path_t *dir = path_clone(item_path(h));
-    path_pop(dir);
-    snprintf(folder, sizeof(folder), "%s", path_last_get(dir));
-    path_free(dir);
-
-    int text_w = LAUNCHER_X1 - RESUME_TEXT_X - 14;
-    launcher_text(RESUME_TEXT_X, y + 28, text_w, ALIGN_LEFT, STL_ACCENT, "Resume");
-    char where[96];
-    snprintf(where, sizeof(where), "Last played  -  %s", folder);
-    launcher_title(RESUME_TEXT_X, y + 50, text_w, ALIGN_LEFT, STL_DEFAULT, h->title);
-    launcher_name(RESUME_TEXT_X, y + 84, text_w, ALIGN_LEFT, STL_GRAY, where);
-
-    char details[160];
-    library_details_for_path(menu, item_path(h), details, sizeof(details));
-    if (details[0]) {
-        launcher_game_details(RESUME_TEXT_X, y + 108, text_w, ALIGN_LEFT, STL_GRAY, details);
-    }
-    return y + RESUME_CARD_H + ROW_GAP;
-}
-
 static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lookups_left) {
     const char *label = (row->kind == ROW_FAVORITES) ? "Favorites" : "Recently played";
     launcher_text(LAUNCHER_X0, y, 0, ALIGN_LEFT, focused ? STL_DEFAULT : STL_GRAY, "%s", label);
@@ -1373,6 +1336,158 @@ static void set_style_chrome (int style) {
     }
 }
 
+/*
+ * Classic: at the top, a viewer showing the selected game large (cover, title, details, A Play) and, when Resume is on,
+ * a slim Resume card beside it (cover and name). Selecting Resume (up from the rows) grows its card across the whole
+ * top, where it becomes the viewer: the game is never shown twice. Recently played and Favorites scroll beneath.
+ */
+#define CLASSIC_VIEW_H      (146)   /* The top cards' height: a 158x112 cover drawn 1:1, with room around it */
+#define CLASSIC_SLIM_W      (128)   /* The Resume card's width while a row's game is selected */
+#define CLASSIC_CARD_GAP    (12)
+#define CLASSIC_PAD         (12)
+#define CLASSIC_ROWS_GAP    (14)    /* Between the top cards and the rows */
+#define CLASSIC_SLIM_COVER_W (87)   /* The slim card's cover, the small pack's size (1:1) */
+#define CLASSIC_SLIM_COVER_H (61)
+
+static float classic_grow = 0.0f;   /* 0: Resume slim beside the viewer; 1: Resume across the top */
+
+/** @brief A top card's content: its cover 1:1 at the left, a label, the title, details and the A prompt. */
+static void classic_card_content (menu_t *menu, home_item_t *h, int x0, int x1, int y, bool resume, int *lookups_left,
+    bool focused) {
+    const theme_t *t = theme_current();
+    bool pending;
+    int cx = x0 + CLASSIC_PAD, cy = y + (CLASSIC_VIEW_H - LAUNCHER_COVER_H) / 2;
+    surface_t *image = item_image(menu, h, LAUNCHER_COVER_W, LAUNCHER_COVER_H, lookups_left, &pending);
+    launcher_draw_tile(cx, cy, LAUNCHER_COVER_W, LAUNCHER_COVER_H, image, pending, h->title, false, t->panel);
+    if (focused) {
+        launcher_note_focused_cover(image, cx, cy, LAUNCHER_COVER_W, LAUNCHER_COVER_H);
+    }
+    int tx = cx + LAUNCHER_COVER_W + 16, tw = x1 - CLASSIC_PAD - tx;
+    if (tw < 60) {
+        return;     // Too narrow to say anything yet (the card is still growing).
+    }
+    int ty = y + 10;
+    launcher_text_sized(LAUNCHER_SIZE_BODY, tx, ty, tw, 20, ALIGN_LEFT, STL_ACCENT,
+        resume ? "Resume" : row_label(rows[row_selected].kind));
+    ty += 20;
+    ty += launcher_title_wrapped(tx, ty, tw, 2, STL_DEFAULT, h->title) + 2;
+    char details[160];
+    library_details_for_path(menu, item_path(h), details, sizeof(details));
+    if (resume) {
+        char folder[64], line[240];
+        item_folder(h, folder, sizeof(folder));
+        snprintf(line, sizeof(line), "%s%s%s", details, details[0] ? "   \xC2\xB7   " : "", folder);
+        ty += launcher_game_details_wrapped(tx, ty, tw, 1, STL_GRAY, line);
+    } else if (details[0]) {
+        ty += launcher_game_details_wrapped(tx, ty, tw, 1, STL_GRAY, details);
+    }
+    // The A prompt at the foot, when the title and details left room for it (the hints say it too).
+    int py = y + CLASSIC_VIEW_H - 34 - 8;
+    if (ty + 4 <= py) {
+        launcher_draw_prompt(tx, py, LAUNCHER_BUTTON_A, "A",
+            resume ? "Resume" : (menu->settings.launcher_quick_launch ? "Play" : "Details"), t->bg);
+    }
+}
+
+/** @brief The slim Resume card: label, a small cover and the game's name. */
+static void classic_slim_content (menu_t *menu, home_item_t *h, int x0, int x1, int y, int *lookups_left) {
+    const theme_t *t = theme_current();
+    int w = x1 - x0;
+    launcher_text_sized(LAUNCHER_SIZE_BODY, x0 + 10, y + 6, w - 20, 20, ALIGN_LEFT, STL_ACCENT, "Resume");
+    bool pending;
+    int cx = x0 + (w - CLASSIC_SLIM_COVER_W) / 2, cy = y + 30;
+    surface_t *image = item_image(menu, h, CLASSIC_SLIM_COVER_W, CLASSIC_SLIM_COVER_H, lookups_left, &pending);
+    launcher_draw_tile(cx, cy, CLASSIC_SLIM_COVER_W, CLASSIC_SLIM_COVER_H, image, pending, h->title, false, t->panel);
+    launcher_title_wrapped(x0 + 10, cy + CLASSIC_SLIM_COVER_H + 4, w - 20, 1, STL_DEFAULT, h->title);
+    (void)t;
+}
+
+static void draw_classic (menu_t *menu, int *lookups_left) {
+    const theme_t *t = theme_current();
+    int resume_row = row_of_kind(ROW_RESUME);
+    bool on_resume = (resume_row >= 0 && row_selected == resume_row);
+    float target = on_resume ? 1.0f : 0.0f;
+    classic_grow = motion_snap ? target : launcher_ease(classic_grow, target);
+    int top = CONTENT_TOP;
+
+    // The top: viewer and Resume card, their widths gliding as the Resume card grows or shrinks.
+    int full_x0 = LAUNCHER_X0, full_x1 = LAUNCHER_X1;
+    int resume_x0 = full_x1;
+    if (resume_row >= 0) {
+        int slim_x0 = full_x1 - CLASSIC_SLIM_W;
+        resume_x0 = slim_x0 + (int)lroundf((full_x0 - slim_x0) * classic_grow);
+    }
+    int viewer_x1 = (resume_row >= 0) ? resume_x0 - CLASSIC_CARD_GAP : full_x1;
+    if (viewer_x1 - full_x0 > 40 && !(on_resume && classic_grow > 0.98f)) {
+        launcher_fill_rounded(full_x0, top, viewer_x1, top + CLASSIC_VIEW_H, CARD_RADIUS, t->panel);
+        home_item_t *v = on_resume ? NULL : focused_item();
+        if (!v && resume_row >= 0) {
+            // While Resume is selected the viewer is on its way out: what it showed last stays until it's gone.
+            int r = (resume_row + 1 < row_count) ? resume_row + 1 : resume_row;
+            v = (rows[r].count > 0) ? &rows[r].items[rows[r].selected] : NULL;
+        }
+        if (v) {
+            rdpq_set_scissor(0, top, launcher_px(viewer_x1), top + CLASSIC_VIEW_H);
+            classic_card_content(menu, v, full_x0, viewer_x1, top, false, lookups_left, !on_resume);
+            rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+        }
+    }
+    if (resume_row >= 0) {
+        home_item_t *h = &rows[resume_row].items[0];
+        if (on_resume) {
+            launcher_draw_focus_ring(resume_x0, top, full_x1, top + CLASSIC_VIEW_H, CARD_RADIUS);
+        }
+        launcher_fill_rounded(resume_x0, top, full_x1, top + CLASSIC_VIEW_H, CARD_RADIUS, t->panel);
+        int clip_x1 = launcher_px(full_x1);
+        rdpq_set_scissor(0, top, clip_x1 > display_get_width() ? display_get_width() : clip_x1, top + CLASSIC_VIEW_H);
+        if (classic_grow > 0.5f) {
+            classic_card_content(menu, h, resume_x0, full_x1, top, true, lookups_left, on_resume);
+        } else {
+            classic_slim_content(menu, h, resume_x0, full_x1, top, lookups_left);
+        }
+        rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+    }
+
+    // The rows beneath, scrolling to keep the selected one in view (Resume stays at the top).
+    int list_top = top + CLASSIC_VIEW_H + CLASSIC_ROWS_GAP;
+    int row_top = list_top, sel_top = list_top;
+    for (int r = 0; r < row_count; r++) {
+        if (rows[r].kind == ROW_RESUME) {
+            continue;
+        }
+        if (r == row_selected) {
+            sel_top = row_top;
+        }
+        row_top += ROW_H;
+    }
+    if (!on_resume) {
+        if (sel_top - scroll_y < list_top) {
+            scroll_y = sel_top - list_top;
+        }
+        if (sel_top + ROW_H - scroll_y > CONTENT_BOTTOM) {
+            scroll_y = sel_top + ROW_H - CONTENT_BOTTOM;
+        }
+    }
+    scroll_y_pos = motion_snap ? (float)scroll_y : launcher_ease(scroll_y_pos, (float)scroll_y);
+    int drawn_scroll = (int)lroundf(scroll_y_pos);
+    scroll_y_ahead = drawn_scroll - scroll_y;
+    int clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
+    rdpq_set_scissor(0, list_top - LAUNCHER_RING - 2,
+        clip_x1 > display_get_width() ? display_get_width() : (clip_x1 < 1 ? 1 : clip_x1), CONTENT_BOTTOM + 2);
+    int y = list_top - drawn_scroll;
+    for (int r = 0; r < row_count; r++) {
+        if (rows[r].kind == ROW_RESUME) {
+            continue;
+        }
+        if (y + ROW_H < list_top - 10 || y > CONTENT_BOTTOM) {
+            y += ROW_H;
+            continue;
+        }
+        y = draw_row(menu, &rows[r], y, r == row_selected, lookups_left);
+    }
+    rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+}
+
 /** @brief The hints: Z Move on a favorite (at least two), and while one is moving, how to move and place it. */
 static void draw_home_hints (menu_t *menu) {
     if (moving) {
@@ -1416,43 +1531,7 @@ static void draw (menu_t *menu, surface_t *d) {
         home_background_work(menu, &lookups_left);
         draw_home_hints(menu);
     } else {
-        // Keep the selected row on screen; rows above or below scroll out of the content area.
-        int row_top = CONTENT_TOP;
-        for (int r = 0; r < row_selected; r++) {
-            row_top += (rows[r].kind == ROW_RESUME) ? RESUME_CARD_H + ROW_GAP : ROW_H;
-        }
-        int row_bottom = row_top + ((rows[row_selected].kind == ROW_RESUME) ? RESUME_CARD_H : ROW_H);
-        if (row_top - scroll_y < CONTENT_TOP) {
-            scroll_y = row_top - CONTENT_TOP;
-        }
-        if (row_bottom - scroll_y > CONTENT_BOTTOM) {
-            scroll_y = row_bottom - CONTENT_BOTTOM;
-        }
-
-        // The page glides to its scroll position too.
-        scroll_y_pos = motion_snap ? (float)scroll_y : launcher_ease(scroll_y_pos, (float)scroll_y);
-        int drawn_scroll = (int)lroundf(scroll_y_pos);
-        scroll_y_ahead = drawn_scroll - scroll_y;
-
-        // The left edge stays at 0: covers are copied in COPY mode, where any other left bound
-        // hangs the RDP (a hardware bug). The right edge clips rows gliding sideways.
-        int clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
-        rdpq_set_scissor(0, CONTENT_TOP - LAUNCHER_RING - 2,
-            clip_x1 > display_get_width() ? display_get_width() : (clip_x1 < 1 ? 1 : clip_x1), CONTENT_BOTTOM + 2);
-        int y = CONTENT_TOP - drawn_scroll;
-        for (int r = 0; r < row_count; r++) {
-            bool focused = (r == row_selected);
-            int height = (rows[r].kind == ROW_RESUME) ? RESUME_CARD_H + ROW_GAP : ROW_H;
-            if (y + height < CONTENT_TOP - 10 || y > CONTENT_BOTTOM) {
-                y += height;    // Off screen: skip drawing (and loading its covers).
-                continue;
-            }
-            if (rows[r].kind == ROW_RESUME) {
-                y = draw_resume(menu, &rows[r], y, focused, &lookups_left);
-            } else {
-                y = draw_row(menu, &rows[r], y, focused, &lookups_left);
-            }
-        }
+        draw_classic(menu, &lookups_left);
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
         home_background_work(menu, &lookups_left);
