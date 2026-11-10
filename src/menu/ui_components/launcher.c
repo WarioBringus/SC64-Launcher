@@ -1638,6 +1638,68 @@ void launcher_draw_dialog (const char *title, const char *body, const launcher_h
 #define FOOTER_ICON_GAP         (6)
 #define FOOTER_GAP              (18)
 
+/*
+ * L, R and Z drawn as on the controller (the N64 pad and the 8BitDo 64 alike): L and R are wide shoulder bars, Z an
+ * upright trigger; "L R" is the two bars side by side. A, B, Start and the C buttons are round, as they are.
+ */
+#define SHOULDER_W          (32)
+#define SHOULDER_H          (16)
+#define SHOULDER_PAIR_W     (28)    /* Each bar of "L R" */
+#define SHOULDER_PAIR_GAP   (4)
+#define TRIGGER_W           (18)
+#define TRIGGER_H           (24)
+#define SHOULDER_RADIUS     (5)
+
+typedef enum { SHAPE_ROUND, SHAPE_SHOULDER, SHAPE_TRIGGER, SHAPE_SHOULDERS } button_shape_t;
+
+static button_shape_t button_shape (const launcher_hint_t *hint) {
+    if (hint->kind != LAUNCHER_BUTTON_OTHER) {
+        return SHAPE_ROUND;
+    }
+    if (strcmp(hint->button, "Z") == 0) {
+        return SHAPE_TRIGGER;
+    }
+    if (strcmp(hint->button, "L") == 0 || strcmp(hint->button, "R") == 0) {
+        return SHAPE_SHOULDER;
+    }
+    if (strcmp(hint->button, "L R") == 0) {
+        return SHAPE_SHOULDERS;
+    }
+    return SHAPE_ROUND;
+}
+
+static int shape_width (button_shape_t shape) {
+    switch (shape) {
+        case SHAPE_SHOULDER: return SHOULDER_W;
+        case SHAPE_TRIGGER: return TRIGGER_W;
+        case SHAPE_SHOULDERS: return 2 * SHOULDER_PAIR_W + SHOULDER_PAIR_GAP;
+        default: return 0;
+    }
+}
+
+/** @brief A shoulder button or trigger centred on the row (y is the top of the round icons, size their height). */
+static void draw_shaped_button (button_shape_t shape, int x, int y, int size, color_t color, const char *text) {
+    int cy = y + size / 2;
+    if (shape == SHAPE_TRIGGER) {
+        int y0 = cy - TRIGGER_H / 2;
+        fill_smooth_rounded(x, y0, x + TRIGGER_W, y0 + TRIGGER_H, SHOULDER_RADIUS, color);
+        text_centered_ink(FNT_LAUNCHER, x, y0, TRIGGER_W, TRIGGER_H, STL_ON_BUTTON, text);
+        return;
+    }
+    int y0 = cy - SHOULDER_H / 2;
+    if (shape == SHAPE_SHOULDER) {
+        fill_smooth_rounded(x, y0, x + SHOULDER_W, y0 + SHOULDER_H, SHOULDER_RADIUS, color);
+        text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_W, SHOULDER_H, STL_ON_BUTTON, text);
+        return;
+    }
+    // "L R": two bars.
+    int x1 = x + SHOULDER_PAIR_W + SHOULDER_PAIR_GAP;
+    fill_smooth_rounded(x, y0, x + SHOULDER_PAIR_W, y0 + SHOULDER_H, SHOULDER_RADIUS, color);
+    fill_smooth_rounded(x1, y0, x1 + SHOULDER_PAIR_W, y0 + SHOULDER_H, SHOULDER_RADIUS, color);
+    text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_PAIR_W, SHOULDER_H, STL_ON_BUTTON, "L");
+    text_centered_ink(FNT_LAUNCHER, x1, y0, SHOULDER_PAIR_W, SHOULDER_H, STL_ON_BUTTON, "R");
+}
+
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     uint64_t perf_started = get_ticks_us();
     transition_content_end();
@@ -1660,6 +1722,9 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             text_width_font(FNT_LAUNCHER, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
         bool single = strlen(hints[i].button) == 1 && !is_c_button(hints[i].kind);
         button_w[i] = (single || bw < FOOTER_BUTTON_SIZE) ? FOOTER_BUTTON_SIZE : bw;
+        if (button_shape(&hints[i]) != SHAPE_ROUND) {
+            button_w[i] = shape_width(button_shape(&hints[i]));
+        }
         label_w[i] = text_width_font(FNT_LAUNCHER, hints[i].label) + 2;
         total += button_w[i] + FOOTER_ICON_GAP + label_w[i] + (i > 0 ? FOOTER_GAP : 0);
     }
@@ -1677,8 +1742,15 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             case LAUNCHER_BUTTON_C_LEFT_RIGHT: color = BUTTON_C_COLOR; break;
             default: color = theme_current()->text_muted; break;
         }
-        fill_smooth_rounded(x, y, x + button_w[i], y + FOOTER_BUTTON_SIZE, FOOTER_BUTTON_SIZE / 2, color);
-        if (is_c_button(hints[i].kind)) {
+        button_shape_t shape = button_shape(&hints[i]);
+        if (shape != SHAPE_ROUND) {
+            draw_shaped_button(shape, x, y, FOOTER_BUTTON_SIZE, color, hints[i].button);
+        } else {
+            fill_smooth_rounded(x, y, x + button_w[i], y + FOOTER_BUTTON_SIZE, FOOTER_BUTTON_SIZE / 2, color);
+        }
+        if (shape != SHAPE_ROUND) {
+            // Drawn with its letters above.
+        } else if (is_c_button(hints[i].kind)) {
             // "C" on the left, a pair of arrows drawn on the right.
             int letter_w = button_w[i] - C_ARROWS_WIDTH;
             text_centered_ink(FNT_LAUNCHER, x + 1, text_y, letter_w, FOOTER_TEXT_H, STL_ON_C_BUTTON, hints[i].button);
