@@ -108,17 +108,6 @@ void launcher_filter_set (int field, const char *value) {
     snprintf(filter_value, sizeof(filter_value), "%s", (field >= 0 && value) ? value : "");
 }
 
-/* Filter picker: first a field, then one of its groups. */
-static const char *picker_field_names[] = { "No filter", "Genre", "Developer", "Year", "Players" };
-static const int picker_field_ids[] = { -1, LAUNCHER_SORT_GENRE, LAUNCHER_SORT_DEVELOPER, LAUNCHER_SORT_YEAR, LAUNCHER_SORT_PLAYERS };
-#define PICKER_FIELD_COUNT (5)
-static bool picker_open = false;
-static int picker_stage = 0;
-static int picker_sel = 0;
-static int picker_top = 0;
-static int picker_field = -1;
-static library_group_t *picker_groups = NULL;
-static int picker_group_count = 0;
 
 /* Hidden games list (Start > Hidden games): A shows a game again. */
 static bool hidden_open = false;
@@ -166,12 +155,6 @@ static const launcher_hint_t hints_search[] = {
     { LAUNCHER_BUTTON_A, "A", "Type" },
     { LAUNCHER_BUTTON_B, "B", "Delete" },
     { LAUNCHER_BUTTON_START, "S", "Done" },
-};
-
-static const launcher_hint_t hints_picker[] = {
-    { LAUNCHER_BUTTON_A, "A", "Choose" },
-    { LAUNCHER_BUTTON_B, "B", "Back" },
-    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Page" },
 };
 
 typedef struct {
@@ -310,122 +293,6 @@ static void apply_sort (library_category_t *c, int index) {
         } else if (*sel >= c->shown) {
             *sel = c->shown > 0 ? c->shown - 1 : 0;
         }
-    }
-}
-
-static void picker_close (void) {
-    picker_open = false;
-    free(picker_groups);
-    picker_groups = NULL;
-    picker_group_count = 0;
-}
-
-static void picker_show_fields (void) {
-    picker_close();
-    picker_open = true;
-    picker_stage = 0;
-    picker_sel = 0;
-    for (int i = 0; i < PICKER_FIELD_COUNT; i++) {
-        if (picker_field_ids[i] == filter_field) {
-            picker_sel = i;
-        }
-    }
-    picker_top = 0;
-}
-
-static void picker_process (menu_t *menu, library_category_t *c) {
-    int count = (picker_stage == 0) ? PICKER_FIELD_COUNT : picker_group_count;
-    int step = menu->actions.go_fast ? PICKER_ROWS : 1;
-
-    if (menu->actions.go_up && picker_sel > 0) {
-        picker_sel = (picker_sel - step < 0) ? 0 : picker_sel - step;
-        sound_play_effect(SFX_CURSOR);
-    } else if (menu->actions.go_down && picker_sel < count - 1) {
-        picker_sel = (picker_sel + step > count - 1) ? count - 1 : picker_sel + step;
-        sound_play_effect(SFX_CURSOR);
-    } else if (menu->actions.back) {
-        sound_play_effect(SFX_EXIT);
-        if (picker_stage == 1) {
-            picker_show_fields();
-        } else {
-            picker_close();
-        }
-        return;
-    } else if (menu->actions.enter) {
-        sound_play_effect(SFX_ENTER);
-        if (picker_stage == 0) {
-            if (picker_field_ids[picker_sel] < 0 || !c) {
-                filter_field = -1;
-                filter_value[0] = '\0';
-                picker_close();
-                return;
-            }
-            picker_field = picker_field_ids[picker_sel];
-            free(picker_groups);
-            picker_group_count = library_category_groups(c, picker_field, &picker_groups);
-            picker_stage = 1;
-            picker_sel = 0;
-            picker_top = 0;
-        } else if (picker_group_count > 0) {
-            filter_field = picker_field;
-            snprintf(filter_value, sizeof(filter_value), "%s", picker_groups[picker_sel].label);
-            picker_close();
-        }
-        return;
-    }
-
-    if (picker_sel < picker_top) {
-        picker_top = picker_sel;
-    }
-    if (picker_sel >= picker_top + PICKER_ROWS) {
-        picker_top = picker_sel - PICKER_ROWS + 1;
-    }
-}
-
-static void picker_draw (void) {
-    color_t line = theme_current()->line;
-    launcher_fill_rounded(LAUNCHER_X0 - 2, PICKER_TOP - 2, LAUNCHER_X1 + 2, PICKER_BOTTOM + 2, 14, line);
-    launcher_fill_rounded(LAUNCHER_X0, PICKER_TOP, LAUNCHER_X1, PICKER_BOTTOM, 12, theme_current()->panel);
-
-    char title[96];
-    if (picker_stage == 0) {
-        snprintf(title, sizeof(title), "Filter");
-    } else {
-        snprintf(title, sizeof(title), "Filter");
-        for (int i = 0; i < PICKER_FIELD_COUNT; i++) {
-            if (picker_field_ids[i] == picker_field) {
-                snprintf(title, sizeof(title), "Filter by %s", picker_field_names[i]);
-            }
-        }
-    }
-    launcher_title(LAUNCHER_X0 + 20, PICKER_TOP + 10, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_DEFAULT, title);
-
-    int count = (picker_stage == 0) ? PICKER_FIELD_COUNT : picker_group_count;
-    if (count == 0) {
-        launcher_text(LAUNCHER_X0, PICKER_FIRST_ROW_Y + 40, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No game details here");
-        return;
-    }
-    for (int r = 0; r < PICKER_ROWS; r++) {
-        int i = picker_top + r;
-        if (i >= count) {
-            break;
-        }
-        int y = PICKER_FIRST_ROW_Y + r * PICKER_ROW_H;
-        if (i == picker_sel) {
-            launcher_fill_rounded(LAUNCHER_X0 + 12, y - 3, LAUNCHER_X1 - 12, y + PICKER_ROW_H - 5, 6, theme_current()->highlight);
-        }
-        if (picker_stage == 0) {
-            launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH / 2, ALIGN_LEFT, STL_DEFAULT, picker_field_names[i]);
-            if (picker_field_ids[i] >= 0 && picker_field_ids[i] == filter_field) {
-                launcher_name(LAUNCHER_X0 + LAUNCHER_WIDTH / 2, y, LAUNCHER_WIDTH / 2 - 24, ALIGN_RIGHT, STL_ACCENT, filter_value);
-            }
-        } else {
-            launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 110, ALIGN_LEFT, STL_DEFAULT, picker_groups[i].label);
-            launcher_text(LAUNCHER_X1 - 84, y, 60, ALIGN_RIGHT, STL_GRAY, "%d", picker_groups[i].count);
-        }
-    }
-    if (picker_top + PICKER_ROWS < count) {
-        launcher_small(LAUNCHER_X0, PICKER_BOTTOM - 22, LAUNCHER_WIDTH - 24, ALIGN_RIGHT, STL_GRAY, "more below");
     }
 }
 
@@ -838,10 +705,6 @@ static void process (menu_t *menu) {
         apply_sort(current, category_index);
     }
 
-    if (picker_open) {
-        picker_process(menu, current);
-        return;
-    }
     if (search_open) {
         search_process(menu);
         return;
@@ -872,10 +735,6 @@ static void process (menu_t *menu) {
         const char *name = library_category_name(category_index);
         snprintf(group_badge, sizeof(group_badge), "%s", name ? name : "");
         group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
-        return;
-    }
-    if (request == LAUNCHER_REQUEST_FILTER) {
-        picker_show_fields();
         return;
     }
     if (request == LAUNCHER_REQUEST_SEARCH) {
@@ -1756,9 +1615,6 @@ static void draw (menu_t *menu, surface_t *d) {
         } else if (folders_open) {
             folders_draw(menu);
             launcher_draw_footer(hints_folders, HINT_COUNT(hints_folders));
-        } else if (picker_open) {
-            picker_draw();
-            launcher_draw_footer(hints_picker, HINT_COUNT(hints_picker));
         } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
             launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
         } else {

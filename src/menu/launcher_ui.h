@@ -509,7 +509,6 @@ void launcher_game_menu_show(menu_t *menu, path_t *selected_rom);
 typedef enum {
     LAUNCHER_REQUEST_NONE,
     LAUNCHER_REQUEST_SURPRISE,
-    LAUNCHER_REQUEST_FILTER,
     LAUNCHER_REQUEST_SEARCH,
     LAUNCHER_REQUEST_HIDDEN,
     LAUNCHER_REQUEST_FOLDERS,
