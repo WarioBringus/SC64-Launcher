@@ -1176,11 +1176,6 @@ static bool draw_now_playing_at (int x, int y, int width, rdpq_align_t align) {
     }
     static char text[128];      // Kept in memory: its width is remembered
     snprintf(text, sizeof(text), "Now playing: %s", name);
-    // On a pill in the background colour, so a long title stays readable over a style's coloured band.
-    int w = text_width_font(FNT_SMALL, text);
-    w = (w > width) ? width : w;
-    int px0 = (align == ALIGN_RIGHT) ? x + width - w : x;
-    launcher_fill_rounded(px0 - 10, y - 2, px0 + w + 10, y + 18, 10, theme_current()->bg);
     launcher_small(x, y, width, align, STL_GRAY, text);
     return true;
 }
@@ -1475,10 +1470,6 @@ static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
         struct tm *t = localtime(&menu->current_time);
         strftime(clock, sizeof(clock), "%I:%M %p", t);
         const char *shown = (clock[0] == '0') ? clock + 1 : clock;
-        // On a pill in the background colour: it stays readable over a style's coloured band.
-        int cw = text_width(shown);
-        launcher_fill_rounded(LAUNCHER_X1 - cw - 10, LAUNCHER_HEADER_Y - 1, LAUNCHER_X1 + 8, LAUNCHER_HEADER_Y + 21, 10,
-            theme_current()->bg);
         launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", shown);
     }
     // The music note takes the spot for its few seconds; the new games notice comes back after.

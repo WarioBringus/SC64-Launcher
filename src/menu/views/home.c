@@ -53,7 +53,7 @@ static const launcher_hint_t hints_empty[] = {
 #define REVEAL_LOOKUPS      (64)    /* Cover lookups per frame while it's hidden */
 #define REVEAL_FADE_MS      (250)   /* Then it fades in from black over this long */
 #define REVEAL_STEADY_FRAMES (6)    /* ...once this many frames in a row came quickly (startup has settled) */
-#define REVEAL_STEADY_MS    (25)
+#define REVEAL_STEADY_MS    (34)    /* The newer styles take ~23-30 ms a frame: steady, but not under 25 */
 #define REVEAL_STEP_MS      (40)    /* A frame moves the fade on by at most this much, so a hitch pauses it */
 #define REVEAL_CHECK_US     (40000) /* While hidden, the new-ROM check runs this long a frame (music fills ~140 ms ahead) */
 
@@ -851,7 +851,7 @@ static void eased_color_from (eased_color_t *e, surface_t *image, bool pending, 
  * list.
  */
 #define CART_TOP            (LAUNCHER_SUBHEADER_Y + 4)
-#define CART_ZOOM           (1.25f) /* The label, 1.25x the showcase size */
+#define CART_ZOOM           (1.1f)  /* The label, 1.1x the showcase size */
 #define CART_PAD            (14)    /* Cartridge body around its label */
 #define CART_GRIP           (34)    /* The cartridge's lower part, under the label */
 #define CART_BAND_Y1        (296)   /* The band's foot, above the row */
@@ -896,7 +896,7 @@ static void cart_background (void) {
     int dx = (int)lroundf(cart_band_dx);
     // The foot just past the text and the A pill beside the cart (the slant leans right above it).
     int want = right + CART_BAND_FOOT_W;
-    want = (cart_text_right + 30 > want) ? cart_text_right + 30 : want;
+    want = (cart_text_right + 14 > want) ? cart_text_right + 14 : want;
     int max_foot = LAUNCHER_SCREEN_W - CART_BAND_TOP_W + CART_BAND_FOOT_W - CART_BAND_EDGE;
     want = (want > max_foot) ? max_foot : want;
     cart_band_reach = (cart_band_reach < 0.0f || motion_snap) ? (float)want : launcher_ease(cart_band_reach, (float)want);
@@ -936,7 +936,7 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
 
         // Beside it: which list, the title, the details and the A prompt.
         int tx = bx + bw + 26, tw = LAUNCHER_X1 - tx;
-        tw = (tw > 300) ? 300 : tw;     // A column, not the rest of the screen: the band reaches past it.
+        tw = (tw > 250) ? 250 : tw;     // A column, not the rest of the screen: the band reaches just past it.
         int y = by + 4;
         launcher_text_sized(LAUNCHER_SIZE_BODY, tx, y, tw, 22, ALIGN_LEFT, STL_DEFAULT, row_label(rows[row_selected].kind));
         y += 26;
@@ -1019,8 +1019,8 @@ static bool process_cartridge (menu_t *menu) {
 #define TYPE_CENTER_Y       (204)   /* The lane's middle */
 #define TYPE_LANE_H         (80)
 #define TYPE_LANE_BAR       (8)
-#define TYPE_COVER_W_WIDE   (380)   /* The cover's width in 16:9 and 4:3 (from the 420x300 pack, never enlarged) */
-#define TYPE_COVER_W_43     (300)
+#define TYPE_COVER_W_WIDE   (330)   /* The cover's width in 16:9 and 4:3 (from the 420x300 pack, never enlarged) */
+#define TYPE_COVER_W_43     (270)
 #define TYPE_TOP            (60)    /* The list's area, under the header and above the hints */
 #define TYPE_SECTION_GAP    (0.9f)  /* Extra room before each list, in names */
 #define TYPE_HEADING_AT     (0.75f) /* Its heading, this far before the list's first name */
@@ -1066,9 +1066,9 @@ static float type_size_for (float d) {
 }
 
 /**
- * @brief One name, its middle at mid: drawn in the two font sizes either side of its size, each as see-through as it
- * is far from that size, so it grows and shrinks smoothly as it glides. Its colour goes from grey to white as it
- * comes into the lane. Too long for a size: the largest that fits.
+ * @brief One name, its middle at mid, in the nearest of the five sizes to its size by distance: it steps up through
+ * them as it glides in (crisp; blending two sizes looked doubled). Its colour goes from grey to white as it comes into
+ * the lane. Too long for a size: the largest that fits.
  */
 static void type_draw_name (int x, int mid, int width, float d, const char *title) {
     float size = type_size_for(d);
@@ -1077,29 +1077,19 @@ static void type_draw_name (int x, int mid, int width, float d, const char *titl
         fit--;
     }
     size = (size > type_px[fit]) ? type_px[fit] : size;
-    int lo = 0;
-    while (lo < TYPE_SIZES - 2 && type_px[lo + 1] <= size) {
-        lo++;
+    int near = 0;
+    for (int i = 1; i <= fit; i++) {
+        near = (fabsf(type_px[i] - size) < fabsf(type_px[near] - size)) ? i : near;
     }
-    float f = (size - type_px[lo]) / (type_px[lo + 1] - type_px[lo]);
-    f = (f < 0.0f) ? 0.0f : (f > 1.0f ? 1.0f : f);
     float bright = 1.0f - fabsf(d);     // 1 in the lane, 0 from one name away
     bright = (bright < 0.0f) ? 0.0f : bright;
     color_t white = THEME_TEXT_DEFAULT, grey = THEME_TEXT_GRAY;
     color_t c = RGBA32(grey.r + (int)((white.r - grey.r) * bright), grey.g + (int)((white.g - grey.g) * bright),
         grey.b + (int)((white.b - grey.b) * bright), 0xFF);
     int raise = (int)lroundf(10.0f * bright);  // In the lane, lifted to leave room for its details
-    for (int pass = 0; pass < 2; pass++) {
-        int i = lo + pass;
-        float alpha = pass ? f : 1.0f - f;
-        if (alpha < 0.06f) {
-            continue;
-        }
-        c.a = (uint8_t)(alpha * 255.0f);
-        fonts_set_fade_color(c);
-        launcher_text_sized(type_sizes[i], x, mid - type_box[i] / 2 - raise, width, type_box[i], ALIGN_LEFT,
-            STL_FADE, title);
-    }
+    fonts_set_fade_color(c);
+    launcher_text_sized(type_sizes[near], x, mid - type_box[near] / 2 - raise, width, type_box[near], ALIGN_LEFT, STL_FADE,
+        title);
 }
 
 static void draw_minimal (menu_t *menu, int *lookups_left) {
