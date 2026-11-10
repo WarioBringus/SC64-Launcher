@@ -454,6 +454,15 @@ int launcher_game_name (int x, int y, int width, rdpq_align_t align, menu_font_s
         large_text ? TEXT_HEIGHT + 4 : TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
+int launcher_game_name_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *name) {
+    char escaped[256];
+    escape_text_codes(name, escaped, sizeof(escaped));
+    int line_h = large_text ? TEXT_HEIGHT + 4 : TEXT_HEIGHT;
+    text_box_wrapped(font_for(escaped, large_text ? FNT_LARGE : FNT_LAUNCHER), x, y, width, line_h * max_lines,
+        ALIGN_LEFT, VALIGN_TOP, style, escaped);
+    return last_layout_lines * line_h;
+}
+
 int launcher_game_details (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text) {
     char escaped[256];
     escape_text_codes(text, escaped, sizeof(escaped));
@@ -534,7 +543,9 @@ static break_entry_t *detail_breaks (uint8_t font, const char *text, int width) 
     b->hash = hash;
     b->width = width;
     b->font = real_font;
-    int real_w = px(width) - px(0);
+    // Measured spans are glyph extents, a few pixels short of the drawn text: a line that only just fit was drawn
+    // cut short ("4 play..."), so it's measured against a little less.
+    int real_w = px(width) - px(0) - 6;
     int len = (int)strlen(text);
     int line_start = 0, line_end = 0, pos = 0;
     while (pos <= len) {

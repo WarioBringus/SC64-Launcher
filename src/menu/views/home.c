@@ -599,7 +599,7 @@ static const char *row_label (row_kind_t kind) {
 #define SPOT_OUTLINE        (3)
 #define SPOT_GAP            (12)
 #define SPOT_LABEL_H        (24)
-#define SPOT_RESUME_H       (77)    /* The Resume card pinned at the top of the column */
+#define SPOT_RESUME_H       (84)    /* The Resume card pinned at the top of the column */
 
 static int spot_scroll = 0;
 static float spot_scroll_pos = 0.0f;
@@ -673,10 +673,12 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
         launcher_fill_rounded(gx0, ry0, LAUNCHER_X1, ry1, CARD_RADIUS, t->panel);
         bool pending;
         surface_t *image = item_image(menu, h, 87, 61, lookups_left, &pending);
-        launcher_draw_tile(gx0 + 8, ry0 + 8, 87, 61, image, pending, h->title, false, t->panel);
+        launcher_draw_tile(gx0 + 8, ry0 + (SPOT_RESUME_H - 61) / 2, 87, 61, image, pending, h->title, false, t->panel);
         int text_x = gx0 + 8 + 87 + 12;
-        launcher_text(text_x, ry0 + 12, LAUNCHER_X1 - 8 - text_x, ALIGN_LEFT, STL_ACCENT, "Resume");
-        launcher_game_name(text_x, ry0 + 38, LAUNCHER_X1 - 8 - text_x, ALIGN_LEFT, on_panel ? STL_DEFAULT : STL_GRAY, h->title);
+        launcher_text(text_x, ry0 + 6, LAUNCHER_X1 - 8 - text_x, ALIGN_LEFT, STL_ACCENT, "Resume");
+        // The whole name, over two lines when it needs them (one was cut short: "Super Smash Br...").
+        launcher_game_name_wrapped(text_x, ry0 + 28, LAUNCHER_X1 - 8 - text_x, 2, on_panel ? STL_DEFAULT : STL_GRAY,
+            h->title);
         grid_top = ry1 + 6;
     }
 
@@ -1481,8 +1483,20 @@ static void binder_draw_tabs (binder_tab_t *tabs, int n, int cur, int page_x0) {
         if (open) {
             launcher_fill_rounded(LAUNCHER_X0, y + 8, LAUNCHER_X0 + 5, y + BINDER_TAB_H - 8, 2, t->accent2);
         }
-        launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + (BINDER_TAB_H - 20) / 2 + 1, rail_w - 18, 20,
-            ALIGN_LEFT, open ? STL_DEFAULT : STL_GRAY, row_label(tabs[i].kind));
+        const char *label = row_label(tabs[i].kind);
+        menu_font_style_t style = open ? STL_DEFAULT : STL_GRAY;
+        int lw = rail_w - 18;
+        const char *space = strchr(label, ' ');
+        if (space && launcher_text_sized_width(LAUNCHER_SIZE_BODY, label) > lw) {
+            // Too wide for the tab: its two words on two lines, rather than cut short ("Recently pla...").
+            char first[32];
+            snprintf(first, sizeof(first), "%.*s", (int)(space - label), label);
+            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + 2, lw, 18, ALIGN_LEFT, style, first);
+            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + 20, lw, 18, ALIGN_LEFT, style, space + 1);
+        } else {
+            launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + (BINDER_TAB_H - 20) / 2 + 1, lw, 20,
+                ALIGN_LEFT, style, label);
+        }
     }
 }
 

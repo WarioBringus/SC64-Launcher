@@ -247,6 +247,9 @@ int launcher_title_space(void);
 /** @brief A game's title under its cover, in the game-title size. */
 int launcher_game_name(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name);
 
+/** @brief A game name wrapped over up to max_lines lines (whole words); returns the height used. */
+int launcher_game_name_wrapped(int x, int y, int width, int max_lines, menu_font_style_t style, const char *name);
+
 /** @brief A game's details line ("Racing  ·  1997  ·  ..."), in the game-details size. */
 int launcher_game_details(int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *text);
 
