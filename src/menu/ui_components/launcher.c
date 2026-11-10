@@ -2003,6 +2003,19 @@ static void standout_pair (color_t behind, color_t *first, color_t *second) {
     }
 }
 
+color_t launcher_frame_color (void) {
+    const theme_t *t = theme_current();
+    color_t c = t->bg;
+    for (int pct = 25; pct <= 70; pct += 5) {
+        c = RGBA32(t->bg.r + (t->text.r - t->bg.r) * pct / 100, t->bg.g + (t->text.g - t->bg.g) * pct / 100,
+            t->bg.b + (t->text.b - t->bg.b) * pct / 100, 0xFF);
+        if (color_contrast(c, t->bg) >= 2.2f) {
+            break;
+        }
+    }
+    return c;
+}
+
 color_t launcher_standout_color (color_t behind) {
     color_t a, b;
     standout_pair(behind, &a, &b);

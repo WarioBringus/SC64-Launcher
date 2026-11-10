@@ -1299,6 +1299,7 @@ static void set_style_chrome (int style) {
 #define BINDER_SMALL_H      (61)
 #define BINDER_SLIDE        (24)    /* A newly opened page slides this far into place */
 #define BINDER_DETAILS_LINE (20)
+#define BINDER_FRAME        (2)     /* The outline round the page and the tabs */
 #define BINDER_WEDGE_Y      (262)   /* The lower-left wedge: from the left edge here... */
 #define BINDER_WEDGE_FOOT_W (250)   /* ...to this far along the foot of the screen */
 #define BINDER_WEDGE_EDGE   (12)    /* Its darker edge */
@@ -1453,17 +1454,21 @@ static void binder_details (menu_t *menu, home_item_t *h, bool resume, char *lin
 static void binder_draw_tabs (binder_tab_t *tabs, int n, int cur, int page_x0) {
     const theme_t *t = theme_current();
     int rail_w = binder_wide() ? BINDER_RAIL_W_WIDE : BINDER_RAIL_W_43;
+    color_t frame = launcher_frame_color();
     for (int i = 0; i < n; i++) {
         int y = CONTENT_TOP + i * (BINDER_TAB_H + BINDER_TAB_GAP);
         bool open = (i == cur);
         int x1 = (open && !binder_rail) ? page_x0 + CARD_RADIUS : LAUNCHER_X0 + rail_w;
         if (open && binder_rail) {
             launcher_draw_focus_ring(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS);
+        } else {
+            launcher_fill_rounded(LAUNCHER_X0 - BINDER_FRAME, y - BINDER_FRAME, x1 + BINDER_FRAME, y + BINDER_TAB_H +
+                BINDER_FRAME, BINDER_TAB_RADIUS + BINDER_FRAME, frame);
         }
         launcher_fill_rounded(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS, open ? t->panel :
-            color_mix(t->bg, t->panel, 45));
+            color_mix(t->bg, t->text, 9));
         if (open) {
-            launcher_fill_rounded(LAUNCHER_X0, y + 8, LAUNCHER_X0 + 5, y + BINDER_TAB_H - 8, 2, t->accent);
+            launcher_fill_rounded(LAUNCHER_X0, y + 8, LAUNCHER_X0 + 5, y + BINDER_TAB_H - 8, 2, t->accent2);
         }
         launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + (BINDER_TAB_H - 20) / 2 + 1, rail_w - 18, 20,
             ALIGN_LEFT, open ? STL_DEFAULT : STL_GRAY, row_label(tabs[i].kind));
@@ -1488,6 +1493,9 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
     launcher_fill_slanted(0, BINDER_WEDGE_FOOT_W + BINDER_WEDGE_EDGE, BINDER_WEDGE_Y - BINDER_WEDGE_EDGE, foot,
         color_mix(t->feature, t->bg, 40));
     launcher_fill_slanted(0, BINDER_WEDGE_FOOT_W, BINDER_WEDGE_Y, foot, t->feature);
+    // The page's outline goes under the tabs, so the open tab's runs into it with no line between them.
+    launcher_fill_rounded(x0 - BINDER_FRAME, CONTENT_TOP - BINDER_FRAME, x1 + BINDER_FRAME, CONTENT_BOTTOM + BINDER_FRAME,
+        CARD_RADIUS + BINDER_FRAME, launcher_frame_color());
     if (rail) {
         binder_draw_tabs(tabs, n, cur, x0);
     }

@@ -469,6 +469,9 @@ color_t launcher_focus_color(void);
 /** @brief The theme colour that stands out most on a colour (for a mark drawn on it). */
 color_t launcher_standout_color(color_t behind);
 
+/** @brief An outline for cards on the background: the background moved toward the text until it stands out from it. */
+color_t launcher_frame_color(void);
+
 /** @brief The moving pulse for something drawn on a colour: between the two theme colours that stand out most on it. */
 color_t launcher_moving_color(color_t behind);
 
