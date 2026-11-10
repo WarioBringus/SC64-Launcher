@@ -567,7 +567,7 @@ static int get_launcher_home_style_current_selection (menu_t *menu) {
 static component_context_menu_t set_launcher_home_style_context_menu = {
     .get_default_selection = get_launcher_home_style_current_selection,
     .list = {
-        {.text = "Binder Mosaic", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_BINDER) },
+        {.text = "Binder", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_BINDER) },
         {.text = "Spotlight", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_SPOTLIGHT) },
         {.text = "Cartridge", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_CARTRIDGE) },
         {.text = "Minimal", .action = set_launcher_home_style_type, .arg = (void *)(uintptr_t)(LAUNCHER_HOME_MINIMAL) },

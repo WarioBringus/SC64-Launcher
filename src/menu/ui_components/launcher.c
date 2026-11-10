@@ -2681,7 +2681,7 @@ static const int filter_field_ids[] = { -1, LAUNCHER_SORT_GENRE, LAUNCHER_SORT_D
 #define FILTER_FIELD_COUNT  (5)
 
 static const int quick_home_styles[] = { LAUNCHER_HOME_BINDER, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_CARTRIDGE, LAUNCHER_HOME_MINIMAL };
-static const char *quick_home_style_names[] = { "Binder Mosaic", "Spotlight", "Cartridge", "Minimal" };
+static const char *quick_home_style_names[] = { "Binder", "Spotlight", "Cartridge", "Minimal" };
 #define QUICK_HOME_STYLES   (4)
 
 static quick_row_t quick_rows[QUICK_MAX_ROWS];
