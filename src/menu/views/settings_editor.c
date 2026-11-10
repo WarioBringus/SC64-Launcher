@@ -974,8 +974,13 @@ static void settings_move (int step) {
     }
 }
 
+static bool settings_entry_widescreen = false;     /* Screen when the page opened */
+
 static void settings_go_back (menu_t *menu) {
     settings_defer_saves(false);
+    if (menu->settings.launcher_widescreen != settings_entry_widescreen) {
+        launcher_covers_reset();    // Covers stay loaded through Settings; a new screen shape takes other packs.
+    }
     sound_play_effect(SFX_EXIT);
     menu->launcher_return_mode = settings_came_from;
     launcher_transition(MENU_MODE_SETTINGS_EDITOR, menu->launcher_return_mode);
@@ -1339,6 +1344,7 @@ void view_settings_init (menu_t *menu) {
         settings_came_from = menu->launcher_return_mode;
     }
     settings_last_press_ms = get_ticks_ms();
+    settings_entry_widescreen = menu->settings.launcher_widescreen;
     settings_defer_saves(menu->settings.launcher_enabled);
 }
 

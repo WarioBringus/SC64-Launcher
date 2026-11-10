@@ -244,6 +244,16 @@ static view_t menu_views[] = {
 /**
  * @brief Whether a mode is one of the launcher's own views.
  */
+/**
+ * @brief Screens the launcher's covers stay loaded through: its own, and its Settings page (which needs neither
+ * their memory nor the PNG decoder). Freeing them for Settings made the way back to Home read every cover pack
+ * again: a 0.6 s fade with a 170 ms frame in the performance log.
+ */
+static bool menu_mode_keeps_covers (menu_mode_t mode) {
+    return mode == MENU_MODE_LIBRARY || mode == MENU_MODE_HOME || mode == MENU_MODE_ABOUT || mode == MENU_MODE_ATTRACT ||
+        mode == MENU_MODE_SETTINGS_EDITOR;
+}
+
 /** @brief Whether any button or direction is pressed this frame. */
 static bool menu_any_action (menu_t *menu) {
     return menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
@@ -367,7 +377,7 @@ void menu_run (boot_params_t *boot_params) {
                     menu->next_mode = menu->launcher_return_mode;
                 }
                 // Free cover images when leaving the launcher (other screens need the memory and the PNG decoder).
-                if (menu_mode_is_launcher(menu->mode) && !menu_mode_is_launcher(menu->next_mode)) {
+                if (menu_mode_keeps_covers(menu->mode) && !menu_mode_keeps_covers(menu->next_mode)) {
                     perf_log_leave();
                     launcher_covers_reset();
                 }
