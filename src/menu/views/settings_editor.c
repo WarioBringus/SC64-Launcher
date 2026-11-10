@@ -1008,7 +1008,7 @@ static void launcher_settings_process (menu_t *menu) {
             settings_reset_to_defaults();
             show_message_reset_settings = false;
             sound_play_effect(SFX_SETTING);
-            menu_show_error(menu, "Reboot N64 to take effect!");
+            menu_show_error(menu, "Settings reset. Turn the N64 off and on again to finish.");
         } else if (menu->actions.back) {
             show_message_reset_settings = false;
             sound_play_effect(SFX_EXIT);
@@ -1201,10 +1201,12 @@ static void launcher_settings_draw (menu_t *menu, surface_t *d) {
     launcher_draw_footer(hints, 3);
 
     if (show_message_reset_settings) {
-        ui_components_messagebox_draw(
-            "Reset all settings?\n\n"
-            "A: Yes, B: Back"
-        );
+        static const launcher_hint_t answers[] = {
+            { LAUNCHER_BUTTON_A, "A", "Reset" },
+            { LAUNCHER_BUTTON_B, "B", "Keep them" },
+        };
+        launcher_draw_dialog("Reset all settings?", "Every setting goes back to how it was at first. Your games, saves "
+            "and favorites stay.", answers, 2);
     }
 
     rdpq_detach_show();
@@ -1219,7 +1221,7 @@ static void process (menu_t *menu) {
     if (menu->actions.enter) {
         if (show_message_reset_settings) {
             settings_reset_to_defaults();
-            menu_show_error(menu, "Reboot N64 to take effect!");
+            menu_show_error(menu, "Settings reset. Turn the N64 off and on again to finish.");
             show_message_reset_settings = false;
         } else {
             ui_components_context_menu_show(&options_context_menu);

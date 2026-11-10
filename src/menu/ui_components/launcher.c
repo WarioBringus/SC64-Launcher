@@ -1581,6 +1581,45 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     perf_log_add(PERF_CHROME, (uint32_t)(get_ticks_us() - perf_started));
 }
 
+#define DIALOG_W            (380)
+#define DIALOG_PAD          (24)
+
+void launcher_draw_dialog (const char *title, const char *body, const launcher_hint_t *buttons, int count) {
+    const theme_t *t = theme_current();
+    fade_band(0, display_get_height(), t->bg, MENU_BACKDROP_ALPHA);
+    int w = DIALOG_W;
+    int text_w = w - 2 * DIALOG_PAD;
+    // The message's height, laid out once (it is cached with the text).
+    char escaped[512];
+    int body_h = 0;
+    if (body && body[0]) {
+        escape_text_codes(body, escaped, sizeof(escaped));
+        int nbytes = (int)strlen(escaped);
+        rdpq_paragraph_t *layout = rdpq_paragraph_build(&(rdpq_textparms_t) { .width = px(text_w) - px(0), .wrap = WRAP_WORD },
+            launcher_font(FNT_LAUNCHER), escaped, &nbytes);
+        body_h = (int)(layout->bbox.y1 - layout->bbox.y0) + 6;
+        rdpq_paragraph_free(layout);
+        body_h = (body_h > 5 * 22) ? 5 * 22 : body_h;
+    }
+    int h = DIALOG_PAD + 30 + (body_h ? 8 + body_h : 0) + 20 + PROMPT_H + DIALOG_PAD;
+    int x0 = LAUNCHER_CENTER_X - w / 2, y0 = display_get_height() / 2 - h / 2 - 10;
+    launcher_fill_rounded(x0 - 1, y0 - 1, x0 + w + 1, y0 + h + 1, 15, t->line);
+    launcher_fill_rounded(x0, y0, x0 + w, y0 + h, 14, t->panel);
+    int y = y0 + DIALOG_PAD;
+    launcher_title(x0 + DIALOG_PAD, y, text_w, ALIGN_LEFT, STL_DEFAULT, title);
+    y += 30;
+    if (body_h) {
+        y += 8;
+        text_box_wrapped(FNT_LAUNCHER, x0 + DIALOG_PAD, y, text_w, 5 * 22, ALIGN_LEFT, VALIGN_TOP, STL_GRAY, escaped);
+        y += body_h;
+    }
+    y += 20;
+    int x = x0 + DIALOG_PAD - PROMPT_PAD;
+    for (int i = 0; i < count; i++) {
+        x += launcher_draw_prompt(x, y, buttons[i].kind, buttons[i].button, buttons[i].label, t->panel) + 10;
+    }
+}
+
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     uint64_t perf_started = get_ticks_us();
     transition_content_end();

@@ -299,6 +299,12 @@ void launcher_filter_set(int field, const char *value);
 /** @brief Draw a page title in the header (for screens opened from the launcher). */
 void launcher_draw_page_title(const char *title);
 
+/**
+ * @brief A dialog over the screen (dimmed behind it): a card with a title, an optional wrapped message, and the
+ * buttons that answer it with their icons.
+ */
+void launcher_draw_dialog(const char *title, const char *body, const launcher_hint_t *buttons, int count);
+
 /** @brief Draw the screen background (theme color, or the user's background image). */
 void launcher_draw_background(void);
 
