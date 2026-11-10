@@ -1533,6 +1533,11 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
         // showing between them (the first tab meets the page's top corner).
         int ty = CONTENT_TOP + cur * (BINDER_TAB_H + BINDER_TAB_GAP);
         launcher_fill_rounded(x0 - 1, ty, x0 + CARD_RADIUS + 1, ty + BINDER_TAB_H, 0, t->panel);
+        if (cur == 0) {
+            // The first tab's outline and the page's run along the same line: their rounded ends left a gap in it.
+            launcher_fill_rounded(x0 - 4, CONTENT_TOP - BINDER_FRAME, x0 + CARD_RADIUS + 4, CONTENT_TOP, 0,
+                launcher_frame_color());
+        }
     }
 
     binder_slide = motion_snap ? 0.0f : launcher_ease(binder_slide, 0.0f);
