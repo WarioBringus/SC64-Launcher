@@ -2459,6 +2459,20 @@ static int quick_settled_frames = 0;        /* Frames drawn in a row with nothin
 static int quick_frames_drawn = 0;          /* While open, for the performance log */
 static menu_t *quick_owner;                 /* The menu it was opened with (defined with launcher_menu_show) */
 static uint64_t quick_arrange_ms = 0;       /* The last change that re-sorts the Library (sort, filter) */
+static surface_t quick_image;               /* The panel, drawn once and copied to the screen each frame */
+static void *quick_image_block = NULL;      /* Its pixels, borrowed from the cover memory */
+static bool quick_image_fresh = false;      /* It shows the panel as it is now */
+static uint32_t quick_image_song = 0;
+
+#define QUICK_IMAGE_H       (QUICK_BOTTOM + 14)
+
+static void quick_image_release (void) {
+    if (quick_image_block) {
+        launcher_covers_return(quick_image_block);
+        quick_image_block = NULL;
+    }
+    quick_image_fresh = false;
+}
 static int quick_cost_logs = 0;             /* Draw-cost notes so far (the log holds only so many events) */
 
 #define ARRANGE_WAIT_MS     (300)   /* Re-sorting a large folder takes ~90 ms: once the presses stop, not per press */
@@ -2557,6 +2571,9 @@ static void quick_close (bool slide) {
     quick_open = false;
     quick_changed_ms = slide ? get_ticks_ms() : 0;
     quick_free_groups();
+    if (!slide) {
+        quick_image_release();      // Leaving at once: the screen it goes to may reset the cover memory.
+    }
     settings_resume_saves();    // What changed is written in one go once the controller rests, not as it closes.
 }
 
@@ -2783,6 +2800,7 @@ static bool quick_process (menu_t *menu) {
         menu->actions.enter || menu->actions.back || menu->actions.settings;
     if (input) {
         quick_settled_frames = 0;   // Draw a few frames: the screen behind catches up with a change.
+        quick_image_fresh = false;
     }
     quick_build_rows();
     const quick_row_t *row = &quick_rows[quick_row];
@@ -2832,6 +2850,17 @@ static int quick_layout (int *top, int *height) {
     return y;
 }
 
+/* Where the panel is drawn: its own image (from 0), or the screen. */
+static int quick_target_width = 0, quick_target_height = 0;
+
+static int quick_target_w (void) {
+    return quick_target_width ? quick_target_width : display_get_width();
+}
+
+static int quick_target_h (void) {
+    return quick_target_height ? quick_target_height : display_get_height();
+}
+
 static void quick_draw_rows (menu_t *menu, int left, int right) {
     const theme_t *theme = theme_current();
     int top[QUICK_MAX_ROWS], height[QUICK_MAX_ROWS];
@@ -2851,7 +2880,7 @@ static void quick_draw_rows (menu_t *menu, int left, int right) {
     quick_scroll_pos = launcher_ease(quick_scroll_pos, (float)quick_scroll);
     int scroll = (int)(quick_scroll_pos + 0.5f);
 
-    rdpq_set_scissor(0, 2, display_get_width(), QUICK_BOTTOM + 2);
+    rdpq_set_scissor(0, 2, quick_target_w(), QUICK_BOTTOM + 2);
     for (int r = 0; r < quick_row_count; r++) {
         const quick_row_t *row = &quick_rows[r];
         int y = top[r] - scroll;
@@ -2908,7 +2937,7 @@ static void quick_draw_rows (menu_t *menu, int left, int right) {
             launcher_draw_arrow(right - 6, cy, 11, true, theme->accent);
         }
     }
-    rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+    rdpq_set_scissor(0, 0, quick_target_w(), quick_target_h());
     if (quick_scroll < max_scroll) {
         launcher_draw_arrow((left + right) / 2, QUICK_BOTTOM + 4, 7, true, theme->text_muted);
     }
@@ -2920,6 +2949,7 @@ static void quick_draw (menu_t *menu) {
         quick_draw_logged = false;
         quick_draw_frames = 0;
         quick_draw_us = 0;
+        quick_image_release();
         return;
     }
     uint64_t started = get_ticks_us();
@@ -2935,13 +2965,48 @@ static void quick_draw (menu_t *menu) {
         rdpq_set_prim_color(dim);
         rdpq_fill_rectangle(0, 0, launcher_px(x0), display_get_height());
     rdpq_mode_pop();
-    ui_components_box_draw(launcher_px(x0), 0, display_get_width(), display_get_height(), theme->panel);
-    ui_components_box_draw(launcher_px(x0), 0, launcher_px(x0) + 1, display_get_height(), theme->line);
-
     quick_build_rows();
-    int left = x0 + QUICK_PAD;
-    int right = x0 + QUICK_W - QUICK_PAD - (launcher_is_widescreen() ? 6 : 0);
-    quick_draw_rows(menu, left, right);
+    // The panel as an image: drawn again only when it changes (a press, a song, a glide), copied to the screen each
+    // frame. Drawn every frame it cost ~14 ms on top of the screen behind (30-40 fps while it slid in).
+    int image_w = launcher_px(QUICK_W) - launcher_px(0);
+    if (quick_image_block && !launcher_covers_lent(quick_image_block)) {
+        quick_image_block = NULL;   // The cover memory was reset.
+        quick_image_fresh = false;
+    }
+    if (!quick_image_block) {
+        quick_image_block = launcher_covers_borrow((uint32_t)(image_w * QUICK_IMAGE_H * 2));
+        if (quick_image_block) {
+            quick_image = surface_make_linear(quick_image_block, FMT_RGBA16, image_w, QUICK_IMAGE_H);
+            quick_image_fresh = false;
+        }
+    }
+    int pad_right = QUICK_PAD + (launcher_is_widescreen() ? 6 : 0);
+    if (quick_image_block) {
+        bool gliding = fabsf(quick_scroll_pos - (float)quick_scroll) >= 0.5f;
+        if (!quick_image_fresh || gliding || sound_bgm_track_generation() != quick_image_song) {
+            rdpq_attach(&quick_image, NULL);
+            quick_target_width = image_w;
+            quick_target_height = QUICK_IMAGE_H;
+            ui_components_box_draw(0, 0, image_w, QUICK_IMAGE_H, theme->panel);
+            ui_components_box_draw(0, 0, 1, QUICK_IMAGE_H, theme->line);
+            quick_draw_rows(menu, QUICK_PAD, QUICK_W - pad_right);
+            quick_target_width = quick_target_height = 0;
+            rdpq_detach();
+            quick_image_fresh = true;
+            quick_image_song = sound_bgm_track_generation();
+        }
+        rdpq_mode_push();
+            rdpq_set_mode_copy(false);
+            rdpq_tex_blit(&quick_image, launcher_px(x0), 0, NULL);
+        rdpq_mode_pop();
+        ui_components_box_draw(launcher_px(x0), QUICK_IMAGE_H, display_get_width(), display_get_height(), theme->panel);
+        ui_components_box_draw(launcher_px(x0), QUICK_IMAGE_H, launcher_px(x0) + 1, display_get_height(), theme->line);
+    } else {
+        // No memory to spare for the image: drawn straight to the screen.
+        ui_components_box_draw(launcher_px(x0), 0, display_get_width(), display_get_height(), theme->panel);
+        ui_components_box_draw(launcher_px(x0), 0, launcher_px(x0) + 1, display_get_height(), theme->line);
+        quick_draw_rows(menu, x0 + QUICK_PAD, x0 + QUICK_W - pad_right);
+    }
 
     if (quick_open && t >= 1.0f) {
         static const launcher_hint_t select_hints[] = {

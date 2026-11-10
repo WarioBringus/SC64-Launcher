@@ -1132,6 +1132,40 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     return NULL;
 }
 
+static void *lent_block = NULL;
+
+void *launcher_covers_borrow (uint32_t bytes) {
+    if (lent_block) {
+        return NULL;
+    }
+    arena_init();
+    if (!arena) {
+        return NULL;
+    }
+    for (int tries = 0; tries < 64; tries++) {
+        void *block = arena_alloc(bytes);
+        if (block) {
+            lent_block = block;
+            return block;
+        }
+        if (!free_oldest_cover(NULL)) {
+            break;
+        }
+    }
+    return NULL;
+}
+
+bool launcher_covers_lent (const void *block) {
+    return block && block == lent_block;
+}
+
+void launcher_covers_return (void *block) {
+    if (block && block == lent_block) {
+        arena_free(block);
+        lent_block = NULL;
+    }
+}
+
 surface_t *launcher_cover_get (const char *path, int max_w, int max_h, bool *pending) {
     return cover_get(path, max_w, max_h, pending, false);
 }
@@ -1148,6 +1182,7 @@ void launcher_covers_reset (void) {
     packs_close();
     // The reserved block goes back to the heap (the original menu's screens need the memory); it is reserved again
     // with the next cover.
+    lent_block = NULL;      // Freed with the rest.
     if (arena) {
         free_uncached(arena);
         arena = NULL;

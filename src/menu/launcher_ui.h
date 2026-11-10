@@ -182,6 +182,18 @@ void launcher_covers_begin_frame(void);
 void launcher_covers_reset(void);
 
 /**
+ * @brief A block of the cover memory for something else (the Quick menu's image), freeing covers unused longest to
+ * make room; NULL when it can't. One at a time. It's gone when the covers are reset: check launcher_covers_lent.
+ */
+void *launcher_covers_borrow(uint32_t bytes);
+
+/** @brief Whether a borrowed block is still lent (the covers weren't reset since). */
+bool launcher_covers_lent(const void *block);
+
+/** @brief Give a borrowed block back. */
+void launcher_covers_return(void *block);
+
+/**
  * @brief While held, covers not yet in memory are read at most one every other frame (the rest show as
  * placeholders until their turn): used during fast scrolling, when a pack read every frame would make
  * the scrolling skip. Released each frame.
