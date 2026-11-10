@@ -1953,17 +1953,73 @@ void launcher_set_focus_moving (bool moving) {
     focus_moving = moving;
 }
 
+/** @brief Relative luminance (sRGB, as for text contrast). */
+static float color_luminance (color_t c) {
+    float ch[3] = { c.r / 255.0f, c.g / 255.0f, c.b / 255.0f };
+    for (int i = 0; i < 3; i++) {
+        ch[i] = (ch[i] <= 0.03928f) ? ch[i] / 12.92f : powf((ch[i] + 0.055f) / 1.055f, 2.4f);
+    }
+    return 0.2126f * ch[0] + 0.7152f * ch[1] + 0.0722f * ch[2];
+}
+
+/** @brief Contrast ratio of two colours (1 = the same, 21 = black on white). */
+static float color_contrast (color_t a, color_t b) {
+    float la = color_luminance(a), lb = color_luminance(b);
+    return (fmaxf(la, lb) + 0.05f) / (fminf(la, lb) + 0.05f);
+}
+
+static color_t color_lerp (color_t a, color_t b, float s) {
+    return RGBA32(a.r + (int)((b.r - a.r) * s), a.g + (int)((b.g - a.g) * s), a.b + (int)((b.b - a.b) * s), 0xFF);
+}
+
+/**
+ * @brief The theme's two colours that stand out most on what's behind: the one with the most contrast, and another
+ * clearly different one that still has a contrast of 3 (or, when the theme has none, the first dimmed a little
+ * toward what's behind). Themes share colours between roles (Castle Sky's second accent is its feature colour), so
+ * fixed roles vanished on some of them.
+ */
+static void standout_pair (color_t behind, color_t *first, color_t *second) {
+    const theme_t *t = theme_current();
+    color_t pool[] = { t->text, t->on_feature, t->accent, t->accent2, t->on_accent, t->bg, t->panel };
+    int n = sizeof(pool) / sizeof(pool[0]);
+    int best = 0;
+    for (int i = 1; i < n; i++) {
+        best = (color_contrast(pool[i], behind) > color_contrast(pool[best], behind)) ? i : best;
+    }
+    *first = pool[best];
+    float second_contrast = 0.0f;
+    bool found = false;
+    for (int i = 0; i < n; i++) {
+        int apart = abs(pool[i].r - pool[best].r) + abs(pool[i].g - pool[best].g) + abs(pool[i].b - pool[best].b);
+        float c = color_contrast(pool[i], behind);
+        if (apart > 120 && c >= 3.0f && c > second_contrast) {
+            *second = pool[i];
+            second_contrast = c;
+            found = true;
+        }
+    }
+    if (!found) {
+        *second = color_lerp(pool[best], behind, 0.3f);
+    }
+}
+
+color_t launcher_standout_color (color_t behind) {
+    color_t a, b;
+    standout_pair(behind, &a, &b);
+    return a;
+}
+
+color_t launcher_moving_color (color_t behind) {
+    // Between the two colours that stand out most on what's behind, about twice a second.
+    color_t a, b;
+    standout_pair(behind, &a, &b);
+    float phase = (float)(get_ticks_ms() % 600) / 600.0f;
+    return color_lerp(a, b, 0.5f - 0.5f * cosf(phase * 6.2831853f));
+}
+
 color_t launcher_focus_color (void) {
     const theme_t *t = theme_current();
-    if (!focus_moving) {
-        return t->accent;
-    }
-    // Between the second accent and the text colour, about twice a second: different from the resting cursor in
-    // every theme, whatever its colours.
-    float phase = (float)(get_ticks_ms() % 600) / 600.0f;
-    float s = 0.5f - 0.5f * cosf(phase * 6.2831853f);
-    color_t a = t->accent2, b = t->text;
-    return RGBA32(a.r + (int)((b.r - a.r) * s), a.g + (int)((b.g - a.g) * s), a.b + (int)((b.b - a.b) * s), 0xFF);
+    return focus_moving ? launcher_moving_color(t->bg) : t->accent;
 }
 
 void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {

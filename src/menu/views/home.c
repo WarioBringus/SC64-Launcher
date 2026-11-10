@@ -1187,7 +1187,7 @@ static void type_draw_name (int x, int mid, int width, float d, const char *titl
     color_t c = RGBA32(grey.r + (int)((white.r - grey.r) * bright), grey.g + (int)((white.g - grey.g) * bright),
         grey.b + (int)((white.b - grey.b) * bright), 0xFF);
     if (held) {
-        c = launcher_focus_color();
+        c = launcher_moving_color(theme_current()->feature);   // Readable on the lane at every point of the pulse
     }
     int raise = (int)lroundf(16.0f * bright);  // In the lane, lifted to leave room for its details
     fonts_set_fade_color(c);
@@ -1222,11 +1222,11 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     // The lane across the screen, in the focused cover's colour, with a bar of it at the left edge.
     // The lane in the theme's own feature colour, as Spotlight's panel (the cover's colour changed it every game).
     color_t lane = t->feature;
-    color_t bar = t->accent2;
+    color_t bar = launcher_standout_color(lane);    // The second accent is the feature colour in some themes
     int ly0 = TYPE_CENTER_Y - TYPE_LANE_H / 2;
     ui_components_box_draw(0, ly0, display_get_width(), ly0 + TYPE_LANE_H, lane);
     ui_components_box_draw(0, ly0, launcher_px(TYPE_LANE_BAR * (moving ? 2 : 1)), ly0 + TYPE_LANE_H,
-        moving ? launcher_focus_color() : bar);     // Wider and pulsing while a favorite is being moved
+        moving ? launcher_moving_color(lane) : bar);    // Wider and pulsing while a favorite is being moved
 
     bool hires = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H);
     int clip_x1 = launcher_px(cover_x - 10);

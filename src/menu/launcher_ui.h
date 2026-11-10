@@ -466,6 +466,12 @@ void launcher_set_focus_moving(bool moving);
 /** @brief The focus ring's colour this frame (the accent, or the moving pulse). */
 color_t launcher_focus_color(void);
 
+/** @brief The theme colour that stands out most on a colour (for a mark drawn on it). */
+color_t launcher_standout_color(color_t behind);
+
+/** @brief The moving pulse for something drawn on a colour: between the two theme colours that stand out most on it. */
+color_t launcher_moving_color(color_t behind);
+
 /** @brief The focus ring around a tile's cover where it fills the tile (it may be a pixel short), else the tile. */
 void launcher_draw_focus_ring_cover(int x, int y, int w, int h, surface_t *image);
 
