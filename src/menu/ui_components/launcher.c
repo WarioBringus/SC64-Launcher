@@ -790,8 +790,57 @@ void launcher_draw_page_title (const char *title) {
     launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
 }
 
+static bool background_override = false;
+static color_t background_override_color;
+
+void launcher_set_background_color (color_t color) {
+    background_override = true;
+    background_override_color = color;
+}
+
 void launcher_draw_background (void) {
+    if (background_override) {
+        background_override = false;    // Only for the frame it was set in.
+        ui_components_box_draw(0, 0, display_get_width(), display_get_height(), background_override_color);
+        return;
+    }
     ui_components_background_draw();
+}
+
+#define COLOR_SAMPLES       (12)    /* Across and down: 144 pixels read, a few tens of microseconds */
+
+bool launcher_cover_color (const surface_t *image, color_t *out) {
+    if (!image || !image->buffer || surface_get_format(image) != FMT_RGBA16 || image->width < 4 || image->height < 4) {
+        return false;
+    }
+    uint32_t r = 0, g = 0, b = 0, weight = 0, ar = 0, ag = 0, ab = 0, count = 0;
+    for (int sy = 0; sy < COLOR_SAMPLES; sy++) {
+        const uint16_t *line = (const uint16_t *)((const uint8_t *)image->buffer +
+            (image->height * (2 * sy + 1) / (2 * COLOR_SAMPLES)) * image->stride);
+        for (int sx = 0; sx < COLOR_SAMPLES; sx++) {
+            uint16_t p = line[image->width * (2 * sx + 1) / (2 * COLOR_SAMPLES)];
+            if (!(p & 1)) {
+                continue;   // See-through (a cartridge's outline)
+            }
+            int pr = ((p >> 11) & 31) << 3, pg = ((p >> 6) & 31) << 3, pb = ((p >> 1) & 31) << 3;
+            int hi = pr > pg ? (pr > pb ? pr : pb) : (pg > pb ? pg : pb);
+            int lo = pr < pg ? (pr < pb ? pr : pb) : (pg < pb ? pg : pb);
+            ar += pr; ag += pg; ab += pb; count++;
+            int sat = hi - lo;
+            if (hi < 48 || sat < 48) {
+                continue;   // Near black, white or grey: not the colour that names the game
+            }
+            r += pr * sat; g += pg * sat; b += pb * sat; weight += sat;
+        }
+    }
+    if (weight > 0) {
+        *out = RGBA32(r / weight, g / weight, b / weight, 0xFF);
+    } else if (count > 0) {
+        *out = RGBA32(ar / count, ag / count, ab / count, 0xFF);
+    } else {
+        return false;
+    }
+    return true;
 }
 
 struct launcher_paragraph_s {

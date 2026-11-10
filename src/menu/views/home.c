@@ -575,110 +575,6 @@ static surface_t *big_cover (menu_t *menu, home_item_t *h, float want_zoom, int 
     return item_image(menu, h, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, pending);
 }
 
-/* Minimal: no tabs; big type on the background, a short accent line under the focused title, and the focused
-   game's cover large on the right. */
-#define MIN_TOP             (30)
-#define MIN_LABEL_H         (24)
-#define MIN_ITEM_H          (30)
-#define MIN_RESUME_H        (44)
-#define MIN_SECTION_GAP     (22)
-#define MIN_BAR_W           (26)
-#define MIN_COVER_ZOOM      (1.25f)
-
-static int min_scroll = 0;
-static float min_scroll_pos = 0.0f;
-
-static const char *min_label (row_kind_t kind) {
-    return (kind == ROW_RESUME) ? "CONTINUE" : ((kind == ROW_RECENT) ? "RECENT" : "FAVORITES");
-}
-
-static void draw_minimal (menu_t *menu, int *lookups_left) {
-    const theme_t *t = theme_current();
-    int cover_w = (int)(LAUNCHER_SHOWCASE_W * MIN_COVER_ZOOM);
-    int cover_h = (int)(LAUNCHER_SHOWCASE_H * MIN_COVER_ZOOM);
-    int cover_x = LAUNCHER_X1 - cover_w - 6;
-    int cover_y = MIN_TOP + 36;
-    int list_x = LAUNCHER_X0 + 8;
-    int list_w = cover_x - 32 - list_x;
-    int top = MIN_TOP, bottom = CONTENT_BOTTOM;
-
-    // Where the focused title sits in the whole list, so the list scrolls to keep it in view.
-    int y = 0, focus_top = 0, focus_bottom = 0;
-    for (int r = 0; r < row_count; r++) {
-        y += MIN_LABEL_H;
-        for (int i = 0; i < rows[r].count; i++) {
-            int h = (rows[r].kind == ROW_RESUME) ? MIN_RESUME_H : MIN_ITEM_H;
-            if (is_focus(r, i)) {
-                focus_top = y - (i == 0 ? MIN_LABEL_H : 0);     // The first of a section brings its label.
-                focus_bottom = y + h;
-            }
-            y += h;
-        }
-        y += MIN_SECTION_GAP;
-    }
-    if (focus_top < min_scroll) {
-        min_scroll = focus_top;
-    }
-    if (focus_bottom - min_scroll > bottom - top) {
-        min_scroll = focus_bottom - (bottom - top);
-    }
-    min_scroll_pos = motion_snap ? (float)min_scroll : launcher_ease(min_scroll_pos, (float)min_scroll);
-    int drawn = (int)lroundf(min_scroll_pos);
-
-    int clip_x1 = launcher_px(cover_x - 8);
-    rdpq_set_scissor(0, top - 2, clip_x1 < 1 ? 1 : clip_x1, bottom + 2);
-    y = top - drawn;
-    for (int r = 0; r < row_count; r++) {
-        if (y + MIN_LABEL_H > top - 4 && y < bottom) {
-            launcher_small(list_x, y + 4, list_w, ALIGN_LEFT, STL_GRAY, min_label(rows[r].kind));
-        }
-        y += MIN_LABEL_H;
-        for (int i = 0; i < rows[r].count; i++) {
-            home_item_t *h = &rows[r].items[i];
-            bool resume = (rows[r].kind == ROW_RESUME);
-            int item_h = resume ? MIN_RESUME_H : MIN_ITEM_H;
-            bool focus = is_focus(r, i);
-            slot_add(list_x, y + drawn - min_scroll, list_w, item_h, r, i);
-            if (y + item_h > top - 4 && y < bottom) {
-                if (resume) {
-                    launcher_title(list_x, y, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
-                } else {
-                    launcher_game_name(list_x, y + 2, list_w, ALIGN_LEFT, focus ? STL_DEFAULT : STL_GRAY, h->title);
-                }
-                if (focus) {
-                    launcher_fill_rounded(list_x, y + item_h - 5, list_x + MIN_BAR_W, y + item_h - 2, 1, t->feature);
-                }
-            }
-            y += item_h;
-        }
-        y += MIN_SECTION_GAP;
-    }
-    clip_none();
-
-    home_item_t *f = focused_item();
-    if (f) {
-        bool pending;
-        float zoom;
-        surface_t *image = big_cover(menu, f, MIN_COVER_ZOOM, lookups_left, &pending, &zoom);
-        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, t->bg, zoom);
-        launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, zoom);
-        char details[160];
-        library_details_for_path(menu, item_path(f), details, sizeof(details));
-        int text_y = cover_y + cover_h + 14;
-        if (details[0]) {
-            text_y += launcher_game_details_wrapped(cover_x, text_y, cover_w, 2, STL_GRAY, details) + 2;
-        }
-        char folder[64];
-        item_folder(f, folder, sizeof(folder));
-        launcher_name(cover_x, text_y, cover_w, ALIGN_LEFT, STL_GRAY, folder);
-    }
-    // The clock at the bottom left, across from the hints; the music note above the cover.
-    char clock[16];
-    launcher_clock_text(menu, clock, sizeof(clock));
-    launcher_small(LAUNCHER_X0 + 8, LAUNCHER_FOOTER_Y + 12, 200, ALIGN_LEFT, STL_GRAY, clock);
-    launcher_draw_notes(cover_x - 200, MIN_TOP + 4, cover_w + 206, ALIGN_RIGHT);
-}
-
 static int row_of_kind (row_kind_t kind) {
     for (int r = 0; r < row_count; r++) {
         if (rows[r].kind == kind) {
@@ -910,109 +806,290 @@ static void draw_strip (menu_t *menu, const game_ref_t *refs, int n, int x0, int
     }
 }
 
-/* Cartridge: a header bar; the game to resume and the recently played stand as cartridges in a band (the first one
-   larger), the focused game's title under it, Favorites below. Every shade comes from the theme. */
-#define CART_BAND_TOP       (LAUNCHER_HEADER_BAR_H + 14)
-#define CART_BAND_H         (160)
-#define CART_PAD_X          (12)    /* Cartridge body around its label */
-#define CART_PAD_TOP        (12)
-#define CART_PAD_BOTTOM     (16)
-#define CART_GAP            (18)
-#define CART_LIFT           (8)     /* The focused cartridge stands this much higher */
+/*
+ * Cartridge: one big cartridge with the focused game's label, its title and details beside it, and the whole screen
+ * taking on the label's colour (fading to the next game's as the focus moves). Below, the lists (Resume / Recently
+ * played / Favorites) as tabs over a row of small cartridges: up/down change list, left/right move along it.
+ */
+#define CART_TOP            (LAUNCHER_SUBHEADER_Y + 4)
+#define CART_ZOOM           (1.1f)  /* The label, 1.1x the showcase size */
+#define CART_PAD            (14)    /* Cartridge body around its label */
+#define CART_GRIP           (34)    /* The cartridge's lower part, under the label */
+#define CART_TABS_Y         (296)
+#define CART_STRIP_Y        (330)
 #define CART_ROW_W          (87)
 #define CART_ROW_H          (61)
 #define CART_ROW_STEP       (97)
+#define CART_TINT           (34)    /* Percent of the label's colour in the background */
+#define CART_TAB_GAP        (12)
 
-static int cart_scroll = 0;
-static float cart_scroll_pos = 0.0f;
 static strip_t cart_row_strip;
+static int cart_strip_row = -1;         /* The list the strip shows (a new one starts without gliding) */
+static float cart_ambient[3] = { -1.0f, 0.0f, 0.0f };
+static color_t cart_ambient_target;
+
+/** @brief This frame's background: the label colour, eased toward the focused game's. */
+static color_t cart_background (void) {
+    const theme_t *t = theme_current();
+    if (cart_ambient[0] < 0.0f) {
+        cart_ambient_target = t->bg;    // The theme's own until a label's colour is known.
+    }
+    color_t target = cart_ambient_target;
+    if (cart_ambient[0] < 0.0f || motion_snap) {
+        cart_ambient[0] = target.r;
+        cart_ambient[1] = target.g;
+        cart_ambient[2] = target.b;
+    } else {
+        cart_ambient[0] = launcher_ease(cart_ambient[0], target.r);
+        cart_ambient[1] = launcher_ease(cart_ambient[1], target.g);
+        cart_ambient[2] = launcher_ease(cart_ambient[2], target.b);
+    }
+    return RGBA32((int)cart_ambient[0], (int)cart_ambient[1], (int)cart_ambient[2], 0xFF);
+}
 
 static void draw_cartridge (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
-    color_t band_color = color_mix(t->bg, t->panel, 60);
-    color_t body_color = color_mix(t->panel, t->text_muted, 35);
-    int y0 = CART_BAND_TOP, y1 = CART_BAND_TOP + CART_BAND_H;
-    launcher_fill_rounded(LAUNCHER_X0, y0, LAUNCHER_X1, y1, 6, band_color);
+    color_t body = color_mix(t->panel, t->text_muted, 35);
+    color_t behind = RGBA32((int)cart_ambient[0], (int)cart_ambient[1], (int)cart_ambient[2], 0xFF);
+    int lw = (int)(LAUNCHER_SHOWCASE_W * CART_ZOOM), lh = (int)(LAUNCHER_SHOWCASE_H * CART_ZOOM);
+    int bx = LAUNCHER_X0 + 4, by = CART_TOP;
+    int bw = lw + 2 * CART_PAD, bh = lh + CART_PAD + CART_GRIP;
+    home_item_t *f = focused_item();
 
-    game_ref_t band[MAX_ROW_ITEMS + 1];
-    int band_n = refs_add(band, 0, MAX_ROW_ITEMS + 1, row_of_kind(ROW_RESUME));
-    bool has_resume = band_n > 0;
-    band_n = refs_add(band, band_n, MAX_ROW_ITEMS + 1, row_of_kind(ROW_RECENT));
-
-    // Where each cartridge goes along the band (the one to resume is larger), and the scroll that keeps the
-    // focused one in view.
-    int xs[MAX_ROW_ITEMS + 1], ws[MAX_ROW_ITEMS + 1];
-    int x = 0, focus = refs_focus(band, band_n);
-    for (int i = 0; i < band_n; i++) {
-        bool big = has_resume && i == 0;
-        ws[i] = (big ? LAUNCHER_COVER_W : 133) + 2 * CART_PAD_X;
-        xs[i] = x;
-        x += ws[i] + CART_GAP;
+    // The cartridge: its body, grip lines in the lower part, and the label.
+    launcher_fill_rounded(bx, by, bx + bw, by + bh, 12, body);
+    color_t ridge = color_mix(body, t->bg, 35);
+    for (int k = 0; k < 3; k++) {
+        int ry = by + CART_PAD + lh + 9 + k * 7;
+        launcher_fill_rounded(bx + bw / 2 - 46, ry, bx + bw / 2 + 46, ry + 3, 1, ridge);
     }
-    int view_x0 = LAUNCHER_X0 + 24, view_w = LAUNCHER_WIDTH - 48;
-    if (focus >= 0) {
-        if (xs[focus] < cart_scroll) {
-            cart_scroll = xs[focus];
-        }
-        if (xs[focus] + ws[focus] - cart_scroll > view_w) {
-            cart_scroll = xs[focus] + ws[focus] - view_w;
-        }
-    }
-    cart_scroll_pos = motion_snap ? (float)cart_scroll : launcher_ease(cart_scroll_pos, (float)cart_scroll);
-    int drawn = (int)lroundf(cart_scroll_pos);
-
-    int clip_x1 = launcher_px(LAUNCHER_X1 - 8);
-    rdpq_set_scissor(0, y0 - CART_LIFT, clip_x1 < 1 ? 1 : clip_x1, y1);
-    for (int i = 0; i < band_n; i++) {
-        bool big = has_resume && i == 0;
-        int lw = big ? LAUNCHER_COVER_W : 133, lh = big ? LAUNCHER_COVER_H : 94;
-        int bh = lh + CART_PAD_TOP + CART_PAD_BOTTOM;
-        int lift = (i == focus) ? CART_LIFT : 0;
-        int bx = view_x0 + xs[i] - drawn;
-        int target_bx = view_x0 + xs[i] - cart_scroll;
-        int by = y1 - bh - lift;
-        slot_add(target_bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh, band[i].row, band[i].index);
-        if (bx < LAUNCHER_X0 + 8 || bx > LAUNCHER_X1) {
-            continue;   // Past the band's ends: not drawn, and its cover not read.
-        }
-        // The cartridge's body: rounded at the top, standing on the band's floor.
-        launcher_fill_rounded(bx, by, bx + ws[i], by + 16, 8, body_color);
-        launcher_fill_rounded(bx, by + 8, bx + ws[i], y1, 0, body_color);
-        home_item_t *h = &rows[band[i].row].items[band[i].index];
+    if (f) {
         bool pending;
-        surface_t *image = item_image(menu, h, lw, lh, lookups_left, &pending);
-        launcher_draw_tile(bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh, image, pending, h->title, false, body_color);
-        if (i == focus) {
-            launcher_note_focused_cover(image, bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh);
-            launcher_draw_focus_ring_tile(target_bx + CART_PAD_X, by + CART_PAD_TOP, lw, lh);
+        float zoom;
+        surface_t *image = big_cover(menu, f, CART_ZOOM, lookups_left, &pending, &zoom);
+        int iw = (image && !pending) ? (int)(image->width * zoom) : lw;
+        int ih = (image && !pending) ? (int)(image->height * zoom) : lh;
+        iw = (iw > lw) ? lw : iw;
+        ih = (ih > lh) ? lh : ih;
+        int ix = bx + CART_PAD + (lw - iw) / 2, iy = by + CART_PAD + (lh - ih) / 2;
+        launcher_draw_tile_zoomed(ix, iy, iw, ih, image, pending, f->title, false, body, zoom);
+        launcher_note_focused_cover_zoomed(image, ix, iy, iw, ih, zoom);
+        color_t c;
+        if (!pending && launcher_cover_color(image, &c)) {
+            cart_ambient_target = color_mix(t->bg, c, CART_TINT);
+        }
+
+        // Beside it: which list, the title, the details and the A prompt.
+        int tx = bx + bw + 26, tw = LAUNCHER_X1 - tx;
+        int y = by + 4;
+        launcher_text_sized(LAUNCHER_SIZE_BODY, tx, y, tw, 22, ALIGN_LEFT, STL_ACCENT, row_label(rows[row_selected].kind));
+        y += 26;
+        y += launcher_title_wrapped(tx, y, tw, 3, STL_DEFAULT, f->title) + 6;
+        char details[160];
+        library_details_for_path(menu, item_path(f), details, sizeof(details));
+        if (details[0]) {
+            y += launcher_game_details_wrapped(tx, y, tw, 3, STL_GRAY, details) + 12;
+        }
+        bool resume = (rows[row_selected].kind == ROW_RESUME);
+        launcher_draw_prompt(tx, y, LAUNCHER_BUTTON_A, "A", resume ? "Resume" : "Play", color_mix(behind, t->panel, 50));
+    }
+
+    // The lists as tabs, the focused one bright with the accent line, slashes between them.
+    int x = LAUNCHER_X0;
+    int slash_w = launcher_text_sized_width(LAUNCHER_SIZE_LARGE, "/");
+    for (int r = 0; r < row_count; r++) {
+        const char *name = row_label(rows[r].kind);
+        int w = launcher_text_sized(LAUNCHER_SIZE_LARGE, x, CART_TABS_Y, 0, 26, ALIGN_LEFT,
+            (r == row_selected) ? STL_DEFAULT : STL_GRAY, name);
+        if (r == row_selected) {
+            launcher_fill_rounded(x, CART_TABS_Y + 26, x + w, CART_TABS_Y + 29, 1, t->accent2);
+        }
+        x += w + CART_TAB_GAP;
+        if (r + 1 < row_count) {
+            launcher_text_sized(LAUNCHER_SIZE_LARGE, x, CART_TABS_Y, 0, 26, ALIGN_LEFT, STL_GRAY, "/");
+            x += slash_w + CART_TAB_GAP;
+        }
+    }
+
+    // The focused list's games as small cartridges.
+    game_ref_t refs[MAX_ROW_ITEMS];
+    int n = refs_add(refs, 0, MAX_ROW_ITEMS, row_selected);
+    if (cart_strip_row != row_selected) {
+        cart_strip_row = row_selected;
+        cart_row_strip.scroll = 0;
+        cart_row_strip.pos = 0.0f;
+        bool snap = motion_snap;
+        motion_snap = true;     // A new list is laid out in place.
+        clip_content();
+        draw_strip(menu, refs, n, LAUNCHER_X0, LAUNCHER_X1, CART_STRIP_Y, CART_ROW_W, CART_ROW_H, CART_ROW_STEP,
+            &cart_row_strip, behind, lookups_left);
+        clip_none();
+        motion_snap = snap;
+        return;
+    }
+    clip_content();
+    draw_strip(menu, refs, n, LAUNCHER_X0, LAUNCHER_X1, CART_STRIP_Y, CART_ROW_W, CART_ROW_H, CART_ROW_STEP,
+        &cart_row_strip, behind, lookups_left);
+    clip_none();
+}
+
+/** @brief Cartridge's input: left/right along the list, up/down to the list before or after. */
+static bool process_cartridge (menu_t *menu) {
+    home_row_t *row = &rows[row_selected];
+    if (menu->actions.go_left || menu->actions.go_right) {
+        int i = row->selected + (menu->actions.go_right ? 1 : -1);
+        if (i >= 0 && i < row->count) {
+            row->selected = i;
+            sound_play_effect(SFX_TICK);
+        }
+        return true;
+    }
+    if (menu->actions.go_up || menu->actions.go_down) {
+        int r = row_selected + (menu->actions.go_down ? 1 : -1);
+        if (r >= 0 && r < row_count) {
+            row_selected = r;
+            sound_play_effect(SFX_TICK);
+        }
+        return true;
+    }
+    return false;
+}
+
+/*
+ * Minimal: the game names are the menu. The focused name is large and bright, the ones around it smaller and dimmer
+ * as they get further away, gliding up and down; the focused game's cover on the right. Up/down go through every
+ * game (Resume, Recently played, Favorites in turn); left/right jump between those lists.
+ */
+#define TYPE_CENTER_Y       (190)   /* The focused name's middle */
+#define TYPE_COVER_ZOOM     (1.25f)
+#define TYPE_TOP            (52)    /* The list's area, between the section label and the hints */
+#define TYPE_BOTTOM         (404)
+
+static float type_pos = 0.0f;       /* Drawn place in the list, gliding toward the focused game */
+
+/** @brief Every Home game in order, as (row, index) pairs; the count. */
+static int type_games (game_ref_t *refs, int max) {
+    int n = 0;
+    for (int r = 0; r < row_count; r++) {
+        for (int i = 0; i < rows[r].count && n < max; i++) {
+            refs[n++] = (game_ref_t) { r, i };
+        }
+    }
+    return n;
+}
+
+/** @brief How far from the focused name's middle a name sits, by its distance in the list (more room below it: the
+    details line). */
+static float type_offset (float d) {
+    static const float above[] = { 0.0f, 44.0f, 76.0f, 102.0f, 124.0f };
+    static const float below[] = { 0.0f, 74.0f, 106.0f, 132.0f, 154.0f };
+    const float *table = (d < 0.0f) ? above : below;
+    float a = fabsf(d);
+    int i = (int)a;
+    if (i >= 4) {
+        return (d < 0.0f ? -1.0f : 1.0f) * (table[4] + (a - 4.0f) * 22.0f);
+    }
+    float f = a - (float)i;
+    float v = table[i] + (table[i + 1] - table[i]) * f;
+    return (d < 0.0f) ? -v : v;
+}
+
+static void draw_minimal (menu_t *menu, int *lookups_left) {
+    const theme_t *t = theme_current();
+    game_ref_t refs[ROW_KINDS * MAX_ROW_ITEMS];
+    int n = type_games(refs, ROW_KINDS * MAX_ROW_ITEMS);
+    int sel = refs_focus(refs, n);
+    if (sel < 0) {
+        return;
+    }
+    type_pos = motion_snap ? (float)sel : launcher_ease(type_pos, (float)sel);
+
+    int cover_w = (int)(LAUNCHER_SHOWCASE_W * TYPE_COVER_ZOOM);
+    int cover_h = (int)(LAUNCHER_SHOWCASE_H * TYPE_COVER_ZOOM);
+    int cover_x = LAUNCHER_X1 - cover_w - 6;
+    int cover_y = TYPE_CENTER_Y - cover_h / 2 - 8;
+    int list_x = LAUNCHER_X0 + 8;
+    int list_w = cover_x - 32 - list_x;
+
+    // Which list the focused game is in, at the top left; where it is in all of them, under the cover.
+    launcher_text_sized(LAUNCHER_SIZE_BODY, list_x, 18, list_w, 24, ALIGN_LEFT, STL_ACCENT, row_label(rows[row_selected].kind));
+
+    int clip_x1 = launcher_px(cover_x - 12);
+    rdpq_set_scissor(0, TYPE_TOP, clip_x1 < 1 ? 1 : clip_x1, TYPE_BOTTOM);
+    for (int k = 0; k < n; k++) {
+        float d = (float)k - type_pos;
+        if (fabsf(d) > 4.5f) {
+            continue;
+        }
+        home_item_t *h = &rows[refs[k].row].items[refs[k].index];
+        float a = fabsf(d);
+        launcher_text_size_t size = (a < 0.5f) ? LAUNCHER_SIZE_TITLE : (a < 1.5f) ? LAUNCHER_SIZE_LARGE : LAUNCHER_SIZE_BODY;
+        int hgt = (size == LAUNCHER_SIZE_TITLE) ? 32 : 26;
+        int y = TYPE_CENTER_Y + (int)lroundf(type_offset(d)) - hgt / 2;
+        launcher_text_sized(size, list_x, y, list_w, hgt, ALIGN_LEFT, (k == sel) ? STL_DEFAULT : STL_GRAY, h->title);
+        if (k == sel) {
+            launcher_fill_rounded(list_x, y + hgt + 1, list_x + 30, y + hgt + 4, 1, t->accent2);
+        }
+        if (abs(k - sel) == 1) {
+            keep_loaded(menu, h, launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H) ?
+                LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W, launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W,
+                LAUNCHER_HIRES_H) ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H, lookups_left);
         }
     }
     clip_none();
 
-    // The focused game's name and where it's from, under the band.
     home_item_t *f = focused_item();
-    int text_end = y1 + 76;
     if (f) {
-        int ty = y1 + 12;
-        ty += launcher_title_wrapped(LAUNCHER_X0 + 24, ty, LAUNCHER_WIDTH - 48, 2, STL_DEFAULT, f->title) + 4;
-        char line[200], details[160];
+        // The focused game's details under its name, settled or not (they follow the focus, not the glide).
+        char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
-        snprintf(line, sizeof(line), "%s%s%s", row_label(rows[row_selected].kind), details[0] ? "  -  " : "", details);
-        ty += launcher_game_details_wrapped(LAUNCHER_X0 + 24, ty, LAUNCHER_WIDTH - 48, 2, STL_GRAY, line);
-        text_end = (ty + 8 > text_end) ? ty + 8 : text_end;
+        if (details[0]) {
+            launcher_game_details_wrapped(list_x, TYPE_CENTER_Y + 24, list_w, 1, STL_GRAY, details);
+        }
+        bool pending;
+        float zoom;
+        surface_t *image = big_cover(menu, f, TYPE_COVER_ZOOM, lookups_left, &pending, &zoom);
+        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, t->bg, zoom);
+        launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, zoom);
+        char where[96], folder[64];
+        item_folder(f, folder, sizeof(folder));
+        snprintf(where, sizeof(where), "%s   %d of %d", folder, sel + 1, n);
+        launcher_name(cover_x, cover_y + cover_h + 12, cover_w, ALIGN_RIGHT, STL_GRAY, where);
     }
+    // The clock at the bottom left, across from the hints; the music note at the top right.
+    char clock[16];
+    launcher_clock_text(menu, clock, sizeof(clock));
+    launcher_small(LAUNCHER_X0 + 8, LAUNCHER_FOOTER_Y + 12, 200, ALIGN_LEFT, STL_GRAY, clock);
+    launcher_draw_notes(cover_x - 200, 20, cover_w + 206, ALIGN_RIGHT);
+}
 
-    int fav = row_of_kind(ROW_FAVORITES);
-    if (fav >= 0) {
-        int ly = text_end;
-        game_ref_t refs[MAX_ROW_ITEMS];
-        int n = refs_add(refs, 0, MAX_ROW_ITEMS, fav);
-        launcher_text(LAUNCHER_X0, ly, 0, ALIGN_LEFT, refs_focus(refs, n) >= 0 ? STL_DEFAULT : STL_GRAY, "Favorites");
-        clip_content();
-        draw_strip(menu, refs, n, LAUNCHER_X0, LAUNCHER_X1, ly + 24, CART_ROW_W, CART_ROW_H, CART_ROW_STEP,
-            &cart_row_strip, t->bg, lookups_left);
-        clip_none();
+/** @brief Minimal's input: up/down through every game, left/right to the next or previous list. */
+static bool process_minimal (menu_t *menu) {
+    game_ref_t refs[ROW_KINDS * MAX_ROW_ITEMS];
+    int n = type_games(refs, ROW_KINDS * MAX_ROW_ITEMS);
+    int sel = refs_focus(refs, n);
+    int next = sel;
+    if (menu->actions.go_up && sel > 0) {
+        next = sel - 1;
+    } else if (menu->actions.go_down && sel + 1 < n) {
+        next = sel + 1;
+    } else if ((menu->actions.go_left || menu->actions.go_right) && row_count > 1) {
+        int r = row_selected + (menu->actions.go_right ? 1 : -1);
+        if (r >= 0 && r < row_count) {
+            row_selected = r;
+            rows[r].selected = 0;
+            sound_play_effect(SFX_TICK);
+        }
+        return true;
+    } else {
+        return false;
     }
+    if (next != sel && next >= 0) {
+        row_selected = refs[next].row;
+        rows[row_selected].selected = refs[next].index;
+        sound_play_effect(SFX_TICK);
+    }
+    return true;
 }
 
 /** @brief Draw Home in one of the new styles (not Classic). */
@@ -1033,18 +1110,14 @@ static void draw_styled (menu_t *menu, int style, int *lookups_left) {
 
 /** @brief Input for the new styles: the d-pad moves between slots. */
 static void process_styled (menu_t *menu, int style) {
+    if ((style == LAUNCHER_HOME_MINIMAL && process_minimal(menu)) || (style == LAUNCHER_HOME_CARTRIDGE && process_cartridge(menu))) {
+        return;
+    }
     int dx = menu->actions.go_left ? -1 : (menu->actions.go_right ? 1 : 0);
     int dy = menu->actions.go_up ? -1 : (menu->actions.go_down ? 1 : 0);
     if (dx || dy) {
         if (slot_move(dx, dy)) {
             sound_play_effect(SFX_TICK);
-        } else if (style == LAUNCHER_HOME_MINIMAL && dx) {
-            // Left/right jump between the lists.
-            int r = row_selected + dx;
-            if (r >= 0 && r < row_count) {
-                row_selected = r;
-                sound_play_effect(SFX_TICK);
-            }
         }
         return;
     }
@@ -1060,7 +1133,7 @@ static void process_styled (menu_t *menu, int style) {
 static void set_style_chrome (int style) {
     switch (style) {
         case LAUNCHER_HOME_CARTRIDGE:
-            launcher_set_header_style(LAUNCHER_HEADER_BAR);
+            launcher_set_background_color(cart_background());
             launcher_hide_footer_line();
             break;
         case LAUNCHER_HOME_MINIMAL:

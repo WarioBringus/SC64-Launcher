@@ -300,6 +300,15 @@ void launcher_draw_page_title(const char *title);
 /** @brief Draw the screen background (theme color, or the user's background image). */
 void launcher_draw_background(void);
 
+/** @brief This frame's background is this colour instead (Cartridge's label colour); set before the header. */
+void launcher_set_background_color(color_t color);
+
+/**
+ * @brief A cover's main colour: its most colourful pixels averaged (white, black and greys left out), from a grid of
+ * samples. False when the image isn't one it can read.
+ */
+bool launcher_cover_color(const surface_t *image, color_t *out);
+
 /** @brief A block of wrapped text laid out once and drawn every frame (e.g. a game description). */
 typedef struct launcher_paragraph_s launcher_paragraph_t;
 
