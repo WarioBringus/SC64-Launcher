@@ -851,7 +851,7 @@ static void eased_color_from (eased_color_t *e, surface_t *image, bool pending, 
  * list.
  */
 #define CART_TOP            (LAUNCHER_SUBHEADER_Y + 4)
-#define CART_ZOOM           (1.1f)  /* The label, 1.1x the showcase size */
+#define CART_ZOOM           (1.0f)  /* The label at the showcase pack's own size: drawn 1:1, the fast way */
 #define CART_PAD            (14)    /* Cartridge body around its label */
 #define CART_GRIP           (34)    /* The cartridge's lower part, under the label */
 #define CART_BAND_Y1        (296)   /* The band's foot, above the row */
@@ -923,7 +923,9 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
     if (f) {
         bool pending;
         float zoom;
-        surface_t *image = big_cover(menu, f, CART_ZOOM, lookups_left, &pending, &zoom);
+        // 1:1 from the showcase pack: a shrunk hi-res cover is drawn in small pieces, which kept Home at ~43 fps.
+        surface_t *image = item_image(menu, f, LAUNCHER_SHOWCASE_W, LAUNCHER_SHOWCASE_H, lookups_left, &pending);
+        zoom = 1.0f;
         int iw = (image && !pending) ? (int)(image->width * zoom) : lw;
         int ih = (image && !pending) ? (int)(image->height * zoom) : lh;
         iw = (iw > lw) ? lw : iw;
@@ -1019,8 +1021,7 @@ static bool process_cartridge (menu_t *menu) {
 #define TYPE_CENTER_Y       (204)   /* The lane's middle */
 #define TYPE_LANE_H         (80)
 #define TYPE_LANE_BAR       (8)
-#define TYPE_COVER_W_WIDE   (330)   /* The cover's width in 16:9 and 4:3 (from the 420x300 pack, never enlarged) */
-#define TYPE_COVER_W_43     (270)
+#define TYPE_COVER_ZOOM     (1.4f)  /* The hi-res pack's own size: drawn 1:1, the fast way (a shrunk cover kept ~43 fps) */
 #define TYPE_TOP            (60)    /* The list's area, under the header and above the hints */
 #define TYPE_SECTION_GAP    (0.9f)  /* Extra room before each list, in names */
 #define TYPE_HEADING_AT     (0.75f) /* Its heading, this far before the list's first name */
@@ -1109,9 +1110,8 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         type_pos = (fabsf(target - type_pos) < 0.005f) ? target : type_pos;
     }
 
-    bool wall = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H);
-    int cover_w = launcher_is_widescreen() ? TYPE_COVER_W_WIDE : TYPE_COVER_W_43;
-    int cover_h = cover_w * LAUNCHER_WALL_H / LAUNCHER_WALL_W;
+    int cover_w = (int)(LAUNCHER_SHOWCASE_W * TYPE_COVER_ZOOM);
+    int cover_h = (int)(LAUNCHER_SHOWCASE_H * TYPE_COVER_ZOOM);
     int cover_x = LAUNCHER_X1 - cover_w - 6;
     int cover_y = TYPE_CENTER_Y - cover_h / 2 - 6;
     int list_x = LAUNCHER_X0 + 14;
@@ -1144,8 +1144,8 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         int mid = TYPE_CENTER_Y + (int)lroundf(type_offset(d));
         type_draw_name(list_x, mid, list_w, d, h->title);
         if (abs(k - sel) == 1) {
-            keep_loaded(menu, h, wall ? LAUNCHER_WALL_W : (hires ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W),
-                wall ? LAUNCHER_WALL_H : (hires ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H), lookups_left);
+            keep_loaded(menu, h, hires ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W, hires ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H,
+                lookups_left);
         }
     }
     clip_none();
@@ -1164,13 +1164,7 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         }
         bool pending;
         float zoom;
-        surface_t *image;
-        if (wall) {
-            zoom = (float)cover_w / LAUNCHER_WALL_W;
-            image = item_image(menu, f, LAUNCHER_WALL_W, LAUNCHER_WALL_H, lookups_left, &pending);
-        } else {
-            image = big_cover(menu, f, (float)cover_w / LAUNCHER_SHOWCASE_W, lookups_left, &pending, &zoom);
-        }
+        surface_t *image = big_cover(menu, f, TYPE_COVER_ZOOM, lookups_left, &pending, &zoom);
         launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, lane, zoom);
         launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, zoom);
         eased_color_from(&type_lane, image, pending, t->bg, TYPE_LANE_TINT);
