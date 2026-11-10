@@ -269,6 +269,7 @@ static bool packs_open = false;         /* Every cover pack opened ahead (again 
 
 static void process_styled(menu_t *menu, int style);
 static void process_binder(menu_t *menu);
+static int slot_toward(int dx, int dy);
 static bool binder_rail;     /* Binder Mosaic: the tabs have the focus */
 
 /* Moving a favorite: Z picks up the highlighted one, the d-pad or stick moves it, A or Z places it, B puts it back. */
@@ -332,6 +333,13 @@ static void moving_process (menu_t *menu) {
     }
     home_row_t *row = &rows[row_selected];
     int i = row->selected, j = i + step;
+    // Binder Mosaic's tiles aren't in one line: the game goes to the tile in the direction pressed.
+    if (menu->settings.launcher_home_style == LAUNCHER_HOME_BINDER && step) {
+        int dx = menu->actions.go_left ? -1 : (menu->actions.go_right ? 1 : 0);
+        int dy = menu->actions.go_up ? -1 : (menu->actions.go_down ? 1 : 0);
+        j = slot_toward(dx, dy);
+        j = (j < 0) ? i : j;
+    }
     j = (j < 0) ? 0 : ((j >= row->count) ? row->count - 1 : j);
     if (!step || j == i) {
         return;
@@ -478,8 +486,8 @@ static color_t color_mix (color_t a, color_t b, int pct) {
     return RGBA32(a.r + (b.r - a.r) * pct / 100, a.g + (b.g - a.g) * pct / 100, a.b + (b.b - a.b) * pct / 100, 0xFF);
 }
 
-/** @brief Move the focus to the nearest slot in a direction; false when there is none. */
-static bool slot_move (int dx, int dy) {
+/** @brief The nearest slot in a direction from the focused one, or NULL. */
+static const slot_t *slot_find (int dx, int dy) {
     const slot_t *c = NULL;
     for (int i = 0; i < slot_total && !c; i++) {
         if (is_focus(slots[i].row, slots[i].index)) {
@@ -487,7 +495,7 @@ static bool slot_move (int dx, int dy) {
         }
     }
     if (!c) {
-        return false;
+        return NULL;
     }
     const slot_t *best = NULL;
     int best_score = INT_MAX;
@@ -517,6 +525,18 @@ static bool slot_move (int dx, int dy) {
             best = s;
         }
     }
+    return best;
+}
+
+/** @brief The game in the selected row in a direction from the focused one, or -1. */
+static int slot_toward (int dx, int dy) {
+    const slot_t *to = slot_find(dx, dy);
+    return (to && to->row == row_selected) ? to->index : -1;
+}
+
+/** @brief Move the focus to the nearest slot in a direction; false when there is none. */
+static bool slot_move (int dx, int dy) {
+    const slot_t *best = slot_find(dx, dy);
     if (!best) {
         return false;
     }
@@ -1240,6 +1260,7 @@ static void set_style_chrome (int style) {
             launcher_hide_footer_line();
             break;
         case LAUNCHER_HOME_MINIMAL:
+        case LAUNCHER_HOME_BINDER:      // Its wedge runs under the hints: no line across it.
             launcher_hide_footer_line();
             break;
         case LAUNCHER_HOME_SPOTLIGHT: {
@@ -1278,6 +1299,9 @@ static void set_style_chrome (int style) {
 #define BINDER_SMALL_H      (61)
 #define BINDER_SLIDE        (24)    /* A newly opened page slides this far into place */
 #define BINDER_DETAILS_LINE (20)
+#define BINDER_WEDGE_Y      (262)   /* The lower-left wedge: from the left edge here... */
+#define BINDER_WEDGE_FOOT_W (250)   /* ...to this far along the foot of the screen */
+#define BINDER_WEDGE_EDGE   (12)    /* Its darker edge */
 
 typedef struct {
     int x, y, w, h;
@@ -1292,6 +1316,8 @@ typedef struct {
 static bool binder_rail = false;            /* The tabs have the focus, not the page */
 static row_kind_t binder_kind = ROW_RESUME; /* The open tab */
 static float binder_slide = 0.0f;
+static int binder_scroll = 0;               /* The tiles beside the big one: how far scrolled... */
+static float binder_scroll_pos = 0.0f;      /* ...and drawn, gliding there */
 
 static bool binder_wide (void) {
     return LAUNCHER_SCREEN_W > 640;
@@ -1334,6 +1360,8 @@ static void binder_open (binder_tab_t tab, int direction) {
         row_selected = tab.row;
     }
     binder_slide = (float)(BINDER_SLIDE * direction);
+    binder_scroll = 0;
+    binder_scroll_pos = 0.0f;
 }
 
 /** @brief The page's edges: beside the tabs, or the whole width when there are none. */
@@ -1342,49 +1370,41 @@ static void binder_page (bool rail, int *x0, int *x1) {
     *x1 = LAUNCHER_X1;
 }
 
-/** @brief Tiles of one size filling a space row by row, spread to its right edge (and its foot when fill_height). */
-static int binder_region (binder_cell_t *cells, int want, int x0, int y0, int x1, int y1, int tw, int th, int gap,
-    bool fill_height) {
-    int cols = (x1 - x0 + gap) / (tw + gap), rows_n = (y1 - y0 + gap) / (th + gap);
-    if (want <= 0 || cols < 1 || rows_n < 1) {
-        return 0;
-    }
-    int gx = (cols > 1) ? (x1 - x0 - cols * tw) / (cols - 1) : gap;
-    int gy = (fill_height && rows_n > 1) ? (y1 - y0 - rows_n * th) / (rows_n - 1) : gap;
-    int k = 0;
-    for (int r = 0; r < rows_n; r++) {
-        for (int c = 0; c < cols && k < want; c++) {
-            cells[k++] = (binder_cell_t) { x0 + c * (tw + gx), y0 + r * (th + gy), tw, th, false };
-        }
-    }
-    return k;
-}
-
 /** @brief The big tile's size: the hi-res pack at 16:9, the showcase pack at 4:3 (both drawn 1:1). */
 static void binder_big_size (int *w, int *h) {
     *w = binder_wide() ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W;
     *h = binder_wide() ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H;
 }
 
-/** @brief Where a list's n games go on a page from x0 to x1: the big tile, then beside it, then beneath. */
-static int binder_layout (int n, int x0, int x1, binder_cell_t *cells) {
-    int ix0 = x0 + BINDER_PAD, iy0 = CONTENT_TOP + BINDER_PAD, ix1 = x1 - BINDER_PAD, iy1 = CONTENT_BOTTOM - BINDER_PAD;
+/**
+ * @brief Where a list's n games go on a page from x0 to x1: the big tile, then the rest all one size in a column of
+ * tiles beside it, row by row, running on past the page's foot (it scrolls). *cols: the tiles across.
+ */
+static int binder_layout (int n, int x0, int x1, binder_cell_t *cells, int *cols) {
+    int ix0 = x0 + BINDER_PAD, iy0 = CONTENT_TOP + BINDER_PAD, ix1 = x1 - BINDER_PAD;
     int bw, bh;
     binder_big_size(&bw, &bh);
+    *cols = 1;
     if (n <= 0) {
         return 0;
     }
     cells[0] = (binder_cell_t) { ix0, iy0, bw, bh, true };
-    int count = 1, rx = ix0 + bw + BINDER_GAP;
     if (n == 1) {
-        return count;   // The details go beside it.
+        return 1;   // The details go beside it.
     }
     bool wide = binder_wide();
-    count += binder_region(cells + count, n - count, rx, iy0, ix1, iy0 + bh, wide ? BINDER_MED_W : BINDER_SMALL_W,
-        wide ? BINDER_MED_H : BINDER_SMALL_H, wide ? BINDER_GAP : BINDER_SMALL_GAP, true);
-    count += binder_region(cells + count, n - count, rx, iy0 + bh + BINDER_GAP, ix1, iy1, BINDER_SMALL_W,
-        BINDER_SMALL_H, BINDER_SMALL_GAP, false);
-    return count;
+    int rx = ix0 + bw + BINDER_GAP;
+    int tw = wide ? BINDER_MED_W : BINDER_SMALL_W, th = wide ? BINDER_MED_H : BINDER_SMALL_H;
+    int gap = wide ? BINDER_GAP : BINDER_SMALL_GAP;
+    int c_n = (ix1 - rx + gap) / (tw + gap);
+    c_n = (c_n < 1) ? 1 : c_n;
+    int g = (c_n > 1) ? (ix1 - rx - c_n * tw) / (c_n - 1) : gap;    // Spread to the page's right edge
+    for (int k = 1; k < n; k++) {
+        int c = (k - 1) % c_n, r = (k - 1) / c_n;
+        cells[k] = (binder_cell_t) { rx + c * (tw + g), iy0 + r * (th + g), tw, th, false };
+    }
+    *cols = c_n;
+    return n;
 }
 
 /** @brief A tile's cover: the big one from the hi-res pack when it fills a 16:9 big tile. */
@@ -1404,7 +1424,8 @@ static void binder_keep_others (menu_t *menu, int open_row, int x0, int x1, int 
         if (r == open_row) {
             continue;
         }
-        int n = binder_layout(rows[r].count, x0, x1, cells);
+        int cols;
+        int n = binder_layout(rows[r].count, x0, x1, cells, &cols);
         for (int i = 0; i < n; i++) {
             bool hires = cells[i].big && binder_wide() && launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W,
                 LAUNCHER_HIRES_H);
@@ -1462,6 +1483,11 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
     binder_rail = binder_rail && rail;
     int x0, x1;
     binder_page(rail, &x0, &x1);
+    // The lower left: a wedge in the theme's feature colour, behind the tabs and the page, with a darker edge.
+    int foot = display_get_height();
+    launcher_fill_slanted(0, BINDER_WEDGE_FOOT_W + BINDER_WEDGE_EDGE, BINDER_WEDGE_Y - BINDER_WEDGE_EDGE, foot,
+        color_mix(t->feature, t->bg, 40));
+    launcher_fill_slanted(0, BINDER_WEDGE_FOOT_W, BINDER_WEDGE_Y, foot, t->feature);
     if (rail) {
         binder_draw_tabs(tabs, n, cur, x0);
     }
@@ -1490,12 +1516,29 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
 
     home_row_t *row = &rows[tabs[cur].row];
     binder_cell_t cells[MAX_ROW_ITEMS];
-    int count = binder_layout(row->count, x0, x1, cells);
+    int cols;
+    int count = binder_layout(row->count, x0, x1, cells, &cols);
     bool page_focus = !binder_rail;
+    // The column beside the big tile scrolls to keep the selected game in view.
+    if (count > 1 && row->selected > 0) {
+        binder_cell_t *sc = &cells[row->selected];
+        if (sc->y - binder_scroll < iy0) {
+            binder_scroll = sc->y - iy0;
+        }
+        if (sc->y + sc->h - binder_scroll > iy1) {
+            binder_scroll = sc->y + sc->h - iy1;
+        }
+    }
+    binder_scroll_pos = motion_snap ? (float)binder_scroll : launcher_ease(binder_scroll_pos, (float)binder_scroll);
+    int scroll = (int)lroundf(binder_scroll_pos);
     for (int i = 0; i < count; i++) {
         binder_cell_t *c = &cells[i];
         home_item_t *h = &row->items[i];
-        int y = c->y + dy;
+        int y = c->y + dy - (c->big ? 0 : scroll);
+        slot_add(c->x, c->y - (c->big ? 0 : binder_scroll), c->w, c->h, tabs[cur].row, i);
+        if (y + c->h < CONTENT_TOP || y > CONTENT_BOTTOM) {
+            continue;   // Scrolled out of the page.
+        }
         bool pending;
         float zoom;
         surface_t *image = binder_image(menu, h, c, lookups_left, &pending, &zoom);
@@ -1509,7 +1552,6 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
                 launcher_draw_focus_ring_cover_zoomed(c->x, y, c->w, c->h, image, zoom);
             }
         }
-        slot_add(c->x, c->y, c->w, c->h, tabs[cur].row, i);
     }
 
     // The selected game's name and details: beside a lone game, else under the big tile.
