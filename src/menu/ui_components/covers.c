@@ -1095,7 +1095,26 @@ static surface_t *cover_get (const char *path, int max_w, int max_h, bool *pendi
     victim->loading = true;
 
     perf_log_event("no pack cover, decoding the PNG: %s (%dx%d)", victim->path, max_w, max_h);
-    png_err_t err = png_decoder_start(victim->path, max_w, max_h, decode_done, victim);
+    // The whole file in one read, then decoded from memory: decoding straight from the file read the card a few
+    // bytes at a time between frames (a 428 ms frame on the About page in the log).
+    png_err_t err = PNG_ERR_NO_FILE;
+    FILE *file = fopen(victim->path, "rb");
+    if (file) {
+        fseek(file, 0, SEEK_END);
+        long size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        void *data = (size > 0) ? malloc((size_t)size) : NULL;
+        if (data && fread(data, 1, (size_t)size, file) == (size_t)size) {
+            err = png_decoder_start_mem(data, (size_t)size, max_w, max_h, decode_done, victim);
+            if (err == PNG_ERR_BUSY) {
+                free(data);     // Busy: still ours (any other result: the decoder frees it)
+            }
+        } else {
+            free(data);
+            err = data ? PNG_ERR_BAD_FILE : PNG_ERR_OUT_OF_MEM;
+        }
+        fclose(file);
+    }
     if (err == PNG_OK) {
         decoding = true;
     } else if (err == PNG_ERR_BUSY) {
