@@ -19,16 +19,6 @@
 #include "../sound.h"
 #include "../theme.h"
 
-#define RESUME_CARD_H       (140)
-#define RESUME_COVER_X      (LAUNCHER_X0 + 14)
-#define RESUME_TEXT_X       (LAUNCHER_X0 + 194)
-#define ROW_LABEL_H         (22)
-#define ROW_TILE_W          (74)
-#define ROW_TILE_H          (52)
-#define ROW_TILE_STEP       (82)
-#define ROW_H               (100)
-#define ROW_GAP             (14)
-#define ROW_VISIBLE_TILES   (LAUNCHER_WIDTH / ROW_TILE_STEP)
 #define MAX_ROW_ITEMS       (HISTORY_COUNT > FAVORITES_COUNT ? HISTORY_COUNT : FAVORITES_COUNT)
 #define COVER_CACHE_SIZE    (HISTORY_COUNT + FAVORITES_COUNT)
 
@@ -1034,7 +1024,6 @@ static bool process_cartridge (menu_t *menu) {
 #define TYPE_SECTION_GAP    (0.9f)  /* Extra room before each list, in names */
 #define TYPE_HEADING_AT     (0.75f) /* Its heading, this far before the list's first name */
 #define TYPE_BOTTOM         (408)
-#define TYPE_LANE_TINT      (40)
 #define TYPE_GLIDE          (0.16f) /* Of the way to the focused game each frame: a slower glide than the default */
 
 static float type_pos = 0.0f;       /* Drawn place in the list (with the room before each list), gliding */

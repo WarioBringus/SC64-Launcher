@@ -27,7 +27,6 @@
 #define CAROUSEL_SPACING            (14)
 #define CAROUSEL_REACH              (5)     /* Covers considered on each side (off-screen ones are skipped) */
 #define CAROUSEL_EASE               (0.35f) /* Fraction of the remaining distance moved per frame */
-#define CAROUSEL_FAST_STEP          (5)
 #define CAROUSEL_TITLE_Y            (334)
 
 #define GROUP_BADGE_HEIGHT          (64)    /* With a detail line under the name: GROUP_BADGE_TALL */
@@ -134,12 +133,7 @@ static const launcher_hint_t hints_folders[] = {
 
 /* Search (Start > Search): letters typed on an on-screen keyboard narrow the folder as you go. */
 #define SEARCH_MAX                  (24)
-#define SEARCH_TOP                  (240)
-#define SEARCH_FIRST_KEY_Y          (282)
-#define SEARCH_KEY_W                (40)
-#define SEARCH_KEY_H                (26)
 #define SEARCH_KEY_GAP              (6)
-#define SEARCH_ROW_H                (32)
 #define SEARCH_COLS                 (10)
 #define SEARCH_ROWS                 (4)
 #define SEARCH_SPACE_COL            (6)     /* Last row: Space and Delete take two columns each */

@@ -35,11 +35,8 @@
 #define TILE_RADIUS             (6)
 #define PILL_HEIGHT             (24)
 #define PILL_PADDING            (12)
-#define HINT_BUTTON_SIZE        (16)
 /* rdpq drops a line taller than its text box, so text boxes get headroom over the font's line height. */
 #define HINT_TEXT_HEIGHT        (22)
-#define HINT_ICON_GAP           (5)
-#define HINT_GAP                (14)
 #define WIDTH_CACHE_SIZE        (128)
 #define FIT_SLACK               (32)    // physical pixels, wider than any glyph's advance
 
@@ -854,13 +851,6 @@ void launcher_draw_page_title (const char *title) {
     launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
 }
 
-static bool background_override = false;
-static color_t background_override_color;
-
-void launcher_set_background_color (color_t color) {
-    background_override = true;
-    background_override_color = color;
-}
 
 static bool band_set = false;
 static int band_x_top, band_x_bottom, band_y1, band_edge_w;
@@ -878,12 +868,7 @@ void launcher_set_background_band (int x_top, int x_bottom, int y1, color_t colo
 
 void launcher_draw_background (void) {
     uint64_t started = get_ticks_us();
-    if (background_override) {
-        background_override = false;    // Only for the frame it was set in.
-        ui_components_box_draw(0, 0, display_get_width(), display_get_height(), background_override_color);
-    } else {
-        ui_components_background_draw();
-    }
+    ui_components_background_draw();
     if (band_set) {
         band_set = false;
         launcher_fill_slanted(band_x_top + band_edge_w, band_x_bottom + band_edge_w, 0, band_y1, band_edge);
@@ -1252,7 +1237,6 @@ void launcher_draw_notes (int x, int y, int width, rdpq_align_t align) {
 
 #define TRANSITION_MS       (180)
 #define TRANSITION_SLIDE    (40)    /* Logical pixels the content travels while sliding in */
-#define MENU_FADE_MS        (120)
 #define MENU_BACKDROP_ALPHA (150)   /* How far the screen behind the Start menu fades back */
 
 static void motion_frame(void);
@@ -1382,12 +1366,7 @@ static void transition_content_end (void) {
     header_on_feature = false;
 }
 
-static launcher_header_style_t header_style = LAUNCHER_HEADER_TABS;
 static bool footer_line = true;
-
-void launcher_set_header_style (launcher_header_style_t style) {
-    header_style = style;
-}
 
 void launcher_hide_footer_line (void) {
     footer_line = false;
@@ -1437,49 +1416,6 @@ void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t col
     flat_end();
 }
 
-#define CORNER_GAP          (22)    /* Between the corner header's words, with a dot in the middle */
-
-/** @brief Home  ·  Library  ·  clock, right-aligned at the top. */
-static void draw_header_corner (menu_t *menu, launcher_tab_t active) {
-    char clock[16];
-    launcher_clock_text(menu, clock, sizeof(clock));
-    // Separate words and drawn dots: a separator string's spaces aren't measured, which overlapped the words.
-    const char *parts[3] = { "Home", "Library", clock };
-    int count = clock[0] ? 3 : 2;
-    int widths[3], total = 0;
-    for (int i = 0; i < count; i++) {
-        widths[i] = text_width(parts[i]) + 2;
-        total += widths[i] + (i > 0 ? CORNER_GAP : 0);
-    }
-    int x = LAUNCHER_X1 - total;
-    for (int i = 0; i < count; i++) {
-        if (i > 0) {
-            int cx = x + CORNER_GAP / 2;
-            launcher_fill_rounded(cx - 2, LAUNCHER_HEADER_Y + 8, cx + 2, LAUNCHER_HEADER_Y + 12, 2, theme_current()->text_muted);
-            x += CORNER_GAP;
-        }
-        bool on = (i == 0 && active == LAUNCHER_TAB_HOME) || (i == 1 && active == LAUNCHER_TAB_LIBRARY);
-        launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, on ? STL_DEFAULT : STL_GRAY, "%s", parts[i]);
-        x += widths[i];
-    }
-}
-
-/** @brief A full-width bar with the tab's name in capitals and the clock. */
-static void draw_header_bar (menu_t *menu, launcher_tab_t active) {
-    const theme_t *t = theme_current();
-    flat_begin(t->feature);
-    rdpq_fill_rectangle(0, 0, display_get_width(), LAUNCHER_HEADER_BAR_H);
-    flat_end();
-    launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, 0, ALIGN_LEFT, STL_ON_FEATURE, "%s",
-        active == LAUNCHER_TAB_HOME ? "HOME" : "LIBRARY");
-    char clock[16];
-    launcher_clock_text(menu, clock, sizeof(clock));
-    if (clock[0]) {
-        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y - 2, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_ON_FEATURE, "%s", clock);
-    }
-}
-
-
 void launcher_set_header_on_feature (bool on) {
     header_on_feature = on;
 }
@@ -1528,22 +1464,6 @@ static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
 
 static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
     launcher_draw_background();
-    launcher_header_style_t style = header_style;
-    header_style = LAUNCHER_HEADER_TABS;    // Only for this frame's header.
-    if (style == LAUNCHER_HEADER_CORNER) {
-        draw_header_corner(menu, active);
-        launcher_draw_notes(LAUNCHER_X0, LAUNCHER_HEADER_Y + 22, LAUNCHER_WIDTH, ALIGN_RIGHT);   // Under it.
-        return;
-    }
-    if (style == LAUNCHER_HEADER_BAR) {
-        draw_header_bar(menu, active);
-        launcher_draw_notes(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W,
-            ALIGN_RIGHT);
-        return;
-    }
-    if (style == LAUNCHER_HEADER_NONE) {
-        return;
-    }
 
     draw_tabs(menu, active, true);
 }
@@ -1642,9 +1562,8 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     // whole screen fades in, or the panel's ends showed at full color around the fading middle, like a tear.
     // So do styles with a band drawn with the background (Spotlight's panel, Cartridge's band): the tabs on top are
     // drawn again over the fade, so the header stays steady while the rest fades.
-    bool tabs = (header_style == LAUNCHER_HEADER_TABS);
-    bool full_screen = !tabs || band_set;
-    header_redraw = tabs && band_set;
+    bool full_screen = band_set;
+    header_redraw = band_set;
     header_menu = menu;
     header_active = active;
     bool on_feature = header_on_feature;

@@ -331,8 +331,6 @@ void launcher_draw_dialog(const char *title, const char *body, const launcher_hi
 /** @brief Draw the screen background (theme color, or the user's background image). */
 void launcher_draw_background(void);
 
-/** @brief This frame's background is this colour instead; set before the header. */
-void launcher_set_background_color(color_t color);
 
 /**
  * @brief This frame's background also has a slanted band from the left edge (x_top wide at the top, x_bottom at y1)
@@ -400,22 +398,8 @@ void launcher_launch_cover_free(void);
 /** @brief Draw the background, the Home / Library tabs and the clock. */
 void launcher_draw_header(menu_t *menu, launcher_tab_t active);
 
-/** @brief How the next launcher_draw_header draws the tabs and clock (Home's styles). */
-typedef enum {
-    LAUNCHER_HEADER_TABS,       /**< Tabs at the top left, the clock at the right (every screen's own) */
-    LAUNCHER_HEADER_CORNER,     /**< "Home  ·  Library  ·  clock" small in the top-right corner */
-    LAUNCHER_HEADER_BAR,        /**< A full-width bar: the tab's name in capitals and the clock */
-    LAUNCHER_HEADER_NONE,       /**< Only the background */
-} launcher_header_style_t;
-
-/** @brief Use this header style for the next launcher_draw_header only. */
-void launcher_set_header_style(launcher_header_style_t style);
-
 /** @brief This frame's Home / Library tabs sit on the theme's feature colour (Spotlight): drawn in its text colour. */
 void launcher_set_header_on_feature(bool on);
-
-/** @brief Height of the bar LAUNCHER_HEADER_BAR draws. */
-#define LAUNCHER_HEADER_BAR_H   (60)
 
 /**
  * @brief Draw the "Now playing" note while a track has just started, else the new games notice, in a box of
