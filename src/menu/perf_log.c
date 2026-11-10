@@ -213,7 +213,7 @@ void perf_log_read (uint32_t bytes, uint32_t us) {
     frame_read_us += us;
 }
 
-#define MAX_EVENTS          (80)
+#define MAX_EVENTS          (250)
 
 void perf_log_event (const char *fmt, ...) {
     static int events = 0;

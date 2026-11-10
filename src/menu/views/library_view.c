@@ -35,30 +35,22 @@
 
 #define INFO_LINE_Y                 (398)   /* Game details under the grid, above the hints */
 #define NEW_GAMES_CHECK_US          (2000)  /* Time per frame spent looking for new ROMs */
-#define PICKER_TOP                  (56)
-#define PICKER_BOTTOM               (412)
-#define PICKER_FIRST_ROW_Y          (100)
-#define PICKER_ROW_H                (26)
-#define PICKER_ROWS                 ((PICKER_BOTTOM - PICKER_FIRST_ROW_Y - 8) / PICKER_ROW_H)
+/* Folders and Hidden games: full pages laid out as the Settings page is. */
+#define PAGE_TITLE_Y                (LAUNCHER_HEADER_Y - 6)
+#define PAGE_UNDERLINE_Y            (PAGE_TITLE_Y + 33)
+#define PAGE_DIVIDER_Y              (PAGE_UNDERLINE_Y + 12)
+#define PAGE_TOP                    (PAGE_DIVIDER_Y + 14)
+#define PAGE_ROW_H                  (40)
+#define PAGE_ROW_BOX                (36)
+#define PAGE_NOTE_Y                 (LAUNCHER_FOOTER_Y - 32)
+#define PAGE_ROWS                   ((PAGE_NOTE_Y - 6 - PAGE_TOP) / PAGE_ROW_H)
 
 
-static const launcher_hint_t hints_grid[] = {
-    { LAUNCHER_BUTTON_A, "A", "Open" },
-    { LAUNCHER_BUTTON_OTHER, "L", "Home" },
-    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
-    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Size" },
-    { LAUNCHER_BUTTON_OTHER, "R", "View" },
+/* The essentials only: R (view), C (jump, size) still work, and Start's Quick menu has the view's settings. */
+static launcher_hint_t hints_library[] = {
+    { LAUNCHER_BUTTON_A, "A", "Play" },     /* "Details" without Quick launch (set as it's drawn) */
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
-    { LAUNCHER_BUTTON_START, "S", "Menu" },
-};
-
-static const launcher_hint_t hints_carousel[] = {
-    { LAUNCHER_BUTTON_A, "A", "Open" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
-    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
-    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Size" },
-    { LAUNCHER_BUTTON_OTHER, "R", "View" },
-    { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
@@ -508,39 +500,65 @@ static void hidden_process (menu_t *menu) {
     if (hidden_sel < hidden_top) {
         hidden_top = hidden_sel;
     }
-    if (hidden_sel >= hidden_top + PICKER_ROWS) {
-        hidden_top = hidden_sel - PICKER_ROWS + 1;
+    if (hidden_sel >= hidden_top + PAGE_ROWS) {
+        hidden_top = hidden_sel - PAGE_ROWS + 1;
     }
 }
 
+/** @brief A full page over the Library: the background, its title with the accent line, and a divider. */
+static void page_begin (const char *title) {
+    launcher_draw_background();
+    int w = launcher_text_sized(LAUNCHER_SIZE_TITLE, LAUNCHER_X0, PAGE_TITLE_Y, 0, 30, ALIGN_LEFT, STL_DEFAULT, title);
+    launcher_fill_rounded(LAUNCHER_X0, PAGE_UNDERLINE_Y, LAUNCHER_X0 + w, PAGE_UNDERLINE_Y + 3, 1, theme_current()->accent2);
+    ui_components_box_draw(launcher_px(LAUNCHER_X0), PAGE_DIVIDER_Y, launcher_px(LAUNCHER_X1), PAGE_DIVIDER_Y + 1,
+        theme_current()->line);
+}
+
+/** @brief One row: its name, and a value at the right; the selected one highlighted with the accent bar. */
+static void page_row (int r, bool on, const char *name, menu_font_style_t name_style, const char *value,
+    menu_font_style_t value_style) {
+    int y = PAGE_TOP + r * PAGE_ROW_H;
+    if (on) {
+        int box_y = y + (PAGE_ROW_H - PAGE_ROW_BOX) / 2;
+        launcher_fill_rounded(LAUNCHER_X0, box_y, LAUNCHER_X1, box_y + PAGE_ROW_BOX, 6, theme_current()->highlight);
+        launcher_fill_rounded(LAUNCHER_X0, box_y + 4, LAUNCHER_X0 + 4, box_y + PAGE_ROW_BOX - 4, 2, theme_current()->accent2);
+    }
+    int value_w = value ? 220 : 0;
+    launcher_text_sized(LAUNCHER_SIZE_TITLE, LAUNCHER_X0 + 22, y, LAUNCHER_WIDTH - 44 - value_w, PAGE_ROW_H, ALIGN_LEFT,
+        name_style, name);
+    if (value) {
+        launcher_text_sized(LAUNCHER_SIZE_LARGE, LAUNCHER_X1 - 20 - value_w, y, value_w, PAGE_ROW_H, ALIGN_RIGHT,
+            value_style, value);
+    }
+}
+
+static void page_note (const char *note) {
+    launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 22, PAGE_NOTE_Y, LAUNCHER_WIDTH - 30, 24, ALIGN_LEFT, STL_GRAY, note);
+}
+
 static void hidden_draw (menu_t *menu) {
-    launcher_fill_rounded(LAUNCHER_X0 - 2, PICKER_TOP - 2, LAUNCHER_X1 + 2, PICKER_BOTTOM + 2, 14, theme_current()->line);
-    launcher_fill_rounded(LAUNCHER_X0, PICKER_TOP, LAUNCHER_X1, PICKER_BOTTOM, 12, theme_current()->panel);
-    launcher_title(LAUNCHER_X0 + 20, PICKER_TOP + 10, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_DEFAULT, "Hidden games");
+    page_begin("Hidden games");
     int count = library_hidden_count(menu);
     if (count == 0) {
-        launcher_text(LAUNCHER_X0, PICKER_FIRST_ROW_Y + 40, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "No hidden games");
+        page_note("No hidden games. Z on a game in the Library hides it.");
         return;
     }
-    for (int r = 0; r < PICKER_ROWS; r++) {
+    for (int r = 0; r < PAGE_ROWS; r++) {
         int i = hidden_top + r;
         if (i >= count) {
             break;
-        }
-        int y = PICKER_FIRST_ROW_Y + r * PICKER_ROW_H;
-        if (i == hidden_sel) {
-            launcher_fill_rounded(LAUNCHER_X0 + 12, y - 3, LAUNCHER_X1 - 12, y + PICKER_ROW_H - 5, 6, theme_current()->highlight);
         }
         // "sd:/N64 USA/Game.n64" -> "Game" and its folder.
         const char *full = library_hidden_at(i);
         path_t *path = path_create(full);
         char *title = library_title_from_path(menu, path);
         path_pop(path);
-        launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 200, ALIGN_LEFT, STL_DEFAULT, title);
-        launcher_name(LAUNCHER_X1 - 180, y, 156, ALIGN_RIGHT, STL_GRAY, path_last_get(path));
+        bool on = (i == hidden_sel);
+        page_row(r, on, title, on ? STL_DEFAULT : STL_GRAY, path_last_get(path), STL_GRAY);
         free(title);
         path_free(path);
     }
+    page_note("A shows the game in the Library again");
 }
 
 static void folders_show (void) {
@@ -605,37 +623,30 @@ static void folders_process (menu_t *menu) {
     if (folders_sel < folders_top) {
         folders_top = folders_sel;
     }
-    if (folders_sel >= folders_top + PICKER_ROWS) {
-        folders_top = folders_sel - PICKER_ROWS + 1;
+    if (folders_sel >= folders_top + PAGE_ROWS) {
+        folders_top = folders_sel - PAGE_ROWS + 1;
     }
 }
 
 static void folders_draw (menu_t *menu) {
-    launcher_fill_rounded(LAUNCHER_X0 - 2, PICKER_TOP - 2, LAUNCHER_X1 + 2, PICKER_BOTTOM + 2, 14, theme_current()->line);
-    launcher_fill_rounded(LAUNCHER_X0, PICKER_TOP, LAUNCHER_X1, PICKER_BOTTOM, 12, theme_current()->panel);
-    launcher_title(LAUNCHER_X0 + 20, PICKER_TOP + 10, LAUNCHER_WIDTH - 40, ALIGN_LEFT, STL_DEFAULT, "Folders");
+    page_begin("Folders");
     int count = library_folder_count();
-    for (int r = 0; r < PICKER_ROWS; r++) {
+    for (int r = 0; r < PAGE_ROWS; r++) {
         int i = folders_top + r;
         if (i >= count) {
             break;
         }
-        int y = PICKER_FIRST_ROW_Y + r * PICKER_ROW_H;
-        if (i == folders_sel) {
-            launcher_fill_rounded(LAUNCHER_X0 + 12, y - 3, LAUNCHER_X1 - 12, y + PICKER_ROW_H - 5, 6, theme_current()->highlight);
-        }
         bool hidden = library_folder_hidden(i);
-        launcher_name(LAUNCHER_X0 + 24, y, LAUNCHER_WIDTH - 200, ALIGN_LEFT, hidden ? STL_GRAY : STL_DEFAULT, library_folder_name(i));
-        launcher_name(LAUNCHER_X1 - 180, y, 156, ALIGN_RIGHT, hidden ? STL_GRAY : STL_ACCENT, hidden ? "Hidden" : "Shown");
+        bool on = (i == folders_sel);
+        page_row(r, on, library_folder_name(i), hidden ? STL_GRAY : (on ? STL_DEFAULT : STL_GRAY), hidden ? "Hidden" : "Shown",
+            hidden ? STL_GRAY : STL_ACCENT);
     }
-    const char *note = NULL;
     if (get_ticks_ms() < folders_refused_until_ms) {
-        note = "At least one folder stays shown";
+        page_note("At least one folder stays shown");
     } else if (!menu->settings.launcher_categories_enabled) {
-        note = "Folder categories are off: hidden folders are left out of All Games";
-    }
-    if (note) {
-        launcher_small(LAUNCHER_X0 + 24, PICKER_BOTTOM - 22, LAUNCHER_WIDTH - 48, ALIGN_LEFT, STL_GRAY, note);
+        page_note("Folder categories are off: hidden folders are left out of All Games");
+    } else {
+        page_note("A shows or hides a folder; C up and down move it in the tabs");
     }
 }
 
@@ -703,7 +714,7 @@ static void process (menu_t *menu) {
     }
 
     library_category_t *current = library_category(category_index);
-    if (current) {
+    if (current && !launcher_arrange_waiting()) {
         apply_sort(current, category_index);
     }
 
@@ -1621,10 +1632,9 @@ static void draw (menu_t *menu, surface_t *d) {
         } else if (folders_open) {
             folders_draw(menu);
             launcher_draw_footer(hints_folders, HINT_COUNT(hints_folders));
-        } else if (menu->settings.launcher_layout == LAUNCHER_LAYOUT_CAROUSEL || menu->settings.launcher_layout == LAUNCHER_LAYOUT_SHELF) {
-            launcher_draw_footer(hints_carousel, HINT_COUNT(hints_carousel));
         } else {
-            launcher_draw_footer(hints_grid, HINT_COUNT(hints_grid));
+            hints_library[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
+            launcher_draw_footer(hints_library, HINT_COUNT(hints_library));
         }
 
         if (group_badge[0] && get_ticks_ms() < group_badge_until_ms) {

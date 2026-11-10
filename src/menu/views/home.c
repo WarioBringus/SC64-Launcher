@@ -36,8 +36,8 @@
 #define CONTENT_BOTTOM      (412)
 #define ROW_KINDS           (3)
 
-static const launcher_hint_t hints_home[] = {
-    { LAUNCHER_BUTTON_A, "A", "Play" },
+static launcher_hint_t hints_home[] = {
+    { LAUNCHER_BUTTON_A, "A", "Play" },     /* "Details" without Quick launch (set as it's drawn) */
     { LAUNCHER_BUTTON_OTHER, "Z", "Game" },
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
@@ -1099,6 +1099,7 @@ static void draw (menu_t *menu, surface_t *d) {
         draw_styled(menu, menu->settings.launcher_home_style, &lookups_left);
         motion_snap = false;
         home_background_work(menu, &lookups_left);
+        hints_home[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     } else {
         // Keep the selected row on screen; rows above or below scroll out of the content area.
@@ -1141,6 +1142,7 @@ static void draw (menu_t *menu, surface_t *d) {
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
         home_background_work(menu, &lookups_left);
+        hints_home[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
         launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
     }
 

@@ -565,6 +565,9 @@ bool launcher_menu_process(menu_t *menu);
  */
 bool launcher_frame_held(void);
 
+/** @brief While the Quick menu's sort or filter is being changed: the Library re-sorts once the presses stop. */
+bool launcher_arrange_waiting(void);
+
 /** @brief Draw the Start menu if it is open. */
 void launcher_menu_draw(void);
 

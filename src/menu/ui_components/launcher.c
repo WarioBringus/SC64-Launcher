@@ -1979,7 +1979,6 @@ static path_t *selected_rom = NULL;
 static launcher_request_t pending_request = LAUNCHER_REQUEST_NONE;
 static bool favorites_changed = false;
 static char favorite_label[32] = "Add to favorites";
-static char folder_label[64] = "Folder";
 static int requested_category = 0;
 
 static int favorite_index (menu_t *menu, path_t *rom) {
@@ -2189,8 +2188,6 @@ static void toggle_pause (menu_t *menu, void *arg) {
 
 
 
-#define FOLDER_MENU_ROWS    (16)
-
 static void choose_folder (menu_t *menu, void *arg) {
     requested_category = (int)(uintptr_t)(arg);
     request(menu, LAUNCHER_REQUEST_CATEGORY);
@@ -2200,32 +2197,6 @@ static int get_folder_selection (menu_t *menu) {
     int index = library_category_find(menu->settings.launcher_category);
     return index >= 0 ? index : 0;
 }
-
-// Rows are filled with the folder names in prepare_menus; the row after the last folder ends the list.
-static component_context_menu_t folder_menu = {
-    .get_default_selection = get_folder_selection,
-    .list = {
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(0) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(1) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(2) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(3) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(4) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(5) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(6) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(7) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(8) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(9) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(10) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(11) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(12) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(13) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(14) },
-        { .text = "", .action = choose_folder, .arg = (void *)(uintptr_t)(15) },
-        COMPONENT_CONTEXT_MENU_LIST_END,
-    }
-};
-
-
 
 /** @brief The name of a choice menu's current choice, e.g. "Medium" from the tile size menu. */
 static const char *current_choice (menu_t *menu, component_context_menu_t *choices) {
@@ -2244,17 +2215,7 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
     selected_rom = rom;
     snprintf(favorite_label, sizeof(favorite_label), "%s",
         favorite_index(menu, rom) >= 0 ? "Remove from favorites" : "Add to favorites");
-    // Folders, in the order set in Library > Folders.
-    library_init(menu);
-    int folders = library_category_count();
-    for (int i = 0; i < FOLDER_MENU_ROWS; i++) {
-        folder_menu.list[i].text = (i < folders) ? library_category_name(i) : NULL;
-    }
-    if (folders == 0) {
-        folder_menu.list[0].text = "No folders";     // An empty submenu can't be drawn.
-    }
-    const char *shown = library_category_name(get_folder_selection(menu));
-    snprintf(folder_label, sizeof(folder_label), "Folder: %s", shown ? shown : "-");
+    library_init(menu);     // The folders, for the Quick menu's Folder row.
 }
 
 /*
@@ -2322,6 +2283,11 @@ static uint32_t quick_drawn_song = 0;       /* The track playing when it was dra
 static int quick_settled_frames = 0;        /* Frames drawn in a row with nothing moving */
 static int quick_frames_drawn = 0;          /* While open, for the performance log */
 static menu_t *quick_owner;                 /* The menu it was opened with (defined with launcher_menu_show) */
+static uint64_t quick_arrange_ms = 0;       /* The last change that re-sorts the Library (sort, filter) */
+static int quick_cost_logs = 0;             /* Draw-cost notes so far (the log holds only so many events) */
+
+#define ARRANGE_WAIT_MS     (300)   /* Re-sorting a large folder takes ~90 ms: once the presses stop, not per press */
+
 static uint32_t quick_draw_us = 0;
 static int quick_draw_frames = 0;
 static bool quick_draw_logged = false;
@@ -2372,7 +2338,7 @@ static void quick_build_rows (void) {
         quick_rows[n++] = (quick_row_t) { QR_LAYOUT, NULL };
         quick_rows[n++] = (quick_row_t) { QR_TILE_SIZE, NULL };
         quick_rows[n++] = (quick_row_t) { QR_COVERS, NULL };
-        quick_rows[n++] = (quick_row_t) { QR_THEME, NULL };
+        quick_rows[n++] = (quick_row_t) { QR_THEME, "Look" };
     }
     quick_rows[n++] = (quick_row_t) { QR_MUSIC, "Music" };
     quick_rows[n++] = (quick_row_t) { QR_SETTINGS, NULL };
@@ -2386,17 +2352,26 @@ static void quick_close (bool slide) {
     if (!quick_open) {
         return;
     }
-    perf_log_event("quick menu: closed after %.1f s, %d frames drawn", (get_ticks_ms() - quick_changed_ms) / 1000.0f,
-        quick_frames_drawn);
+    if (get_ticks_ms() - quick_changed_ms > 5000) {
+        perf_log_event("quick menu: closed after %.1f s, %d frames drawn", (get_ticks_ms() - quick_changed_ms) / 1000.0f,
+            quick_frames_drawn);
+    }
     quick_open = false;
     quick_changed_ms = slide ? get_ticks_ms() : 0;
     quick_free_groups();
     settings_resume_saves();    // What changed is written in one go once the controller rests, not as it closes.
 }
 
+bool launcher_arrange_waiting (void) {
+    return quick_open && get_ticks_ms() - quick_arrange_ms < ARRANGE_WAIT_MS;
+}
+
 bool launcher_frame_held (void) {
     if (!quick_open || quick_owner == NULL || quick_owner->mode != quick_mode || quick_owner->next_mode != quick_mode) {
         return false;
+    }
+    if (get_ticks_ms() - quick_arrange_ms < ARRANGE_WAIT_MS + 150) {
+        return false;   // A re-sort is waiting for the presses to stop: frames go on until it has shown.
     }
     // Something moving (the slide in, a scroll), a new song, or a while since the last frame.
     return quick_settled_frames >= 4 && sound_bgm_track_generation() == quick_drawn_song &&
@@ -2491,6 +2466,9 @@ static void quick_cycle_menu (menu_t *menu, component_context_menu_t *c, int ste
 
 /** @brief Left or right on a value row: the next or previous value, applied straight away. */
 static void quick_change (menu_t *menu, quick_kind_t kind, int step) {
+    if (kind == QR_SORT || kind == QR_FILTER_BY || kind == QR_FILTER_SHOW) {
+        quick_arrange_ms = get_ticks_ms();
+    }
     switch (kind) {
         case QR_FOLDER: {
             int n = library_category_count();
@@ -2762,11 +2740,12 @@ static void quick_draw (menu_t *menu) {
     quick_frames_drawn++;
 
     // For the performance log: what the panel costs a frame, once per opening.
-    if (quick_open && t >= 1.0f && !quick_draw_logged) {
+    if (quick_open && t >= 1.0f && !quick_draw_logged && quick_cost_logs < 3) {
         quick_draw_us += (uint32_t)(get_ticks_us() - started);
         if (++quick_draw_frames == 30) {
             perf_log_event("quick menu: %.1f ms a frame to draw", quick_draw_us / 30000.0f);
             quick_draw_logged = true;
+            quick_cost_logs++;
         }
     }
 }
