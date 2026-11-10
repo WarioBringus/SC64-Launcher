@@ -45,7 +45,7 @@ static settings_t init = {
     .launcher_category = "USA",
     .launcher_layout = LAUNCHER_LAYOUT_GRID,
     .launcher_tile_size = LAUNCHER_TILE_MEDIUM,
-    .launcher_home_style = LAUNCHER_HOME_CLASSIC,
+    .launcher_home_style = LAUNCHER_HOME_BINDER,
     .launcher_sort = LAUNCHER_SORT_TITLE,
     .launcher_widescreen = false,
     .launcher_quick_launch = false,
@@ -153,7 +153,7 @@ void settings_load (settings_t *settings) {
     if (settings->launcher_tile_size < LAUNCHER_TILE_SMALL || settings->launcher_tile_size > LAUNCHER_TILE_LARGE) {
         settings->launcher_tile_size = init.launcher_tile_size;
     }
-    if (settings->launcher_home_style < LAUNCHER_HOME_CLASSIC || settings->launcher_home_style > LAUNCHER_HOME_MINIMAL) {
+    if (settings->launcher_home_style < LAUNCHER_HOME_BINDER || settings->launcher_home_style > LAUNCHER_HOME_MINIMAL) {
         settings->launcher_home_style = init.launcher_home_style;
     }
 

@@ -288,7 +288,7 @@ static const char *perf_screen_name (menu_t *menu) {
                 case LAUNCHER_HOME_SPOTLIGHT: return "home-spotlight";
                 case LAUNCHER_HOME_CARTRIDGE: return "home-cartridge";
                 case LAUNCHER_HOME_MINIMAL: return "home-minimal";
-                default: return "home-classic";
+                default: return "home-binder";
             }
         case MENU_MODE_ABOUT: return "game-info";
         case MENU_MODE_ATTRACT: return "screensaver";

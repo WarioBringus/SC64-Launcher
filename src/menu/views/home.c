@@ -56,6 +56,12 @@ static const launcher_hint_t hints_moving[] = {
     { LAUNCHER_BUTTON_B, "B", "Cancel" },
 };
 
+static const launcher_hint_t hints_tabs[] = {
+    { LAUNCHER_BUTTON_A, "A", "Open" },
+    { LAUNCHER_BUTTON_OTHER, "R", "Library" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
+};
+
 static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
@@ -107,9 +113,6 @@ typedef struct {
 static home_row_t rows[ROW_KINDS];
 static int row_count = 0;
 static int row_selected = 0;
-static int scroll_y = 0;
-static float scroll_y_pos = 0.0f;       /* Drawn page scroll, gliding toward scroll_y */
-static int scroll_y_ahead = 0;          /* Drawn minus target scroll: where things are headed is this much lower */
 static bool motion_snap = true;
 static cover_lookup_t cover_lookups[COVER_CACHE_SIZE];
 static int cover_lookup_next = 0;
@@ -265,6 +268,8 @@ static uint64_t home_last_input_ms = 0;
 static bool packs_open = false;         /* Every cover pack opened ahead (again after the launcher was left) */
 
 static void process_styled(menu_t *menu, int style);
+static void process_binder(menu_t *menu);
+static bool binder_rail;     /* Binder Mosaic: the tabs have the focus */
 
 /* Moving a favorite: Z picks up the highlighted one, the d-pad or stick moves it, A or Z places it, B puts it back. */
 static bool moving = false;
@@ -360,7 +365,8 @@ static void process (menu_t *menu) {
         moving_process(menu);
         return;
     }
-    if (menu->actions.trigger_z && row_count > 0 && moving_start(menu)) {
+    bool on_tabs = (menu->settings.launcher_home_style == LAUNCHER_HOME_BINDER && binder_rail);
+    if (menu->actions.trigger_z && row_count > 0 && !on_tabs && moving_start(menu)) {
         return;
     }
 
@@ -381,97 +387,11 @@ static void process (menu_t *menu) {
     if (row_count == 0) {
         return;
     }
-    if (menu->settings.launcher_home_style != LAUNCHER_HOME_CLASSIC) {
+    if (menu->settings.launcher_home_style != LAUNCHER_HOME_BINDER) {
         process_styled(menu, menu->settings.launcher_home_style);
         return;
     }
-
-    home_row_t *row = &rows[row_selected];
-
-    if (menu->actions.go_up && row_selected > 0) {
-        row_selected--;
-        sound_play_effect(SFX_TICK);
-    } else if (menu->actions.go_down && row_selected < row_count - 1) {
-        row_selected++;
-        sound_play_effect(SFX_TICK);
-    } else if (menu->actions.go_left && row->selected > 0) {
-        row->selected--;
-        sound_play_effect(SFX_TICK);
-    } else if (menu->actions.go_right && row->selected < row->count - 1) {
-        row->selected++;
-        sound_play_effect(SFX_TICK);
-    } else if (menu->actions.enter && row->count > 0) {
-        launch(menu, &row->items[row->selected]);
-    }
-}
-
-static int draw_row (menu_t *menu, home_row_t *row, int y, bool focused, int *lookups_left) {
-    const char *label = (row->kind == ROW_FAVORITES) ? "Favorites" : "Recently played";
-    launcher_text(LAUNCHER_X0, y, 0, ALIGN_LEFT, focused ? STL_DEFAULT : STL_GRAY, "%s", label);
-
-    // Keep the highlighted tile inside the visible part of the row.
-    if (row->selected < row->scroll) {
-        row->scroll = row->selected;
-    }
-    if (row->selected >= row->scroll + ROW_VISIBLE_TILES) {
-        row->scroll = row->selected - ROW_VISIBLE_TILES + 1;
-    }
-
-    bool highlight_only = menu->settings.launcher_titles_highlight_only;
-    int tile_y = y + ROW_LABEL_H;
-
-    // Glide sideways to the scroll position rather than jumping a tile.
-    float target = (float)(row->scroll * ROW_TILE_STEP);
-    row->scroll_pos = motion_snap ? target : launcher_ease(row->scroll_pos, target);
-    int scroll_px = (int)lroundf(row->scroll_pos);
-    int lift = focused ? launcher_focus_lift((int)(row - rows) * 1000 + row->selected) : 0;
-
-    // The selected game's title shows in full; titles beside it that it would run into wait.
-    int sel_tx = 0, sel_tw = 0;
-    if (focused && row->count > 0) {
-        int sel_x = LAUNCHER_X0 + row->selected * ROW_TILE_STEP - scroll_px;
-        launcher_title_box(row->items[row->selected].title, sel_x + ROW_TILE_W / 2,
-            ROW_TILE_W + 2 * (highlight_only ? 60 : 3), &sel_tx, &sel_tw);
-    }
-    for (int i = scroll_px / ROW_TILE_STEP; i < row->count && i <= scroll_px / ROW_TILE_STEP + ROW_VISIBLE_TILES; i++) {
-        home_item_t *h = &row->items[i];
-        int x = LAUNCHER_X0 + i * ROW_TILE_STEP - scroll_px;
-        bool selected = focused && (i == row->selected);
-        int item_y = selected ? tile_y - lift : tile_y;
-        bool pending;
-        surface_t *image = item_image(menu, h, ROW_TILE_W, ROW_TILE_H, lookups_left, &pending);
-        launcher_draw_tile(x, item_y, ROW_TILE_W, ROW_TILE_H, image, pending, h->title, false, theme_current()->bg);
-        if (selected) {
-            launcher_note_focused_cover(image, x, item_y, ROW_TILE_W, ROW_TILE_H);
-            launcher_draw_focus_ring_cover(LAUNCHER_X0 + (i - row->scroll) * ROW_TILE_STEP, item_y + scroll_y_ahead,
-                ROW_TILE_W, ROW_TILE_H, image);
-        }
-        if (row->kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
-            launcher_draw_favorite_star(x, item_y, ROW_TILE_W);
-        }
-        if (selected || !highlight_only) {
-            int tx = x - 3;
-            int tw = ROW_TILE_W + 6;
-            if (tx < LAUNCHER_X0) {
-                tw -= LAUNCHER_X0 - tx;
-                tx = LAUNCHER_X0;
-            }
-            if (tx + tw > LAUNCHER_X1) {
-                tw = LAUNCHER_X1 - tx;
-            }
-            bool blocked = false;
-            if (selected) {
-                tx = sel_tx;
-                tw = sel_tw;
-            } else if (focused) {
-                blocked = (tx < sel_tx + sel_tw + 6) && (tx + tw > sel_tx - 6);
-            }
-            if (!blocked && tw > 0) {
-                launcher_game_name(tx, tile_y + ROW_TILE_H + LAUNCHER_RING + 3, tw, ALIGN_CENTER, selected ? STL_DEFAULT : STL_GRAY, h->title);
-            }
-        }
-    }
-    return y + ROW_H;
+    process_binder(menu);
 }
 
 /** @brief Work done while Home is on screen: the library's covers and the cover packs, read ahead. */
@@ -513,7 +433,7 @@ static void keep_loaded (menu_t *menu, home_item_t *h, int w, int hgt, int *look
     covers_pending = shown_pending;
 }
 
-/* ------------------------------------------------------------------ Home styles other than Classic */
+/* ------------------------------------------------------------------ Home styles other than Binder Mosaic */
 
 /*
  * Each style lays its games out as slots (rectangles on screen, games off screen included) as it draws,
@@ -1277,7 +1197,7 @@ static bool process_minimal (menu_t *menu) {
     return true;
 }
 
-/** @brief Draw Home in one of the new styles (not Classic). */
+/** @brief Draw Home in one of the slot-based styles (not Binder Mosaic). */
 static void draw_styled (menu_t *menu, int style, int *lookups_left) {
     slot_total = 0;
     switch (style) {
@@ -1337,161 +1257,342 @@ static void set_style_chrome (int style) {
 }
 
 /*
- * Classic: at the top, a viewer showing the selected game large (cover, title, details, A Play) and, when Resume is on,
- * a slim Resume card beside it (cover and name). Selecting Resume (up from the rows) grows its card across the whole
- * top, where it becomes the viewer: the game is never shown twice. Recently played and Favorites scroll beneath.
+ * Binder Mosaic: Home's lists are binder tabs down the left (hidden when only one list is on); the open list is a
+ * page beside them, laid out as a mosaic. Its first game is big, the next ones fill the space beside it and the rest
+ * go small beneath; the selected game's full name and details sit under the big tile. A list of one game is a single
+ * large card (Resume's always is). Every tile is a cover pack's own size, drawn 1:1.
  */
-#define CLASSIC_VIEW_H      (146)   /* The top cards' height: a 158x112 cover drawn 1:1, with room around it */
-#define CLASSIC_SLIM_W      (128)   /* The Resume card's width while a row's game is selected */
-#define CLASSIC_CARD_GAP    (12)
-#define CLASSIC_PAD         (12)
-#define CLASSIC_ROWS_GAP    (14)    /* Between the top cards and the rows */
-#define CLASSIC_SLIM_COVER_W (87)   /* The slim card's cover, the small pack's size (1:1) */
-#define CLASSIC_SLIM_COVER_H (61)
+#define BINDER_RAIL_W_WIDE  (147)   /* The tabs' width: "Recently played" with room around it */
+#define BINDER_RAIL_W_43    (132)
+#define BINDER_RAIL_GAP_WIDE (12)
+#define BINDER_RAIL_GAP_43  (10)
+#define BINDER_TAB_H        (40)
+#define BINDER_TAB_GAP      (6)
+#define BINDER_TAB_RADIUS   (8)
+#define BINDER_PAD          (12)    /* Inside the page */
+#define BINDER_GAP          (12)    /* After the big tile, and between medium tiles */
+#define BINDER_SMALL_GAP    (8)     /* At least this between small tiles (spread to fill their space) */
+#define BINDER_MED_W        (133)   /* The medium pack */
+#define BINDER_MED_H        (94)
+#define BINDER_SMALL_W      (87)    /* The small pack */
+#define BINDER_SMALL_H      (61)
+#define BINDER_SLIDE        (24)    /* A newly opened page slides this far into place */
+#define BINDER_DETAILS_LINE (20)
 
-static float classic_grow = 0.0f;   /* 0: Resume slim beside the viewer; 1: Resume across the top */
+typedef struct {
+    int x, y, w, h;
+    bool big;
+} binder_cell_t;
 
-/** @brief A top card's content: its cover 1:1 at the left, a label, the title, details and the A prompt. */
-static void classic_card_content (menu_t *menu, home_item_t *h, int x0, int x1, int y, bool resume, int *lookups_left,
-    bool focused) {
-    const theme_t *t = theme_current();
-    bool pending;
-    int cx = x0 + CLASSIC_PAD, cy = y + (CLASSIC_VIEW_H - LAUNCHER_COVER_H) / 2;
-    surface_t *image = item_image(menu, h, LAUNCHER_COVER_W, LAUNCHER_COVER_H, lookups_left, &pending);
-    launcher_draw_tile(cx, cy, LAUNCHER_COVER_W, LAUNCHER_COVER_H, image, pending, h->title, false, t->panel);
-    if (focused) {
-        launcher_note_focused_cover(image, cx, cy, LAUNCHER_COVER_W, LAUNCHER_COVER_H);
+typedef struct {
+    row_kind_t kind;
+    int row;                    /**< Into rows; -1 when the list is on but has no games yet */
+} binder_tab_t;
+
+static bool binder_rail = false;            /* The tabs have the focus, not the page */
+static row_kind_t binder_kind = ROW_RESUME; /* The open tab */
+static float binder_slide = 0.0f;
+
+static bool binder_wide (void) {
+    return LAUNCHER_SCREEN_W > 640;
+}
+
+/** @brief The tabs: each list that's on, in order (Recently played and Favorites even while they're empty). */
+static int binder_tabs (menu_t *menu, binder_tab_t *tabs) {
+    bool on[ROW_KINDS] = { menu->settings.launcher_home_resume, menu->settings.launcher_home_recent,
+        menu->settings.launcher_home_favorites };
+    int n = 0;
+    for (int k = 0; k < ROW_KINDS; k++) {
+        int r = row_of_kind((row_kind_t)k);
+        if (on[k] && (r >= 0 || k != ROW_RESUME)) {
+            tabs[n++] = (binder_tab_t) { (row_kind_t)k, r };
+        }
     }
-    int tx = cx + LAUNCHER_COVER_W + 16, tw = x1 - CLASSIC_PAD - tx;
-    if (tw < 60) {
-        return;     // Too narrow to say anything yet (the card is still growing).
+    return n;
+}
+
+/** @brief The open tab (the selected list's when the open one went away), its list made the selected row. */
+static int binder_current (binder_tab_t *tabs, int n) {
+    int cur = -1;
+    for (int i = 0; i < n && cur < 0; i++) {
+        cur = (tabs[i].kind == binder_kind) ? i : cur;
     }
-    int ty = y + 10;
-    launcher_text_sized(LAUNCHER_SIZE_BODY, tx, ty, tw, 20, ALIGN_LEFT, STL_ACCENT,
-        resume ? "Resume" : row_label(rows[row_selected].kind));
-    ty += 20;
-    ty += launcher_title_wrapped(tx, ty, tw, 2, STL_DEFAULT, h->title) + 2;
+    for (int i = 0; i < n && cur < 0; i++) {
+        cur = (tabs[i].row == row_selected) ? i : cur;
+    }
+    cur = (cur < 0) ? 0 : cur;
+    binder_kind = tabs[cur].kind;
+    if (tabs[cur].row >= 0) {
+        row_selected = tabs[cur].row;
+    }
+    return cur;
+}
+
+static void binder_open (binder_tab_t tab, int direction) {
+    binder_kind = tab.kind;
+    if (tab.row >= 0) {
+        row_selected = tab.row;
+    }
+    binder_slide = (float)(BINDER_SLIDE * direction);
+}
+
+/** @brief The page's edges: beside the tabs, or the whole width when there are none. */
+static void binder_page (bool rail, int *x0, int *x1) {
+    *x0 = LAUNCHER_X0 + (rail ? (binder_wide() ? BINDER_RAIL_W_WIDE + BINDER_RAIL_GAP_WIDE : BINDER_RAIL_W_43 + BINDER_RAIL_GAP_43) : 0);
+    *x1 = LAUNCHER_X1;
+}
+
+/** @brief Tiles of one size filling a space row by row, spread to its right edge (and its foot when fill_height). */
+static int binder_region (binder_cell_t *cells, int want, int x0, int y0, int x1, int y1, int tw, int th, int gap,
+    bool fill_height) {
+    int cols = (x1 - x0 + gap) / (tw + gap), rows_n = (y1 - y0 + gap) / (th + gap);
+    if (want <= 0 || cols < 1 || rows_n < 1) {
+        return 0;
+    }
+    int gx = (cols > 1) ? (x1 - x0 - cols * tw) / (cols - 1) : gap;
+    int gy = (fill_height && rows_n > 1) ? (y1 - y0 - rows_n * th) / (rows_n - 1) : gap;
+    int k = 0;
+    for (int r = 0; r < rows_n; r++) {
+        for (int c = 0; c < cols && k < want; c++) {
+            cells[k++] = (binder_cell_t) { x0 + c * (tw + gx), y0 + r * (th + gy), tw, th, false };
+        }
+    }
+    return k;
+}
+
+/** @brief The big tile's size: the hi-res pack at 16:9, the showcase pack at 4:3 (both drawn 1:1). */
+static void binder_big_size (int *w, int *h) {
+    *w = binder_wide() ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W;
+    *h = binder_wide() ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H;
+}
+
+/** @brief Where a list's n games go on a page from x0 to x1: the big tile, then beside it, then beneath. */
+static int binder_layout (int n, int x0, int x1, binder_cell_t *cells) {
+    int ix0 = x0 + BINDER_PAD, iy0 = CONTENT_TOP + BINDER_PAD, ix1 = x1 - BINDER_PAD, iy1 = CONTENT_BOTTOM - BINDER_PAD;
+    int bw, bh;
+    binder_big_size(&bw, &bh);
+    if (n <= 0) {
+        return 0;
+    }
+    cells[0] = (binder_cell_t) { ix0, iy0, bw, bh, true };
+    int count = 1, rx = ix0 + bw + BINDER_GAP;
+    if (n == 1) {
+        return count;   // The details go beside it.
+    }
+    bool wide = binder_wide();
+    count += binder_region(cells + count, n - count, rx, iy0, ix1, iy0 + bh, wide ? BINDER_MED_W : BINDER_SMALL_W,
+        wide ? BINDER_MED_H : BINDER_SMALL_H, wide ? BINDER_GAP : BINDER_SMALL_GAP, true);
+    count += binder_region(cells + count, n - count, rx, iy0 + bh + BINDER_GAP, ix1, iy1, BINDER_SMALL_W,
+        BINDER_SMALL_H, BINDER_SMALL_GAP, false);
+    return count;
+}
+
+/** @brief A tile's cover: the big one from the hi-res pack when it fills a 16:9 big tile. */
+static surface_t *binder_image (menu_t *menu, home_item_t *h, binder_cell_t *c, int *lookups_left, bool *pending,
+    float *zoom) {
+    if (c->big && binder_wide()) {
+        return big_cover(menu, h, (float)LAUNCHER_HIRES_W / LAUNCHER_SHOWCASE_W, lookups_left, pending, zoom);
+    }
+    *zoom = 1.0f;
+    return item_image(menu, h, c->w, c->h, lookups_left, pending);
+}
+
+/** @brief The other tabs' covers stay loaded, so opening one finds them ready. */
+static void binder_keep_others (menu_t *menu, int open_row, int x0, int x1, int *lookups_left) {
+    binder_cell_t cells[MAX_ROW_ITEMS];
+    for (int r = 0; r < row_count; r++) {
+        if (r == open_row) {
+            continue;
+        }
+        int n = binder_layout(rows[r].count, x0, x1, cells);
+        for (int i = 0; i < n; i++) {
+            bool hires = cells[i].big && binder_wide() && launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W,
+                LAUNCHER_HIRES_H);
+            keep_loaded(menu, &rows[r].items[i], hires ? LAUNCHER_HIRES_W : (cells[i].big && binder_wide() ?
+                LAUNCHER_SHOWCASE_W : cells[i].w), hires ? LAUNCHER_HIRES_H : (cells[i].big && binder_wide() ?
+                LAUNCHER_SHOWCASE_H : cells[i].h), lookups_left);
+        }
+    }
+}
+
+/** @brief A game's details line; Resume's adds the folder it's in. */
+static void binder_details (menu_t *menu, home_item_t *h, bool resume, char *line, size_t size) {
     char details[160];
     library_details_for_path(menu, item_path(h), details, sizeof(details));
     if (resume) {
-        char folder[64], line[240];
+        char folder[64];
         item_folder(h, folder, sizeof(folder));
-        snprintf(line, sizeof(line), "%s%s%s", details, details[0] ? "   \xC2\xB7   " : "", folder);
-        ty += launcher_game_details_wrapped(tx, ty, tw, 1, STL_GRAY, line);
-    } else if (details[0]) {
-        ty += launcher_game_details_wrapped(tx, ty, tw, 1, STL_GRAY, details);
-    }
-    // The A prompt at the foot, when the title and details left room for it (the hints say it too).
-    int py = y + CLASSIC_VIEW_H - 34 - 8;
-    if (ty + 4 <= py) {
-        launcher_draw_prompt(tx, py, LAUNCHER_BUTTON_A, "A",
-            resume ? "Resume" : (menu->settings.launcher_quick_launch ? "Play" : "Details"), t->bg);
+        snprintf(line, size, "%s%s%s", details, details[0] ? "   \xC2\xB7   " : "", folder);
+    } else {
+        snprintf(line, size, "%s", details);
     }
 }
 
-/** @brief The slim Resume card: label, a small cover and the game's name. */
-static void classic_slim_content (menu_t *menu, home_item_t *h, int x0, int x1, int y, int *lookups_left) {
+/** @brief The tabs down the left: the open one joins the page (or stands apart, ringed, while the tabs have the focus). */
+static void binder_draw_tabs (binder_tab_t *tabs, int n, int cur, int page_x0) {
     const theme_t *t = theme_current();
-    int w = x1 - x0;
-    launcher_text_sized(LAUNCHER_SIZE_BODY, x0 + 10, y + 6, w - 20, 20, ALIGN_LEFT, STL_ACCENT, "Resume");
-    bool pending;
-    int cx = x0 + (w - CLASSIC_SLIM_COVER_W) / 2, cy = y + 30;
-    surface_t *image = item_image(menu, h, CLASSIC_SLIM_COVER_W, CLASSIC_SLIM_COVER_H, lookups_left, &pending);
-    launcher_draw_tile(cx, cy, CLASSIC_SLIM_COVER_W, CLASSIC_SLIM_COVER_H, image, pending, h->title, false, t->panel);
-    launcher_title_wrapped(x0 + 10, cy + CLASSIC_SLIM_COVER_H + 4, w - 20, 1, STL_DEFAULT, h->title);
-    (void)t;
+    int rail_w = binder_wide() ? BINDER_RAIL_W_WIDE : BINDER_RAIL_W_43;
+    for (int i = 0; i < n; i++) {
+        int y = CONTENT_TOP + i * (BINDER_TAB_H + BINDER_TAB_GAP);
+        bool open = (i == cur);
+        int x1 = (open && !binder_rail) ? page_x0 + CARD_RADIUS : LAUNCHER_X0 + rail_w;
+        if (open && binder_rail) {
+            launcher_draw_focus_ring(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS);
+        }
+        launcher_fill_rounded(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS, open ? t->panel :
+            color_mix(t->bg, t->panel, 45));
+        if (open) {
+            launcher_fill_rounded(LAUNCHER_X0, y + 8, LAUNCHER_X0 + 5, y + BINDER_TAB_H - 8, 2, t->accent);
+        }
+        launcher_text_sized(LAUNCHER_SIZE_BODY, LAUNCHER_X0 + 14, y + (BINDER_TAB_H - 20) / 2 + 1, rail_w - 18, 20,
+            ALIGN_LEFT, open ? STL_DEFAULT : STL_GRAY, row_label(tabs[i].kind));
+    }
 }
 
-static void draw_classic (menu_t *menu, int *lookups_left) {
+static void draw_binder (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
-    int resume_row = row_of_kind(ROW_RESUME);
-    bool on_resume = (resume_row >= 0 && row_selected == resume_row);
-    float target = on_resume ? 1.0f : 0.0f;
-    classic_grow = motion_snap ? target : launcher_ease(classic_grow, target);
-    int top = CONTENT_TOP;
+    slot_total = 0;
+    binder_tab_t tabs[ROW_KINDS];
+    int n = binder_tabs(menu, tabs);
+    if (n == 0) {
+        return;
+    }
+    int cur = binder_current(tabs, n);
+    bool rail = (n > 1);
+    binder_rail = binder_rail && rail;
+    int x0, x1;
+    binder_page(rail, &x0, &x1);
+    if (rail) {
+        binder_draw_tabs(tabs, n, cur, x0);
+    }
+    launcher_fill_rounded(x0, CONTENT_TOP, x1, CONTENT_BOTTOM, CARD_RADIUS, t->panel);
 
-    // The top: viewer and Resume card, their widths gliding as the Resume card grows or shrinks.
-    int full_x0 = LAUNCHER_X0, full_x1 = LAUNCHER_X1;
-    int resume_x0 = full_x1;
-    if (resume_row >= 0) {
-        int slim_x0 = full_x1 - CLASSIC_SLIM_W;
-        resume_x0 = slim_x0 + (int)lroundf((full_x0 - slim_x0) * classic_grow);
-    }
-    int viewer_x1 = (resume_row >= 0) ? resume_x0 - CLASSIC_CARD_GAP : full_x1;
-    if (viewer_x1 - full_x0 > 40 && !(on_resume && classic_grow > 0.98f)) {
-        launcher_fill_rounded(full_x0, top, viewer_x1, top + CLASSIC_VIEW_H, CARD_RADIUS, t->panel);
-        home_item_t *v = on_resume ? NULL : focused_item();
-        if (!v && resume_row >= 0) {
-            // While Resume is selected the viewer is on its way out: what it showed last stays until it's gone.
-            int r = (resume_row + 1 < row_count) ? resume_row + 1 : resume_row;
-            v = (rows[r].count > 0) ? &rows[r].items[rows[r].selected] : NULL;
-        }
-        if (v) {
-            rdpq_set_scissor(0, top, launcher_px(viewer_x1), top + CLASSIC_VIEW_H);
-            classic_card_content(menu, v, full_x0, viewer_x1, top, false, lookups_left, !on_resume);
-            rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
-        }
-    }
-    if (resume_row >= 0) {
-        home_item_t *h = &rows[resume_row].items[0];
-        if (on_resume) {
-            launcher_draw_focus_ring(resume_x0, top, full_x1, top + CLASSIC_VIEW_H, CARD_RADIUS);
-        }
-        launcher_fill_rounded(resume_x0, top, full_x1, top + CLASSIC_VIEW_H, CARD_RADIUS, t->panel);
-        int clip_x1 = launcher_px(full_x1);
-        rdpq_set_scissor(0, top, clip_x1 > display_get_width() ? display_get_width() : clip_x1, top + CLASSIC_VIEW_H);
-        if (classic_grow > 0.5f) {
-            classic_card_content(menu, h, resume_x0, full_x1, top, true, lookups_left, on_resume);
-        } else {
-            classic_slim_content(menu, h, resume_x0, full_x1, top, lookups_left);
-        }
+    binder_slide = motion_snap ? 0.0f : launcher_ease(binder_slide, 0.0f);
+    int dy = (int)lroundf(binder_slide);
+    int clip_x0 = launcher_px(x0), clip_x1 = launcher_px(x1);
+    clip_x0 = clip_x0 < 0 ? 0 : clip_x0;
+    clip_x1 = clip_x1 > display_get_width() ? display_get_width() : (clip_x1 < 1 ? 1 : clip_x1);
+    rdpq_set_scissor(clip_x0, CONTENT_TOP, clip_x1, CONTENT_BOTTOM);
+
+    int ix0 = x0 + BINDER_PAD, ix1 = x1 - BINDER_PAD, iy0 = CONTENT_TOP + BINDER_PAD, iy1 = CONTENT_BOTTOM - BINDER_PAD;
+    if (tabs[cur].row < 0) {
+        // A list that's on but empty says how it fills.
+        bool fav = (tabs[cur].kind == ROW_FAVORITES);
+        int my = (iy0 + iy1) / 2 - 30 + dy;
+        launcher_text_sized(LAUNCHER_SIZE_TITLE, ix0, my, ix1 - ix0, 30, ALIGN_CENTER, STL_DEFAULT,
+            fav ? "No favorites yet" : "Nothing played yet");
+        launcher_text_sized(LAUNCHER_SIZE_BODY, ix0, my + 38, ix1 - ix0, 20, ALIGN_CENTER, STL_GRAY,
+            fav ? "In the Library, press Start on a game: Add to favorites" : "Games you play will show up here");
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+        binder_keep_others(menu, -1, x0, x1, lookups_left);
+        return;
     }
 
-    // The rows beneath, scrolling to keep the selected one in view (Resume stays at the top).
-    int list_top = top + CLASSIC_VIEW_H + CLASSIC_ROWS_GAP;
-    int row_top = list_top, sel_top = list_top;
-    for (int r = 0; r < row_count; r++) {
-        if (rows[r].kind == ROW_RESUME) {
-            continue;
+    home_row_t *row = &rows[tabs[cur].row];
+    binder_cell_t cells[MAX_ROW_ITEMS];
+    int count = binder_layout(row->count, x0, x1, cells);
+    bool page_focus = !binder_rail;
+    for (int i = 0; i < count; i++) {
+        binder_cell_t *c = &cells[i];
+        home_item_t *h = &row->items[i];
+        int y = c->y + dy;
+        bool pending;
+        float zoom;
+        surface_t *image = binder_image(menu, h, c, lookups_left, &pending, &zoom);
+        launcher_draw_tile_zoomed(c->x, y, c->w, c->h, image, pending, h->title, false, t->panel, zoom);
+        if (row->kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(h))) {
+            launcher_draw_favorite_star(c->x, y, c->w);
         }
-        if (r == row_selected) {
-            sel_top = row_top;
+        if (i == row->selected) {
+            launcher_note_focused_cover_zoomed(image, c->x, y, c->w, c->h, zoom);
+            if (page_focus) {
+                launcher_draw_focus_ring_cover_zoomed(c->x, y, c->w, c->h, image, zoom);
+            }
         }
-        row_top += ROW_H;
+        slot_add(c->x, c->y, c->w, c->h, tabs[cur].row, i);
     }
-    if (!on_resume) {
-        if (sel_top - scroll_y < list_top) {
-            scroll_y = sel_top - list_top;
+
+    // The selected game's name and details: beside a lone game, else under the big tile.
+    home_item_t *f = &row->items[row->selected];
+    bool resume = (row->kind == ROW_RESUME);
+    char line[240];
+    binder_details(menu, f, resume, line, sizeof(line));
+    if (count == 1) {
+        int tx = cells[0].x + cells[0].w + BINDER_GAP + 4, tw = ix1 - tx, ty = iy0 + 4 + dy;
+        launcher_text_sized(LAUNCHER_SIZE_BODY, tx, ty, tw, 20, ALIGN_LEFT, STL_ACCENT, row_label(row->kind));
+        ty += 24;
+        ty += launcher_title_wrapped(tx, ty, tw, 3, STL_DEFAULT, f->title) + 4;
+        if (line[0]) {
+            ty += launcher_game_details_wrapped(tx, ty, tw, 3, STL_GRAY, line) + 10;
         }
-        if (sel_top + ROW_H - scroll_y > CONTENT_BOTTOM) {
-            scroll_y = sel_top + ROW_H - CONTENT_BOTTOM;
+        int py = cells[0].y + cells[0].h - 24 + dy;
+        launcher_draw_prompt(tx, ty > py ? ty : py, LAUNCHER_BUTTON_A, "A",
+            resume ? "Resume" : (menu->settings.launcher_quick_launch ? "Play" : "Details"), t->bg);
+    } else {
+        int tx = cells[0].x, tw = cells[0].w, ty = cells[0].y + cells[0].h + BINDER_GAP + dy;
+        ty += launcher_title_wrapped(tx, ty, tw, 2, STL_DEFAULT, f->title) + 2;
+        int lines = (iy1 + dy - ty) / BINDER_DETAILS_LINE;
+        if (line[0] && lines > 0) {
+            launcher_game_details_wrapped(tx, ty, tw, lines > 3 ? 3 : lines, STL_GRAY, line);
         }
-    }
-    scroll_y_pos = motion_snap ? (float)scroll_y : launcher_ease(scroll_y_pos, (float)scroll_y);
-    int drawn_scroll = (int)lroundf(scroll_y_pos);
-    scroll_y_ahead = drawn_scroll - scroll_y;
-    int clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
-    rdpq_set_scissor(0, list_top - LAUNCHER_RING - 2,
-        clip_x1 > display_get_width() ? display_get_width() : (clip_x1 < 1 ? 1 : clip_x1), CONTENT_BOTTOM + 2);
-    int y = list_top - drawn_scroll;
-    for (int r = 0; r < row_count; r++) {
-        if (rows[r].kind == ROW_RESUME) {
-            continue;
-        }
-        if (y + ROW_H < list_top - 10 || y > CONTENT_BOTTOM) {
-            y += ROW_H;
-            continue;
-        }
-        y = draw_row(menu, &rows[r], y, r == row_selected, lookups_left);
     }
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
+    binder_keep_others(menu, tabs[cur].row, x0, x1, lookups_left);
+}
+
+/** @brief Binder Mosaic's input: the d-pad moves around the page, left from its edge to the tabs, up/down past its
+ * top or foot to the tab before or after; on the tabs, up/down opens one and right or A goes into its page. */
+static void process_binder (menu_t *menu) {
+    binder_tab_t tabs[ROW_KINDS];
+    int n = binder_tabs(menu, tabs);
+    if (n == 0) {
+        return;
+    }
+    int cur = binder_current(tabs, n);
+    bool empty = (tabs[cur].row < 0);
+    binder_rail = (n > 1) && (binder_rail || empty);
+    int dx = menu->actions.go_left ? -1 : (menu->actions.go_right ? 1 : 0);
+    int dy = menu->actions.go_up ? -1 : (menu->actions.go_down ? 1 : 0);
+    if (binder_rail) {
+        if (dy && cur + dy >= 0 && cur + dy < n) {
+            binder_open(tabs[cur + dy], dy);
+            sound_play_effect(SFX_TICK);
+        } else if ((dx > 0 || menu->actions.enter) && !empty) {
+            binder_rail = false;
+            sound_play_effect(SFX_TICK);
+        }
+        return;
+    }
+    if (dx || dy) {
+        if (slot_move(dx, dy)) {
+            sound_play_effect(SFX_TICK);
+        } else if (dx < 0 && n > 1) {
+            binder_rail = true;
+            sound_play_effect(SFX_TICK);
+        } else if (dy && cur + dy >= 0 && cur + dy < n && tabs[cur + dy].row >= 0) {
+            binder_open(tabs[cur + dy], dy);
+            sound_play_effect(SFX_TICK);
+        }
+        return;
+    }
+    home_item_t *f = focused_item();
+    if (menu->actions.enter && f) {
+        launch(menu, f);
+    }
 }
 
 /** @brief The hints: Z Move on a favorite (at least two), and while one is moving, how to move and place it. */
 static void draw_home_hints (menu_t *menu) {
     if (moving) {
         launcher_draw_footer(hints_moving, HINT_COUNT(hints_moving));
+        return;
+    }
+    if (menu->settings.launcher_home_style == LAUNCHER_HOME_BINDER && binder_rail) {
+        if (row_of_kind(binder_kind) >= 0) {
+            launcher_draw_footer(hints_tabs, HINT_COUNT(hints_tabs));
+        } else {
+            launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
+        }
         return;
     }
     const char *play = menu->settings.launcher_quick_launch ? "Play" : "Details";
@@ -1525,13 +1626,13 @@ static void draw (menu_t *menu, surface_t *d) {
         launcher_text(LAUNCHER_X0, 200, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Games you play and favorite will show up here");
         launcher_text(LAUNCHER_X0, 224, LAUNCHER_WIDTH, ALIGN_CENTER, STL_GRAY, "Press R to browse your library");
         launcher_draw_footer(hints_empty, HINT_COUNT(hints_empty));
-    } else if (menu->settings.launcher_home_style != LAUNCHER_HOME_CLASSIC) {
+    } else if (menu->settings.launcher_home_style != LAUNCHER_HOME_BINDER) {
         draw_styled(menu, menu->settings.launcher_home_style, &lookups_left);
         motion_snap = false;
         home_background_work(menu, &lookups_left);
         draw_home_hints(menu);
     } else {
-        draw_classic(menu, &lookups_left);
+        draw_binder(menu, &lookups_left);
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
         home_background_work(menu, &lookups_left);
@@ -1615,6 +1716,8 @@ void view_home_init (menu_t *menu) {
     build_rows(menu);
     motion_snap = true;
     launcher_focus_reset();
+    binder_rail = false;
+    binder_kind = (row_count > 0) ? rows[row_selected].kind : ROW_RESUME;
 }
 
 void view_home_display (menu_t *menu, surface_t *display) {
