@@ -261,6 +261,7 @@ typedef enum {
     LAUNCHER_SIZE_LARGE,    /**< 18 px */
     LAUNCHER_SIZE_TITLE,    /**< 22 px, heavy */
     LAUNCHER_SIZE_DISPLAY,  /**< 32 px, heavy, Latin letters only (Minimal; the title size when not loaded) */
+    LAUNCHER_SIZE_DISPLAY_MID, /**< 27 px, the same */
 } launcher_text_size_t;
 
 /**

@@ -7,6 +7,9 @@
 #ifndef FONTS_H__
 #define FONTS_H__
 
+#include <stdbool.h>
+#include <libdragon.h>
+
 /**
  * @brief Font type enumeration.
  * 
@@ -25,6 +28,8 @@ typedef enum {
     FNT_LARGE_WIDE = 9,    /**< FNT_LARGE squeezed for 16:9 */
     FNT_DISPLAY = 10,      /**< Minimal's focused title (Inter, 32 px, Latin only; loaded by fonts_load_display) */
     FNT_DISPLAY_WIDE = 11, /**< FNT_DISPLAY squeezed for 16:9 */
+    FNT_DISPLAY_MID = 12,  /**< 27 px, between the title and display sizes (Minimal's names as they grow) */
+    FNT_DISPLAY_MID_WIDE = 13, /**< FNT_DISPLAY_MID squeezed for 16:9 */
 } menu_font_type_t;
 
 /**
@@ -46,6 +51,7 @@ typedef enum {
     STL_ON_BUTTON,   /**< White, for button icons */
     STL_ON_C_BUTTON, /**< Dark, for the yellow C button icons */
     STL_ON_FEATURE,  /**< Text drawn on the theme's feature color */
+    STL_FADE,        /**< Any colour, see-through too: set with fonts_set_fade_color just before drawing */
 } menu_font_style_t;
 
 /**
@@ -69,6 +75,8 @@ void fonts_load_default(void);
  * @brief Re-color the font styles from the active theme.
  */
 void fonts_apply_theme(void);
+/** @brief The colour STL_FADE text is drawn in from now on (alpha below 255 is see-through). */
+void fonts_set_fade_color(color_t color);
 /** @brief Load the display font (once): only Minimal uses it, so it isn't loaded at startup. */
 void fonts_load_display(void);
 /** @brief Whether the display font is loaded. */

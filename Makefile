@@ -144,6 +144,8 @@ FILESYSTEM = \
 	$(FILESYSTEM_DIR)/menu/fonts/InterLargeWide.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterDisplay.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterDisplayWide.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterDisplayMid.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterDisplayMidWide.font64 \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_WAV:%.wav=%.wav64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_XM:%.xm=%.xm64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sprites/, $(notdir $(IMAGES:%.png=%.sprite)))
@@ -216,6 +218,18 @@ $(FILESYSTEM_DIR)/menu/fonts/InterDisplayWide.font64: $(ASSETS_DIR)/fonts/Inter.
 	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
 	@cp "$<" $(BUILD_DIR)/fonts/InterDisplayWide.ttf
 	@$(N64_MKFONT) --compress 1 --display 640x480,16:9 --charset $(ASSETS_DIR)/fonts/charset_display.txt --ellipsis 2026,1 --size 32 --var-axis wght=800 -o $(dir $@) $(BUILD_DIR)/fonts/InterDisplayWide.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterDisplayMid.font64: $(ASSETS_DIR)/fonts/Inter.ttf $(ASSETS_DIR)/fonts/charset_display.txt
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterDisplayMid.ttf
+	@$(N64_MKFONT) --compress 1 --size 27 --var-axis wght=800 --charset $(ASSETS_DIR)/fonts/charset_display.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterDisplayMid.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterDisplayMidWide.font64: $(ASSETS_DIR)/fonts/Inter.ttf $(ASSETS_DIR)/fonts/charset_display.txt
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterDisplayMidWide.ttf
+	@$(N64_MKFONT) --compress 1 --display 640x480,16:9 --charset $(ASSETS_DIR)/fonts/charset_display.txt --ellipsis 2026,1 --size 27 --var-axis wght=800 -o $(dir $@) $(BUILD_DIR)/fonts/InterDisplayMidWide.ttf
 
 $(FILESYSTEM_DIR)/menu/fonts/%.font64: $(ASSETS_DIR)/fonts/%.ttf
 	@echo " [FONT] $@"

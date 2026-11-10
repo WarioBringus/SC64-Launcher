@@ -851,19 +851,19 @@ static void eased_color_from (eased_color_t *e, surface_t *image, bool pending, 
  * list.
  */
 #define CART_TOP            (LAUNCHER_SUBHEADER_Y + 4)
-#define CART_ZOOM           (1.1f)  /* The label, 1.1x the showcase size */
+#define CART_ZOOM           (1.25f) /* The label, 1.25x the showcase size */
 #define CART_PAD            (14)    /* Cartridge body around its label */
 #define CART_GRIP           (34)    /* The cartridge's lower part, under the label */
-#define CART_BAND_Y1        (284)   /* The band's foot, above the row */
+#define CART_BAND_Y1        (296)   /* The band's foot, above the row */
 #define CART_BAND_TOP_W     (150)   /* How far past the cartridge the band reaches, at the top and at its foot */
 #define CART_BAND_FOOT_W    (70)
 #define CART_BAND_EDGE      (26)    /* Its brighter edge */
 #define CART_BAND_SLIDE     (150)   /* A new game's band slides in from this far left */
-#define CART_LABELS_Y       (296)
-#define CART_STRIP_Y        (318)
-#define CART_ROW_W          (87)
-#define CART_ROW_H          (61)
-#define CART_ROW_STEP       (97)
+#define CART_LABELS_Y       (302)
+#define CART_STRIP_Y        (322)
+#define CART_ROW_W          (133)
+#define CART_ROW_H          (94)
+#define CART_ROW_STEP       (145)
 #define CART_BAND_TINT      (62)    /* Percent of the label's colour in the band; the edge has more */
 #define CART_EDGE_TINT      (92)
 
@@ -871,6 +871,8 @@ static strip_t cart_row_strip;
 static eased_color_t cart_band = { .set = false };
 static eased_color_t cart_edge = { .set = false };
 static float cart_band_dx = 0.0f;       /* The band's slide, easing back to 0 */
+static int cart_text_right = 0;         /* The right end of what's beside the cart, last frame */
+static float cart_band_reach = -1.0f;   /* The band's foot, eased toward past cart_text_right */
 static home_item_t *cart_band_item = NULL;
 
 static int cart_body_w (void) {
@@ -892,7 +894,14 @@ static void cart_background (void) {
     color_t edge = eased_color_step(&cart_edge, color_mix(t->bg, t->feature, CART_EDGE_TINT));
     int right = LAUNCHER_X0 + 4 + cart_body_w();
     int dx = (int)lroundf(cart_band_dx);
-    launcher_set_background_band(right + CART_BAND_TOP_W + dx, right + CART_BAND_FOOT_W + dx, CART_BAND_Y1, band, edge,
+    // The foot just past the text and the A pill beside the cart (the slant leans right above it).
+    int want = right + CART_BAND_FOOT_W;
+    want = (cart_text_right + 30 > want) ? cart_text_right + 30 : want;
+    int max_foot = LAUNCHER_SCREEN_W - CART_BAND_TOP_W + CART_BAND_FOOT_W - CART_BAND_EDGE;
+    want = (want > max_foot) ? max_foot : want;
+    cart_band_reach = (cart_band_reach < 0.0f || motion_snap) ? (float)want : launcher_ease(cart_band_reach, (float)want);
+    int foot = (int)lroundf(cart_band_reach);
+    launcher_set_background_band(foot + (CART_BAND_TOP_W - CART_BAND_FOOT_W) + dx, foot + dx, CART_BAND_Y1, band, edge,
         CART_BAND_EDGE);
 }
 
@@ -927,17 +936,25 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
 
         // Beside it: which list, the title, the details and the A prompt.
         int tx = bx + bw + 26, tw = LAUNCHER_X1 - tx;
+        tw = (tw > 300) ? 300 : tw;     // A column, not the rest of the screen: the band reaches past it.
         int y = by + 4;
         launcher_text_sized(LAUNCHER_SIZE_BODY, tx, y, tw, 22, ALIGN_LEFT, STL_DEFAULT, row_label(rows[row_selected].kind));
         y += 26;
+        int title_w = launcher_text_sized_width(LAUNCHER_SIZE_TITLE, f->title);
         y += launcher_title_wrapped(tx, y, tw, 3, STL_DEFAULT, f->title) + 6;
         char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
+        int details_w = 0;
         if (details[0]) {
+            details_w = tw;     // Wrapped to the column
             y += launcher_game_details_wrapped(tx, y, tw, 3, STL_DEFAULT, details) + 12;
         }
         bool resume = (rows[row_selected].kind == ROW_RESUME);
-        launcher_draw_prompt(tx, y, LAUNCHER_BUTTON_A, "A", resume ? "Resume" : "Play", t->bg);
+        int pill_w = launcher_draw_prompt(tx, y, LAUNCHER_BUTTON_A, "A", resume ? "Resume" : "Play", t->bg);
+        int widest = (title_w > tw) ? tw : title_w;
+        widest = (details_w > widest) ? details_w : widest;
+        widest = (pill_w > widest) ? pill_w : widest;
+        cart_text_right = tx + widest;
     }
 
     // Every game in one row; a label (and a divider) where each list starts.
@@ -1002,7 +1019,8 @@ static bool process_cartridge (menu_t *menu) {
 #define TYPE_CENTER_Y       (204)   /* The lane's middle */
 #define TYPE_LANE_H         (80)
 #define TYPE_LANE_BAR       (8)
-#define TYPE_COVER_ZOOM     (1.4f)  /* The hi-res pack's own size */
+#define TYPE_COVER_W_WIDE   (380)   /* The cover's width in 16:9 and 4:3 (from the 420x300 pack, never enlarged) */
+#define TYPE_COVER_W_43     (300)
 #define TYPE_TOP            (60)    /* The list's area, under the header and above the hints */
 #define TYPE_SECTION_GAP    (0.9f)  /* Extra room before each list, in names */
 #define TYPE_HEADING_AT     (0.75f) /* Its heading, this far before the list's first name */
@@ -1032,6 +1050,58 @@ static float type_offset (float d) {
     return (d < 0.0f) ? -v : v;
 }
 
+/* Font sizes, smallest first, and the box each is drawn in. */
+static const launcher_text_size_t type_sizes[] = { LAUNCHER_SIZE_BODY, LAUNCHER_SIZE_LARGE, LAUNCHER_SIZE_TITLE,
+    LAUNCHER_SIZE_DISPLAY_MID, LAUNCHER_SIZE_DISPLAY };
+static const float type_px[] = { 15.0f, 18.0f, 22.0f, 27.0f, 32.0f };
+static const int type_box[] = { 22, 26, 30, 36, 42 };
+#define TYPE_SIZES          (5)
+
+/** @brief A name's text size by its distance from the lane: 32 px in it, 22 one away, 18 two, 15 beyond. */
+static float type_size_for (float d) {
+    static const float at[] = { 32.0f, 22.0f, 18.0f, 15.0f };
+    float a = fabsf(d);
+    int i = (int)a;
+    return (i >= 3) ? 15.0f : at[i] + (at[i + 1] - at[i]) * (a - (float)i);
+}
+
+/**
+ * @brief One name, its middle at mid: drawn in the two font sizes either side of its size, each as see-through as it
+ * is far from that size, so it grows and shrinks smoothly as it glides. Its colour goes from grey to white as it
+ * comes into the lane. Too long for a size: the largest that fits.
+ */
+static void type_draw_name (int x, int mid, int width, float d, const char *title) {
+    float size = type_size_for(d);
+    int fit = TYPE_SIZES - 1;
+    while (fit > 0 && launcher_text_sized_width(type_sizes[fit], title) > width) {
+        fit--;
+    }
+    size = (size > type_px[fit]) ? type_px[fit] : size;
+    int lo = 0;
+    while (lo < TYPE_SIZES - 2 && type_px[lo + 1] <= size) {
+        lo++;
+    }
+    float f = (size - type_px[lo]) / (type_px[lo + 1] - type_px[lo]);
+    f = (f < 0.0f) ? 0.0f : (f > 1.0f ? 1.0f : f);
+    float bright = 1.0f - fabsf(d);     // 1 in the lane, 0 from one name away
+    bright = (bright < 0.0f) ? 0.0f : bright;
+    color_t white = THEME_TEXT_DEFAULT, grey = THEME_TEXT_GRAY;
+    color_t c = RGBA32(grey.r + (int)((white.r - grey.r) * bright), grey.g + (int)((white.g - grey.g) * bright),
+        grey.b + (int)((white.b - grey.b) * bright), 0xFF);
+    int raise = (int)lroundf(10.0f * bright);  // In the lane, lifted to leave room for its details
+    for (int pass = 0; pass < 2; pass++) {
+        int i = lo + pass;
+        float alpha = pass ? f : 1.0f - f;
+        if (alpha < 0.06f) {
+            continue;
+        }
+        c.a = (uint8_t)(alpha * 255.0f);
+        fonts_set_fade_color(c);
+        launcher_text_sized(type_sizes[i], x, mid - type_box[i] / 2 - raise, width, type_box[i], ALIGN_LEFT,
+            STL_FADE, title);
+    }
+}
+
 static void draw_minimal (menu_t *menu, int *lookups_left) {
     const theme_t *t = theme_current();
     fonts_load_display();
@@ -1049,8 +1119,9 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         type_pos = (fabsf(target - type_pos) < 0.005f) ? target : type_pos;
     }
 
-    int cover_w = (int)(LAUNCHER_SHOWCASE_W * TYPE_COVER_ZOOM);
-    int cover_h = (int)(LAUNCHER_SHOWCASE_H * TYPE_COVER_ZOOM);
+    bool wall = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H);
+    int cover_w = launcher_is_widescreen() ? TYPE_COVER_W_WIDE : TYPE_COVER_W_43;
+    int cover_h = cover_w * LAUNCHER_WALL_H / LAUNCHER_WALL_W;
     int cover_x = LAUNCHER_X1 - cover_w - 6;
     int cover_y = TYPE_CENTER_Y - cover_h / 2 - 6;
     int list_x = LAUNCHER_X0 + 14;
@@ -1080,24 +1151,11 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
             continue;
         }
         home_item_t *h = &rows[refs[k].row].items[refs[k].index];
-        float a = fabsf(d);
         int mid = TYPE_CENTER_Y + (int)lroundf(type_offset(d));
-        if (k == sel && a < 0.5f) {
-            // The focused name, large, with its details under it in the lane; two lines of the title size if it
-            // doesn't fit on one.
-            int w = launcher_text_sized_width(LAUNCHER_SIZE_DISPLAY, h->title);
-            if (w <= list_w) {
-                launcher_text_sized(LAUNCHER_SIZE_DISPLAY, list_x, mid - 32, list_w, 42, ALIGN_LEFT, STL_DEFAULT, h->title);
-            } else {
-                launcher_title_wrapped(list_x, mid - 36, list_w, 2, STL_DEFAULT, h->title);
-            }
-            continue;
-        }
-        launcher_text_size_t size = (a < 1.5f) ? LAUNCHER_SIZE_TITLE : (a < 2.5f) ? LAUNCHER_SIZE_LARGE : LAUNCHER_SIZE_BODY;
-        launcher_text_sized(size, list_x, mid - 15, list_w, 30, ALIGN_LEFT, STL_GRAY, h->title);
+        type_draw_name(list_x, mid, list_w, d, h->title);
         if (abs(k - sel) == 1) {
-            keep_loaded(menu, h, hires ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W, hires ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H,
-                lookups_left);
+            keep_loaded(menu, h, wall ? LAUNCHER_WALL_W : (hires ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W),
+                wall ? LAUNCHER_WALL_H : (hires ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H), lookups_left);
         }
     }
     clip_none();
@@ -1106,13 +1164,23 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     if (f) {
         char details[160];
         library_details_for_path(menu, item_path(f), details, sizeof(details));
-        if (details[0] && fabsf(target - type_pos) < 0.5f) {
+        float off = fabsf(target - type_pos);
+        if (details[0] && off < 0.5f) {
             int dy = (int)lroundf(type_offset(target - type_pos));
-            launcher_game_details_wrapped(list_x, TYPE_CENTER_Y + 12 + dy, list_w, 1, STL_DEFAULT, details);
+            color_t c = THEME_TEXT_DEFAULT;
+            c.a = (uint8_t)(255.0f * (1.0f - off * 2.0f));
+            fonts_set_fade_color(c);
+            launcher_text_sized(LAUNCHER_SIZE_BODY, list_x, TYPE_CENTER_Y + 12 + dy, list_w, 22, ALIGN_LEFT, STL_FADE, details);
         }
         bool pending;
         float zoom;
-        surface_t *image = big_cover(menu, f, TYPE_COVER_ZOOM, lookups_left, &pending, &zoom);
+        surface_t *image;
+        if (wall) {
+            zoom = (float)cover_w / LAUNCHER_WALL_W;
+            image = item_image(menu, f, LAUNCHER_WALL_W, LAUNCHER_WALL_H, lookups_left, &pending);
+        } else {
+            image = big_cover(menu, f, (float)cover_w / LAUNCHER_SHOWCASE_W, lookups_left, &pending, &zoom);
+        }
         launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, lane, zoom);
         launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, zoom);
         eased_color_from(&type_lane, image, pending, t->bg, TYPE_LANE_TINT);
@@ -1309,7 +1377,9 @@ static void draw (menu_t *menu, surface_t *d) {
             reveal_fade_ms = 0.0f;
             fade_started_ms = now_ms;
             perf_log_event("startup Home hidden for %lu ms (%d frames, %s)", (unsigned long)(now_ms - reveal_since_ms),
-                reveal_frames, timed_out ? "timed out" : "covers in, frames steady");
+                reveal_frames, !timed_out ? "covers in, frames steady" : (covers_pending ? "timed out, covers still loading" :
+                "timed out, frames not steady"));
+            perf_log_event("startup: last hidden frame %lu ms, %d quick frames in a row", (unsigned long)frame_ms, reveal_steady);
             heap_stats_t heap;
             sys_get_heap_stats(&heap);
             perf_log_event("after startup: heap %d KB free (%d KB of it in gaps between allocations)", heap.free / 1024, heap.fragmented / 1024);

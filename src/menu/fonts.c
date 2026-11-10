@@ -13,7 +13,7 @@ static rdpq_font_t *title_font = NULL;
 static rdpq_font_t *small_font = NULL;
 static rdpq_font_t *wide_fonts[3] = { NULL, NULL, NULL };
 static rdpq_font_t *large_fonts[2] = { NULL, NULL };   /* Text size: Large, and its 16:9 variant */
-static rdpq_font_t *display_fonts[2] = { NULL, NULL }; /* Minimal's focused title, and its 16:9 variant */
+static rdpq_font_t *display_fonts[4] = { NULL, NULL, NULL, NULL }; /* Minimal: 32 and 27 px, each with a 16:9 variant */
 static char default_font_path[256] = "";
 static bool default_font_loaded = false;
 
@@ -55,8 +55,20 @@ static void apply_font_styles (void) {
         if (large_fonts[i]) {
             apply_styles(large_fonts[i]);
         }
+    }
+    for (int i = 0; i < 4; i++) {
         if (display_fonts[i]) {
             apply_styles(display_fonts[i]);
+        }
+    }
+}
+
+void fonts_set_fade_color (color_t color) {
+    rdpq_font_t *fonts[] = { launcher_font, title_font, small_font, wide_fonts[0], wide_fonts[1], wide_fonts[2],
+        large_fonts[0], large_fonts[1], display_fonts[0], display_fonts[1], display_fonts[2], display_fonts[3] };
+    for (size_t i = 0; i < sizeof(fonts) / sizeof(fonts[0]); i++) {
+        if (fonts[i]) {
+            rdpq_font_style(fonts[i], STL_FADE, &((rdpq_fontstyle_t) { .color = color }));
         }
     }
 }
@@ -67,10 +79,15 @@ void fonts_load_display (void) {
     }
     display_fonts[0] = rdpq_font_load("rom:/menu/fonts/InterDisplay.font64");
     display_fonts[1] = rdpq_font_load("rom:/menu/fonts/InterDisplayWide.font64");
-    apply_styles(display_fonts[0]);
-    apply_styles(display_fonts[1]);
+    display_fonts[2] = rdpq_font_load("rom:/menu/fonts/InterDisplayMid.font64");
+    display_fonts[3] = rdpq_font_load("rom:/menu/fonts/InterDisplayMidWide.font64");
+    for (int i = 0; i < 4; i++) {
+        apply_styles(display_fonts[i]);
+    }
     rdpq_text_register_font(FNT_DISPLAY, display_fonts[0]);
     rdpq_text_register_font(FNT_DISPLAY_WIDE, display_fonts[1]);
+    rdpq_text_register_font(FNT_DISPLAY_MID, display_fonts[2]);
+    rdpq_text_register_font(FNT_DISPLAY_MID_WIDE, display_fonts[3]);
 }
 
 bool fonts_display_loaded (void) {

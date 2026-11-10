@@ -40,7 +40,7 @@
 #define HINT_TEXT_HEIGHT        (22)
 #define HINT_ICON_GAP           (5)
 #define HINT_GAP                (14)
-#define WIDTH_CACHE_SIZE        (48)
+#define WIDTH_CACHE_SIZE        (128)
 #define FIT_SLACK               (32)    // physical pixels, wider than any glyph's advance
 
 #define COVER_ALPHA_THRESHOLD   (128)   /* Scaled covers: filtered alpha below this is transparent */
@@ -103,6 +103,7 @@ uint8_t launcher_font (uint8_t font) {
         case FNT_SMALL: return FNT_SMALL_WIDE;
         case FNT_LARGE: return FNT_LARGE_WIDE;
         case FNT_DISPLAY: return FNT_DISPLAY_WIDE;
+        case FNT_DISPLAY_MID: return FNT_DISPLAY_MID_WIDE;
         default: return font;   // The stock font has no squeezed variant.
     }
 }
@@ -580,6 +581,7 @@ static uint8_t sized_font (launcher_text_size_t size) {
         case LAUNCHER_SIZE_LARGE: return FNT_LARGE;
         case LAUNCHER_SIZE_TITLE: return FNT_TITLE;
         case LAUNCHER_SIZE_DISPLAY: return fonts_display_loaded() ? FNT_DISPLAY : FNT_TITLE;
+        case LAUNCHER_SIZE_DISPLAY_MID: return fonts_display_loaded() ? FNT_DISPLAY_MID : FNT_TITLE;
         default: return FNT_LAUNCHER;
     }
 }
@@ -587,7 +589,7 @@ static uint8_t sized_font (launcher_text_size_t size) {
 /** @brief The display font has Latin letters only: other text (Ō, Ž...) takes the title font. */
 static uint8_t sized_font_for (launcher_text_size_t size, const char *text) {
     uint8_t font = sized_font(size);
-    if (font == FNT_DISPLAY) {
+    if (font == FNT_DISPLAY || font == FNT_DISPLAY_MID) {
         for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
             if (*p >= 0xC4) {
                 return FNT_TITLE;
@@ -1172,8 +1174,13 @@ static bool draw_now_playing_at (int x, int y, int width, rdpq_align_t align) {
     if (!name || !sound_bgm_is_playing() || get_ticks_ms() > now_playing_until_ms) {
         return false;
     }
-    char text[128];
+    static char text[128];      // Kept in memory: its width is remembered
     snprintf(text, sizeof(text), "Now playing: %s", name);
+    // On a pill in the background colour, so a long title stays readable over a style's coloured band.
+    int w = text_width_font(FNT_SMALL, text);
+    w = (w > width) ? width : w;
+    int px0 = (align == ALIGN_RIGHT) ? x + width - w : x;
+    launcher_fill_rounded(px0 - 10, y - 2, px0 + w + 10, y + 18, 10, theme_current()->bg);
     launcher_small(x, y, width, align, STL_GRAY, text);
     return true;
 }
@@ -1309,12 +1316,26 @@ static void fade_band (int y0, int y1, color_t color, int alpha) {
 }
 
 /** @brief End a screen's content: undo the slide and fade the content in from the background. */
+static bool band_set;
+static bool header_on_feature = false;
+static float tab_line_x = -1.0f, tab_line_w = 0.0f;
+static menu_t *header_menu = NULL;          /* This frame's tabs, drawn again over a full-screen fade */
+static launcher_tab_t header_active = LAUNCHER_TAB_HOME;
+static bool header_redraw = false;
+
+static void draw_tabs(menu_t *menu, launcher_tab_t active, bool ease);
+
 static void transition_content_end (void) {
     slide_dx = 0;
     if (transition_fade > 0.0f) {
         fade_band(transition_y0, transition_y1, theme_current()->bg, (int)(transition_fade * 255.0f));
         transition_fade = 0.0f;
+        if (header_redraw && header_menu) {
+            draw_tabs(header_menu, header_active, false);
+        }
     }
+    header_redraw = false;
+    header_on_feature = false;
 }
 
 static launcher_header_style_t header_style = LAUNCHER_HEADER_TABS;
@@ -1413,11 +1434,57 @@ static void draw_header_bar (menu_t *menu, launcher_tab_t active) {
     }
 }
 
-static bool header_on_feature = false;
-static float tab_line_x = -1.0f, tab_line_w = 0.0f;
 
 void launcher_set_header_on_feature (bool on) {
     header_on_feature = on;
+}
+
+/**
+ * @brief Home / Library with the underline, the clock, and the music note or new games notice. ease: move the underline
+ * on (false when drawn a second time in a frame, over a full-screen fade).
+ */
+static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
+    static const char *tabs[] = { "Home", "Library" };
+    bool on_feature = header_on_feature;
+    int x = LAUNCHER_X0, line_x = x, line_w = 0;
+    for (int i = 0; i < 2; i++) {
+        bool on = (i == (int)active);
+        menu_font_style_t style = on_feature ? STL_ON_FEATURE : (on ? STL_DEFAULT : STL_GRAY);
+        int w = launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, style, "%s", tabs[i]);
+        if (on) {
+            line_x = x;
+            line_w = w;
+        }
+        x += w + HEADER_TAB_SPACING;
+    }
+    // The underline glides from Home to Library and back as the screens change.
+    if (tab_line_x < 0.0f) {
+        tab_line_x = (float)line_x;
+        tab_line_w = (float)line_w;
+    }
+    if (ease) {
+        tab_line_x = launcher_ease(tab_line_x, (float)line_x);
+        tab_line_w = launcher_ease(tab_line_w, (float)line_w);
+    }
+    int lx = (int)lroundf(tab_line_x);
+    launcher_fill_rounded(lx, HEADER_UNDERLINE_Y, lx + (int)lroundf(tab_line_w), HEADER_UNDERLINE_Y + 3, 1,
+        on_feature ? theme_current()->on_feature : theme_current()->accent2);
+
+    if (menu->current_time >= 0) {
+        char clock[16];
+        struct tm *t = localtime(&menu->current_time);
+        strftime(clock, sizeof(clock), "%I:%M %p", t);
+        const char *shown = (clock[0] == '0') ? clock + 1 : clock;
+        // On a pill in the background colour: it stays readable over a style's coloured band.
+        int cw = text_width(shown);
+        launcher_fill_rounded(LAUNCHER_X1 - cw - 10, LAUNCHER_HEADER_Y - 1, LAUNCHER_X1 + 8, LAUNCHER_HEADER_Y + 21, 10,
+            theme_current()->bg);
+        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", shown);
+    }
+    // The music note takes the spot for its few seconds; the new games notice comes back after.
+    if (!draw_now_playing()) {
+        launcher_draw_new_games_notice();
+    }
 }
 
 static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
@@ -1439,41 +1506,7 @@ static void draw_header_parts (menu_t *menu, launcher_tab_t active) {
         return;
     }
 
-    static const char *tabs[] = { "Home", "Library" };
-    bool on_feature = header_on_feature;
-    header_on_feature = false;      // Only for this frame's header.
-    int x = LAUNCHER_X0, line_x = x, line_w = 0;
-    for (int i = 0; i < 2; i++) {
-        bool on = (i == (int)active);
-        menu_font_style_t style = on_feature ? STL_ON_FEATURE : (on ? STL_DEFAULT : STL_GRAY);
-        int w = launcher_text(x, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, style, "%s", tabs[i]);
-        if (on) {
-            line_x = x;
-            line_w = w;
-        }
-        x += w + HEADER_TAB_SPACING;
-    }
-    // The underline glides from Home to Library and back as the screens change.
-    if (tab_line_x < 0.0f) {
-        tab_line_x = (float)line_x;
-        tab_line_w = (float)line_w;
-    }
-    tab_line_x = launcher_ease(tab_line_x, (float)line_x);
-    tab_line_w = launcher_ease(tab_line_w, (float)line_w);
-    int lx = (int)lroundf(tab_line_x);
-    launcher_fill_rounded(lx, HEADER_UNDERLINE_Y, lx + (int)lroundf(tab_line_w), HEADER_UNDERLINE_Y + 3, 1,
-        on_feature ? theme_current()->on_feature : theme_current()->accent2);
-
-    if (menu->current_time >= 0) {
-        char clock[16];
-        struct tm *t = localtime(&menu->current_time);
-        strftime(clock, sizeof(clock), "%I:%M %p", t);
-        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock[0] == '0' ? clock + 1 : clock);
-    }
-    // The music note takes the spot for its few seconds; the new games notice comes back after.
-    if (!draw_now_playing()) {
-        launcher_draw_new_games_notice();
-    }
+    draw_tabs(menu, active, true);
 }
 
 int launcher_pill_width (const char *name) {
@@ -1542,8 +1575,16 @@ void launcher_draw_header (menu_t *menu, launcher_tab_t active) {
     uint64_t perf_started = get_ticks_us();
     // Home's styles without the tab row draw from the top of the screen to the bottom (Spotlight's panel): their
     // whole screen fades in, or the panel's ends showed at full color around the fading middle, like a tear.
-    bool full_screen = (header_style != LAUNCHER_HEADER_TABS);
+    // So do styles with a band drawn with the background (Spotlight's panel, Cartridge's band): the tabs on top are
+    // drawn again over the fade, so the header stays steady while the rest fades.
+    bool tabs = (header_style == LAUNCHER_HEADER_TABS);
+    bool full_screen = !tabs || band_set;
+    header_redraw = tabs && band_set;
+    header_menu = menu;
+    header_active = active;
+    bool on_feature = header_on_feature;
     draw_header_parts(menu, active);
+    header_on_feature = on_feature;     // Kept for the redraw; cleared after it.
     launcher_transition_content_begin(full_screen ? 0 : HEADER_UNDERLINE_Y + 6);
     transition_y1 = full_screen ? display_get_height() : LAUNCHER_FOOTER_Y;
     perf_log_add(PERF_CHROME, (uint32_t)(get_ticks_us() - perf_started));
