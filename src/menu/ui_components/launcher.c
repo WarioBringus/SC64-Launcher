@@ -102,6 +102,7 @@ uint8_t launcher_font (uint8_t font) {
         case FNT_TITLE: return FNT_TITLE_WIDE;
         case FNT_SMALL: return FNT_SMALL_WIDE;
         case FNT_LARGE: return FNT_LARGE_WIDE;
+        case FNT_DISPLAY: return FNT_DISPLAY_WIDE;
         default: return font;   // The stock font has no squeezed variant.
     }
 }
@@ -578,19 +579,33 @@ static uint8_t sized_font (launcher_text_size_t size) {
         case LAUNCHER_SIZE_SMALL: return FNT_SMALL;
         case LAUNCHER_SIZE_LARGE: return FNT_LARGE;
         case LAUNCHER_SIZE_TITLE: return FNT_TITLE;
+        case LAUNCHER_SIZE_DISPLAY: return fonts_display_loaded() ? FNT_DISPLAY : FNT_TITLE;
         default: return FNT_LAUNCHER;
     }
+}
+
+/** @brief The display font has Latin letters only: other text (Ō, Ž...) takes the title font. */
+static uint8_t sized_font_for (launcher_text_size_t size, const char *text) {
+    uint8_t font = sized_font(size);
+    if (font == FNT_DISPLAY) {
+        for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
+            if (*p >= 0xC4) {
+                return FNT_TITLE;
+            }
+        }
+    }
+    return font_for(text, font);
 }
 
 int launcher_text_sized (launcher_text_size_t size, int x, int y, int width, int h, rdpq_align_t align, menu_font_style_t style,
     const char *text) {
     char escaped[256];
     escape_text_codes(text, escaped, sizeof(escaped));
-    return text_box_font(font_for(escaped, sized_font(size)), x, y, width, h, align, VALIGN_CENTER, style, escaped);
+    return text_box_font(sized_font_for(size, escaped), x, y, width, h, align, VALIGN_CENTER, style, escaped);
 }
 
 int launcher_text_sized_width (launcher_text_size_t size, const char *text) {
-    return text_width_font(font_for(text, sized_font(size)), text);
+    return text_width_font(sized_font_for(size, text), text);
 }
 
 /** @brief Horizontal inset of row i (from the top or bottom edge) of a rounded corner. */
@@ -798,13 +813,32 @@ void launcher_set_background_color (color_t color) {
     background_override_color = color;
 }
 
+static bool band_set = false;
+static int band_x_top, band_x_bottom, band_y1, band_edge_w;
+static color_t band_color, band_edge;
+
+void launcher_set_background_band (int x_top, int x_bottom, int y1, color_t color, color_t edge, int edge_w) {
+    band_set = true;
+    band_x_top = x_top;
+    band_x_bottom = x_bottom;
+    band_y1 = y1;
+    band_color = color;
+    band_edge = edge;
+    band_edge_w = edge_w;
+}
+
 void launcher_draw_background (void) {
     if (background_override) {
         background_override = false;    // Only for the frame it was set in.
         ui_components_box_draw(0, 0, display_get_width(), display_get_height(), background_override_color);
-        return;
+    } else {
+        ui_components_background_draw();
     }
-    ui_components_background_draw();
+    if (band_set) {
+        band_set = false;
+        launcher_fill_slanted(band_x_top + band_edge_w, band_x_bottom + band_edge_w, 0, band_y1, band_edge);
+        launcher_fill_slanted(band_x_top, band_x_bottom, 0, band_y1, band_color);
+    }
 }
 
 #define COLOR_SAMPLES       (12)    /* Across and down: 144 pixels read, a few tens of microseconds */

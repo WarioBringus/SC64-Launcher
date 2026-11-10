@@ -260,6 +260,7 @@ typedef enum {
     LAUNCHER_SIZE_BODY,     /**< 15 px */
     LAUNCHER_SIZE_LARGE,    /**< 18 px */
     LAUNCHER_SIZE_TITLE,    /**< 22 px, heavy */
+    LAUNCHER_SIZE_DISPLAY,  /**< 32 px, heavy, Latin letters only (Minimal; the title size when not loaded) */
 } launcher_text_size_t;
 
 /**
@@ -300,8 +301,14 @@ void launcher_draw_page_title(const char *title);
 /** @brief Draw the screen background (theme color, or the user's background image). */
 void launcher_draw_background(void);
 
-/** @brief This frame's background is this colour instead (Cartridge's label colour); set before the header. */
+/** @brief This frame's background is this colour instead; set before the header. */
 void launcher_set_background_color(color_t color);
+
+/**
+ * @brief This frame's background also has a slanted band from the left edge (x_top wide at the top, x_bottom at y1)
+ * with an edge_w wide brighter edge; set before the header, which then sits on it.
+ */
+void launcher_set_background_band(int x_top, int x_bottom, int y1, color_t color, color_t edge, int edge_w);
 
 /**
  * @brief A cover's main colour: its most colourful pixels averaged (white, black and greys left out), from a grid of

@@ -23,6 +23,8 @@ typedef enum {
     FNT_SMALL_WIDE = 7,    /**< FNT_SMALL squeezed for 16:9 */
     FNT_LARGE = 8,         /**< Launcher game titles with Text size: Large (Inter, 18 px) */
     FNT_LARGE_WIDE = 9,    /**< FNT_LARGE squeezed for 16:9 */
+    FNT_DISPLAY = 10,      /**< Minimal's focused title (Inter, 32 px, Latin only; loaded by fonts_load_display) */
+    FNT_DISPLAY_WIDE = 11, /**< FNT_DISPLAY squeezed for 16:9 */
 } menu_font_type_t;
 
 /**
@@ -67,5 +69,9 @@ void fonts_load_default(void);
  * @brief Re-color the font styles from the active theme.
  */
 void fonts_apply_theme(void);
+/** @brief Load the display font (once): only Minimal uses it, so it isn't loaded at startup. */
+void fonts_load_display(void);
+/** @brief Whether the display font is loaded. */
+bool fonts_display_loaded(void);
 
 #endif /* FONTS_H__ */

@@ -142,6 +142,8 @@ FILESYSTEM = \
 	$(FILESYSTEM_DIR)/menu/fonts/InterSmallWide.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterLarge.font64 \
 	$(FILESYSTEM_DIR)/menu/fonts/InterLargeWide.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterDisplay.font64 \
+	$(FILESYSTEM_DIR)/menu/fonts/InterDisplayWide.font64 \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_WAV:%.wav=%.wav64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sounds/, $(notdir $(SOUNDS_XM:%.xm=%.xm64))) \
 	$(addprefix $(FILESYSTEM_DIR)/menu/sprites/, $(notdir $(IMAGES:%.png=%.sprite)))
@@ -201,6 +203,19 @@ $(FILESYSTEM_DIR)/menu/fonts/InterLargeWide.font64: $(ASSETS_DIR)/fonts/Inter.tt
 	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
 	@cp "$<" $(BUILD_DIR)/fonts/InterLargeWide.ttf
 	@$(N64_MKFONT) $(INTER_WIDE_FLAGS) --size 18 --var-axis wght=700 -o $(dir $@) $(BUILD_DIR)/fonts/InterLargeWide.ttf
+
+# Display size: Minimal's focused title at 32 px, Latin letters only (charset_display.txt) to keep it small in memory.
+$(FILESYSTEM_DIR)/menu/fonts/InterDisplay.font64: $(ASSETS_DIR)/fonts/Inter.ttf $(ASSETS_DIR)/fonts/charset_display.txt
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterDisplay.ttf
+	@$(N64_MKFONT) --compress 1 --size 32 --var-axis wght=800 --charset $(ASSETS_DIR)/fonts/charset_display.txt --ellipsis 2026,1 -o $(dir $@) $(BUILD_DIR)/fonts/InterDisplay.ttf
+
+$(FILESYSTEM_DIR)/menu/fonts/InterDisplayWide.font64: $(ASSETS_DIR)/fonts/Inter.ttf $(ASSETS_DIR)/fonts/charset_display.txt
+	@echo " [FONT] $@"
+	@mkdir -p $(dir $@) $(BUILD_DIR)/fonts
+	@cp "$<" $(BUILD_DIR)/fonts/InterDisplayWide.ttf
+	@$(N64_MKFONT) --compress 1 --display 640x480,16:9 --charset $(ASSETS_DIR)/fonts/charset_display.txt --ellipsis 2026,1 --size 32 --var-axis wght=800 -o $(dir $@) $(BUILD_DIR)/fonts/InterDisplayWide.ttf
 
 $(FILESYSTEM_DIR)/menu/fonts/%.font64: $(ASSETS_DIR)/fonts/%.ttf
 	@echo " [FONT] $@"
