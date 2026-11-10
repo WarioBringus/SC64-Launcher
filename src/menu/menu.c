@@ -244,6 +244,13 @@ static view_t menu_views[] = {
 /**
  * @brief Whether a mode is one of the launcher's own views.
  */
+/** @brief Whether any button or direction is pressed this frame. */
+static bool menu_any_action (menu_t *menu) {
+    return menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
+        menu->actions.enter || menu->actions.back || menu->actions.options || menu->actions.settings ||
+        menu->actions.lz_context || menu->actions.shoulder_l || menu->actions.shoulder_r || menu->actions.trigger_z;
+}
+
 static bool menu_mode_is_launcher (menu_mode_t mode) {
     return mode == MENU_MODE_LIBRARY || mode == MENU_MODE_HOME || mode == MENU_MODE_ABOUT || mode == MENU_MODE_ATTRACT;
 }
@@ -298,11 +305,32 @@ static bool perf_input (menu_t *menu) {
 void menu_run (boot_params_t *boot_params) {
     menu_init(boot_params);
 
+    bool held_input = false;     // Input read while the picture was held, for the frame it starts
+    uint64_t held_poll_ms = 0;
     while (true) {
+        if (!held_input && launcher_frame_held()) {
+            // Nothing moves on screen: the last frame stays on the TV. Only look for a button press.
+            uint64_t now = get_ticks_ms();
+            if (now - held_poll_ms >= 8) {
+                held_poll_ms = now;
+                actions_update(menu);
+                held_input = menu_any_action(menu);
+            }
+            if (!held_input) {
+                sound_poll();
+                png_decoder_poll();
+                usb_comm_poll(menu);
+                continue;
+            }
+        }
         surface_t *display = display_try_get();
 
         if (display != NULL) {
-            actions_update(menu);
+            if (held_input) {
+                held_input = false;     // Already read.
+            } else {
+                actions_update(menu);
+            }
 
             view_t *view = menu_get_view(menu->mode);
             perf_log_frame_begin(perf_screen_name(menu), perf_input(menu),

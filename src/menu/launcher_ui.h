@@ -556,6 +556,12 @@ int launcher_small(int x, int y, int width, rdpq_align_t align, menu_font_style_
 /** @brief Handle input for the Start menu. Returns true while it is open. */
 bool launcher_menu_process(menu_t *menu);
 
+/**
+ * @brief True while the Quick menu is open and nothing on screen moves: the last frame can stay on the TV and no new
+ * one need be drawn until a button is pressed (drawing the screen behind it every frame halved the frame rate).
+ */
+bool launcher_frame_held(void);
+
 /** @brief Draw the Start menu if it is open. */
 void launcher_menu_draw(void);
 

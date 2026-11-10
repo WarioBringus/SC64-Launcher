@@ -2320,6 +2320,13 @@ static float quick_slide = 0.0f;
 static int quick_filter_field = -1;         /* The field whose groups the groups page lists */
 static library_group_t *quick_groups = NULL;
 static int quick_group_count = 0;
+static uint64_t quick_drawn_ms = 0;         /* The last frame drawn with the panel fully in */
+static uint32_t quick_drawn_song = 0;       /* The track playing when it was drawn */
+static int quick_settled_frames = 0;        /* Frames drawn in a row with nothing moving */
+static int quick_frames_drawn = 0;          /* While open, for the performance log */
+static menu_t *quick_owner;                 /* The menu it was opened with (defined with launcher_menu_show) */
+
+#define QUICK_REDRAW_MS     (1000)  /* Held, the picture is still redrawn this often (the clock) */
 
 /** @brief 0 (off screen) to 1 (fully in), eased; it slides back out after closing. */
 static float quick_progress (void) {
@@ -2342,9 +2349,20 @@ static void quick_close (bool slide) {
     if (!quick_open) {
         return;
     }
+    perf_log_event("quick menu: closed after %.1f s, %d frames drawn", (get_ticks_ms() - quick_changed_ms) / 1000.0f,
+        quick_frames_drawn);
     quick_open = false;
     quick_changed_ms = slide ? get_ticks_ms() : 0;
     settings_defer_saves(false);    // One write for everything changed while it was open.
+}
+
+bool launcher_frame_held (void) {
+    if (!quick_open || quick_owner == NULL || quick_owner->mode != quick_mode || quick_owner->next_mode != quick_mode) {
+        return false;
+    }
+    // Something moving (the slide in, a page sliding or scrolling), a new song, or a while since the last frame.
+    return quick_settled_frames >= 3 && sound_bgm_track_generation() == quick_drawn_song &&
+        get_ticks_ms() - quick_drawn_ms < QUICK_REDRAW_MS;
 }
 
 static bool quick_is_button_row (const quick_row_t *row) {
@@ -2749,6 +2767,14 @@ static void quick_draw (menu_t *menu) {
         launcher_draw_footer(hints, 2);
     }
 
+    // Settled: fully in, and the page's slide and scroll have landed.
+    bool settled = quick_open && t >= 1.0f && fabsf(quick_slide) < 0.5f &&
+        (quick_page == QUICK_PAGE_MAIN || fabsf(quick_list_scroll - (float)quick_list_top) < 0.01f);
+    quick_settled_frames = settled ? quick_settled_frames + 1 : 0;
+    quick_drawn_ms = get_ticks_ms();
+    quick_drawn_song = sound_bgm_track_generation();
+    quick_frames_drawn++;
+
     // For the performance log: what the panel costs a frame, once per opening.
     uint64_t now = get_ticks_us();
     if (quick_open && t >= 1.0f && !quick_draw_logged) {
@@ -2774,6 +2800,8 @@ void launcher_menu_show (menu_t *menu, path_t *rom) {
     quick_mode = menu->mode;
     quick_open = true;
     quick_changed_ms = get_ticks_ms();
+    quick_settled_frames = 0;
+    quick_frames_drawn = 0;
     quick_free_groups();
     quick_page = QUICK_PAGE_MAIN;
     quick_slide = 0.0f;
