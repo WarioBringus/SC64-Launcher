@@ -1186,10 +1186,19 @@ static void type_draw_name (int x, int mid, int width, float d, const char *titl
     color_t white = theme_current()->on_feature, grey = THEME_TEXT_GRAY;
     color_t c = RGBA32(grey.r + (int)((white.r - grey.r) * bright), grey.g + (int)((white.g - grey.g) * bright),
         grey.b + (int)((white.b - grey.b) * bright), 0xFF);
-    if (held) {
-        c = launcher_moving_color(theme_current()->feature);   // Readable on the lane at every point of the pulse
-    }
     int raise = (int)lroundf(16.0f * bright);  // In the lane, lifted to leave room for its details
+    if (held) {
+        // The favorite being moved sits on its own box that flips between white text on black and black text on
+        // white (a hard flip: a fade passes through grey on grey). Its text always has the most contrast there is,
+        // whatever the theme: black or white alone vanished on some themes' lanes (Banana, Pocket Green...).
+        bool light = ((get_ticks_ms() / 400) % 2) == 0;
+        color_t box = light ? RGBA32(0xF0, 0xF0, 0xF0, 0xFF) : RGBA32(0x14, 0x14, 0x14, 0xFF);
+        c = light ? RGBA32(0x14, 0x14, 0x14, 0xFF) : RGBA32(0xF0, 0xF0, 0xF0, 0xFF);
+        int tw = launcher_text_sized_width(type_sizes[near], title);
+        tw = (tw > width) ? width : tw;
+        int by = mid - type_box[near] / 2 - raise;
+        launcher_fill_rounded(x - 8, by - 1, x + tw + 10, by + type_box[near] + 1, 8, box);
+    }
     fonts_set_fade_color(c);
     launcher_text_sized(type_sizes[near], x, mid - type_box[near] / 2 - raise, width, type_box[near], ALIGN_LEFT, STL_FADE,
         title);
