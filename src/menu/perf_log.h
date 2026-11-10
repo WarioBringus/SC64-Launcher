@@ -35,6 +35,9 @@ typedef enum {
     PERF_PARTS,
 } perf_part_t;
 
+/** @brief One text draw's time: the frame's slowest is named in its sampled breakdown. */
+void perf_log_note_text(uint32_t us, int font, const char *text);
+
 /** @brief Add time to one part of this second's frames (cheap enough to call often). */
 void perf_log_add(perf_part_t part, uint32_t us);
 

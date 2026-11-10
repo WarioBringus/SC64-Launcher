@@ -55,7 +55,7 @@
 #define BUTTON_START_COLOR      RGBA32(0xE0, 0x30, 0x2A, 0xFF)
 #define BUTTON_C_COLOR          RGBA32(0xF5, 0xC5, 0x18, 0xFF)
 #define BUTTON_C_INK            RGBA32(0x2A, 0x22, 0x00, 0xFF)
-#define C_ARROWS_WIDTH          (15)    /* Room for the drawn arrows beside the "C" */
+#define C_ARROWS_WIDTH          (19)    /* Room for the drawn arrows beside the "C" (and before the pill's end) */
 
 static bool widescreen = false;
 
@@ -253,15 +253,20 @@ static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t
     uint64_t started = get_ticks_us();
     perf_log_add(PERF_TEXT_DRAWS, 1);
     int width = text_box_wrap_untimed(font, x, y, w, h, align, valign, style, WRAP_ELLIPSES, text);
-    perf_log_add(PERF_TEXT, (uint32_t)(get_ticks_us() - started));
+    uint32_t us = (uint32_t)(get_ticks_us() - started);
+    perf_log_add(PERF_TEXT, us);
+    perf_log_note_text(us, font, text);
     return width;
 }
 
 /** @brief As text_box_font, with text wrapped onto as many lines as the box holds. */
 static int text_box_wrapped (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     uint64_t started = get_ticks_us();
+    perf_log_add(PERF_TEXT_DRAWS, 1);
     int width = text_box_wrap_untimed(font, x, y, w, h, align, valign, style, WRAP_WORD, text);
-    perf_log_add(PERF_TEXT, (uint32_t)(get_ticks_us() - started));
+    uint32_t us = (uint32_t)(get_ticks_us() - started);
+    perf_log_add(PERF_TEXT, us);
+    perf_log_note_text(us, font, text);
     return width;
 }
 
@@ -1693,13 +1698,13 @@ static int shape_width (button_shape_t shape) {
  * controller's shoulders seen from the front.
  */
 static void shoulder_bar (int x, int y0, int w, bool right, color_t color) {
-    int round_w = w * 2 / 3;
+    int r = SHOULDER_H / 2;
     if (right) {
-        fill_smooth_rounded(x, y0, x + w - round_w + 4, y0 + SHOULDER_H, 3, color);
-        fill_smooth_rounded(x + w - round_w, y0, x + w, y0 + SHOULDER_H, SHOULDER_H / 2, color);
+        fill_smooth_rounded(x, y0, x + w - r, y0 + SHOULDER_H, 3, color);
+        fill_smooth_rounded(x + w - 2 * r, y0, x + w, y0 + SHOULDER_H, r, color);
     } else {
-        fill_smooth_rounded(x, y0, x + round_w, y0 + SHOULDER_H, SHOULDER_H / 2, color);
-        fill_smooth_rounded(x + round_w - 4, y0, x + w, y0 + SHOULDER_H, 3, color);
+        fill_smooth_rounded(x, y0, x + 2 * r, y0 + SHOULDER_H, r, color);
+        fill_smooth_rounded(x + r, y0, x + w, y0 + SHOULDER_H, 3, color);
     }
 }
 
@@ -1787,8 +1792,8 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
                 draw_arrow(ax + C_ARROWS_WIDTH / 2 - 2, cy + 3, 0, 1);
             } else {
                 // Two arrow heads apart, not touching tips.
-                launcher_draw_arrow(ax + 3, cy, 8, false, BUTTON_C_INK);
-                launcher_draw_arrow(ax + 11, cy, 8, true, BUTTON_C_INK);
+                launcher_draw_arrow(ax + 4, cy, 8, false, BUTTON_C_INK);
+                launcher_draw_arrow(ax + 12, cy, 8, true, BUTTON_C_INK);
             }
         } else if (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) {
             // Two arrow heads, each centred on its half of the pill.

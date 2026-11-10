@@ -1016,7 +1016,7 @@ static bool process_cartridge (menu_t *menu) {
  * between the lists.
  */
 #define TYPE_CENTER_Y       (204)   /* The lane's middle */
-#define TYPE_LANE_H         (80)
+#define TYPE_LANE_H         (100)   /* Room for the name and two lines of details (4:3 wraps them) */
 #define TYPE_LANE_BAR       (8)
 #define TYPE_COVER_ZOOM     (1.4f)  /* The hi-res pack's own size: drawn 1:1, the fast way (a shrunk cover kept ~43 fps) */
 #define TYPE_TOP            (60)    /* The list's area, under the header and above the hints */
@@ -1041,7 +1041,7 @@ static eased_color_t type_bar = { .set = false };
 
 /** @brief How far from the lane's middle a name sits, by its distance in the list. */
 static float type_offset (float d) {
-    static const float steps[] = { 0.0f, 66.0f, 104.0f, 134.0f, 160.0f };
+    static const float steps[] = { 0.0f, 76.0f, 114.0f, 144.0f, 170.0f };
     float a = fabsf(d);
     int i = (int)a;
     float v = (i >= 4) ? steps[4] + (a - 4.0f) * 24.0f : steps[i] + (steps[i + 1] - steps[i]) * (a - (float)i);
@@ -1084,7 +1084,7 @@ static void type_draw_name (int x, int mid, int width, float d, const char *titl
     color_t white = THEME_TEXT_DEFAULT, grey = THEME_TEXT_GRAY;
     color_t c = RGBA32(grey.r + (int)((white.r - grey.r) * bright), grey.g + (int)((white.g - grey.g) * bright),
         grey.b + (int)((white.b - grey.b) * bright), 0xFF);
-    int raise = (int)lroundf(10.0f * bright);  // In the lane, lifted to leave room for its details
+    int raise = (int)lroundf(16.0f * bright);  // In the lane, lifted to leave room for its details
     fonts_set_fade_color(c);
     launcher_text_sized(type_sizes[near], x, mid - type_box[near] / 2 - raise, width, type_box[near], ALIGN_LEFT, STL_FADE,
         title);
@@ -1157,7 +1157,8 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
             color_t c = THEME_TEXT_DEFAULT;
             c.a = (uint8_t)(255.0f * (1.0f - off * 2.0f));
             fonts_set_fade_color(c);
-            launcher_text_sized(LAUNCHER_SIZE_BODY, list_x, TYPE_CENTER_Y + 12 + dy, list_w, 22, ALIGN_LEFT, STL_FADE, details);
+            // Whole fields to a line, up to two lines (4:3 is narrower), never cut short.
+            launcher_game_details_wrapped(list_x, TYPE_CENTER_Y + 6 + dy, list_w, 2, STL_FADE, details);
         }
         bool pending;
         float zoom;

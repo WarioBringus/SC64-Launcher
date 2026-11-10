@@ -51,6 +51,9 @@ static uint64_t input_total_us = 0;     /* Of the work: reading the controller a
 static uint64_t draw_total_us = 0;      /* Of the work: drawing (including waits for the RDP) */
 static uint64_t part_total_us[PERF_PARTS];
 static uint32_t frame_part_us[PERF_PARTS];  /* This frame's parts, for a slow frame's breakdown */
+static uint32_t slowest_text_us = 0;         /* This frame's slowest text draw, named in a sampled breakdown */
+static int slowest_text_font = 0;
+static char slowest_text[40] = "";
 static uint32_t frame_read_us = 0;
 static int frame_reads = 0;
 
@@ -150,6 +153,7 @@ void perf_log_frame_begin (const char *screen_name, bool input, bool step) {
     work_start_us = now;
     draw_start_us = 0;
     memset(frame_part_us, 0, sizeof(frame_part_us));
+    slowest_text_us = 0;
     frame_read_us = 0;
     frame_reads = 0;
     steps += step;
@@ -181,6 +185,8 @@ void perf_log_frame_end (void) {
             frame_part_us[PERF_TEXT] / 1000.0f, (unsigned long)frame_part_us[PERF_TEXT_DRAWS],
             frame_part_us[PERF_COVERS] / 1000.0f, frame_part_us[PERF_SHAPES] / 1000.0f,
             frame_part_us[PERF_CHROME] / 1000.0f);
+        perf_log_event("  slowest text draw: %.2f ms, font %d: \"%s\"", slowest_text_us / 1000.0f, slowest_text_font,
+            slowest_text);
     }
     if (work_us > SLOW_FRAME_US) {
         uint32_t input_us = draw_start_us ? (uint32_t)(draw_start_us - work_start_us) : 0;
@@ -196,6 +202,14 @@ void perf_log_frame_end (void) {
     } else if (used > sizeof(buffer) - 512) {
         flush("buffer full");
         last_frame_us = 0;
+    }
+}
+
+void perf_log_note_text (uint32_t us, int font, const char *text) {
+    if (enabled && us > slowest_text_us) {
+        slowest_text_us = us;
+        slowest_text_font = font;
+        snprintf(slowest_text, sizeof(slowest_text), "%s", text);
     }
 }
 
