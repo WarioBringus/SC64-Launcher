@@ -3277,6 +3277,10 @@ static void quick_draw (menu_t *menu) {
 void launcher_menu_init (void) {
 }
 
+void launcher_menu_close (void) {
+    quick_close(false);
+}
+
 static menu_t *quick_owner = NULL;
 
 void launcher_menu_show (menu_t *menu, path_t *rom) {

@@ -64,6 +64,7 @@ SRCS = \
 	menu/jpeg_decoder.c \
 	menu/menu.c \
 	menu/perf_log.c \
+	menu/tour.c \
 	menu/path.c \
 	menu/png_decoder.c \
 	menu/rom_info.c \

@@ -629,4 +629,7 @@ void launcher_menu_draw(void);
 /** @brief Reset the Start menu (call from a view's init). */
 void launcher_menu_init(void);
 
+/** @brief Close the Quick menu at once, if it is open (the screenshot tour). */
+void launcher_menu_close(void);
+
 #endif /* LAUNCHER_UI_H__ */

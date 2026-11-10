@@ -26,6 +26,7 @@
 #include "settings.h"
 #include "sound.h"
 #include "theme.h"
+#include "tour.h"
 #include "usb_comm.h"
 #include "utils/fs.h"
 #include "views/views.h"
@@ -320,11 +321,12 @@ static bool perf_input (menu_t *menu) {
  */
 void menu_run (boot_params_t *boot_params) {
     menu_init(boot_params);
+    tour_start(menu);
 
     bool held_input = false;     // Input read while the picture was held, for the frame it starts
     uint64_t held_poll_ms = 0;
     while (true) {
-        if (!held_input && launcher_frame_held()) {
+        if (!held_input && !tour_active() && launcher_frame_held()) {
             // Nothing moves on screen: the last frame stays on the TV. Only look for a button press.
             uint64_t now = get_ticks_ms();
             if (now - held_poll_ms >= 8) {
@@ -349,6 +351,9 @@ void menu_run (boot_params_t *boot_params) {
             }
 
             view_t *view = menu_get_view(menu->mode);
+            if (tour_before_frame(menu) && view && view->init) {
+                view->init(menu);   // The screenshot tour's next scene, on the same screen.
+            }
             perf_log_frame_begin(perf_screen_name(menu), perf_input(menu),
                 menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right);
             if (view && view->show) {
@@ -372,6 +377,7 @@ void menu_run (boot_params_t *boot_params) {
             }
 
             perf_log_frame_end();
+            tour_after_frame(menu, display);
 
             if (menu->mode == MENU_MODE_BOOT) {
                 break;
