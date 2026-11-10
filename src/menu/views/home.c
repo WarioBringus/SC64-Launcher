@@ -270,6 +270,7 @@ static void process_styled(menu_t *menu, int style);
 static bool moving = false;
 static bookkeeping_item_t moving_backup[FAVORITES_COUNT];   /* The order before, for B */
 static int moving_from = 0;
+static int spot_cols = 1;       /* Games across Spotlight's column: up/down move a held favorite a whole row there */
 
 static int row_of_kind(row_kind_t kind);
 static home_item_t *focused_item(void);
@@ -320,19 +321,28 @@ static void moving_process (menu_t *menu) {
         return;
     }
     int step = (menu->actions.go_left || menu->actions.go_up) ? -1 : ((menu->actions.go_right || menu->actions.go_down) ? 1 : 0);
+    // Spotlight lays favorites out in rows of spot_cols: up/down there move the game a whole row.
+    if (menu->settings.launcher_home_style == LAUNCHER_HOME_SPOTLIGHT && (menu->actions.go_up || menu->actions.go_down)) {
+        step *= spot_cols;
+    }
     home_row_t *row = &rows[row_selected];
     int i = row->selected, j = i + step;
-    if (!step || j < 0 || j >= row->count) {
+    j = (j < 0) ? 0 : ((j >= row->count) ? row->count - 1 : j);
+    if (!step || j == i) {
         return;
     }
-    // The row's entries point at their favorites slots: the two slots and the two titles change places.
+    // The game moves to j, the ones in between each move one place to make room: neighbouring slots and titles
+    // trade places one step at a time (the row's entries point at their favorites slots).
     bookkeeping_item_t *items = menu->bookkeeping.favorite_items;
-    bookkeeping_item_t swap = items[row->items[i].index];
-    items[row->items[i].index] = items[row->items[j].index];
-    items[row->items[j].index] = swap;
-    char *title = row->items[i].title;
-    row->items[i].title = row->items[j].title;
-    row->items[j].title = title;
+    int dir = (j > i) ? 1 : -1;
+    for (int k = i; k != j; k += dir) {
+        bookkeeping_item_t swap = items[row->items[k].index];
+        items[row->items[k].index] = items[row->items[k + dir].index];
+        items[row->items[k + dir].index] = swap;
+        char *title = row->items[k].title;
+        row->items[k].title = row->items[k + dir].title;
+        row->items[k + dir].title = title;
+    }
     row->selected = j;
     sound_play_effect(SFX_TICK);
 }
@@ -745,6 +755,7 @@ static void draw_spotlight (menu_t *menu, int *lookups_left) {
     if (cols < 1) {
         cols = 1;
     }
+    spot_cols = cols;
     int line_h = th + SPOT_GAP;
 
     // The game to resume stays in view at the top of the column, whichever game the panel shows.
@@ -1127,8 +1138,6 @@ static float type_place (const game_ref_t *refs, int k) {
     }
     return (float)k + TYPE_SECTION_GAP * (float)lists;
 }
-static eased_color_t type_lane = { .set = false };
-static eased_color_t type_bar = { .set = false };
 
 /** @brief How far from the lane's middle a name sits, by its distance in the list. */
 static float type_offset (float d) {
@@ -1159,7 +1168,7 @@ static float type_size_for (float d) {
  * them as it glides in (crisp; blending two sizes looked doubled). Its colour goes from grey to white as it comes into
  * the lane. Too long for a size: the largest that fits.
  */
-static void type_draw_name (int x, int mid, int width, float d, const char *title) {
+static void type_draw_name (int x, int mid, int width, float d, const char *title, bool held) {
     float size = type_size_for(d);
     int fit = TYPE_SIZES - 1;
     while (fit > 0 && launcher_text_sized_width(type_sizes[fit], title) > width) {
@@ -1172,9 +1181,14 @@ static void type_draw_name (int x, int mid, int width, float d, const char *titl
     }
     float bright = 1.0f - fabsf(d);     // 1 in the lane, 0 from one name away
     bright = (bright < 0.0f) ? 0.0f : bright;
-    color_t white = THEME_TEXT_DEFAULT, grey = THEME_TEXT_GRAY;
+    // Grey away from the lane, the colour text takes on the theme's feature colour in it; the favorite being moved
+    // pulses in the cursor's colour.
+    color_t white = theme_current()->on_feature, grey = THEME_TEXT_GRAY;
     color_t c = RGBA32(grey.r + (int)((white.r - grey.r) * bright), grey.g + (int)((white.g - grey.g) * bright),
         grey.b + (int)((white.b - grey.b) * bright), 0xFF);
+    if (held) {
+        c = launcher_focus_color();
+    }
     int raise = (int)lroundf(16.0f * bright);  // In the lane, lifted to leave room for its details
     fonts_set_fade_color(c);
     launcher_text_sized(type_sizes[near], x, mid - type_box[near] / 2 - raise, width, type_box[near], ALIGN_LEFT, STL_FADE,
@@ -1206,8 +1220,9 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     int list_w = cover_x - 24 - list_x;
 
     // The lane across the screen, in the focused cover's colour, with a bar of it at the left edge.
-    color_t lane = eased_color_step(&type_lane, color_mix(t->bg, t->feature, TYPE_LANE_TINT));
-    color_t bar = eased_color_step(&type_bar, t->feature);
+    // The lane in the theme's own feature colour, as Spotlight's panel (the cover's colour changed it every game).
+    color_t lane = t->feature;
+    color_t bar = t->accent2;
     int ly0 = TYPE_CENTER_Y - TYPE_LANE_H / 2;
     ui_components_box_draw(0, ly0, display_get_width(), ly0 + TYPE_LANE_H, lane);
     ui_components_box_draw(0, ly0, launcher_px(TYPE_LANE_BAR * (moving ? 2 : 1)), ly0 + TYPE_LANE_H,
@@ -1231,7 +1246,7 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         }
         home_item_t *h = &rows[refs[k].row].items[refs[k].index];
         int mid = TYPE_CENTER_Y + (int)lroundf(type_offset(d));
-        type_draw_name(list_x, mid, list_w, d, h->title);
+        type_draw_name(list_x, mid, list_w, d, h->title, moving && k == sel);
         if (abs(k - sel) == 1) {
             keep_loaded(menu, h, hires ? LAUNCHER_HIRES_W : LAUNCHER_SHOWCASE_W, hires ? LAUNCHER_HIRES_H : LAUNCHER_SHOWCASE_H,
                 lookups_left);
@@ -1246,7 +1261,7 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         float off = fabsf(target - type_pos);
         if (details[0] && off < 0.5f) {
             int dy = (int)lroundf(type_offset(target - type_pos));
-            color_t c = THEME_TEXT_DEFAULT;
+            color_t c = t->on_feature;
             c.a = (uint8_t)(255.0f * (1.0f - off * 2.0f));
             fonts_set_fade_color(c);
             // Whole fields to a line, up to two lines (4:3 is narrower), never cut short.
@@ -1255,10 +1270,8 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
         bool pending;
         float zoom;
         surface_t *image = big_cover(menu, f, TYPE_COVER_ZOOM, lookups_left, &pending, &zoom);
-        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, lane, zoom);
+        launcher_draw_tile_zoomed(cover_x, cover_y, cover_w, cover_h, image, pending, f->title, false, t->bg, zoom);
         launcher_note_focused_cover_zoomed(image, cover_x, cover_y, cover_w, cover_h, zoom);
-        eased_color_from(&type_lane, image, pending, t->bg, TYPE_LANE_TINT);
-        eased_color_from(&type_bar, image, pending, t->bg, 100);
         char where[96], folder[64];
         item_folder(f, folder, sizeof(folder));
         snprintf(where, sizeof(where), "%s   %d of %d", folder, sel + 1, n);
