@@ -266,8 +266,16 @@ int launcher_title(int x, int y, int width, rdpq_align_t align, menu_font_style_
  */
 int launcher_title_wrapped(int x, int y, int width, int max_lines, menu_font_style_t style, const char *name);
 
+/** @brief As launcher_title_wrapped, with the lines aligned (ALIGN_CENTER: centred in the width). */
+int launcher_title_wrapped_aligned(int x, int y, int width, int max_lines, rdpq_align_t align, menu_font_style_t style,
+    const char *name);
+
 /** @brief A details line, left aligned, wrapped onto up to max_lines lines rather than cut short. Returns the height. */
 int launcher_game_details_wrapped(int x, int y, int width, int max_lines, menu_font_style_t style, const char *text);
+
+/** @brief As launcher_game_details_wrapped, with the lines aligned. */
+int launcher_game_details_wrapped_aligned(int x, int y, int width, int max_lines, rdpq_align_t align,
+    menu_font_style_t style, const char *text);
 
 /** @brief Text sizes for launcher_text_sized. */
 typedef enum {
@@ -435,6 +443,11 @@ void launcher_fill_slanted(int x_top, int x_bottom, int y0, int y1, color_t colo
  * Returns its width; it is 34 tall.
  */
 int launcher_draw_prompt(int x, int y, launcher_button_t kind, const char *button, const char *label, color_t pill);
+
+#define LAUNCHER_PROMPT_H       (34)    /**< launcher_draw_prompt's height */
+
+/** @brief The width launcher_draw_prompt will draw for a label. */
+int launcher_prompt_width(const char *label);
 
 /** @brief Draw the separator and a right-aligned row of button icons with labels. */
 void launcher_draw_footer(const launcher_hint_t *hints, int count);

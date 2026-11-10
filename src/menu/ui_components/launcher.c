@@ -493,11 +493,16 @@ int launcher_small (int x, int y, int width, rdpq_align_t align, menu_font_style
     return text_box_font(font_for(escaped, FNT_SMALL), x, y, width, HINT_TEXT_HEIGHT, align, VALIGN_TOP, style, escaped);
 }
 
-int launcher_title_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *name) {
+int launcher_title_wrapped_aligned (int x, int y, int width, int max_lines, rdpq_align_t align, menu_font_style_t style,
+    const char *name) {
     char escaped[256];
     escape_text_codes(name, escaped, sizeof(escaped));
-    text_box_wrapped(font_for(escaped, FNT_TITLE), x, y, width, TITLE_HEIGHT * max_lines, ALIGN_LEFT, VALIGN_TOP, style, escaped);
+    text_box_wrapped(font_for(escaped, FNT_TITLE), x, y, width, TITLE_HEIGHT * max_lines, align, VALIGN_TOP, style, escaped);
     return last_layout_lines * TITLE_HEIGHT;
+}
+
+int launcher_title_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *name) {
+    return launcher_title_wrapped_aligned(x, y, width, max_lines, ALIGN_LEFT, style, name);
 }
 
 /* Separators between the fields of a details line (library.c details_text, and "Favorites  -  " on Home). */
@@ -583,7 +588,8 @@ static break_entry_t *detail_breaks (uint8_t font, const char *text, int width) 
     return b;
 }
 
-int launcher_game_details_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *text) {
+int launcher_game_details_wrapped_aligned (int x, int y, int width, int max_lines, rdpq_align_t align,
+    menu_font_style_t style, const char *text) {
     char escaped[256];
     escape_text_codes(text, escaped, sizeof(escaped));
     uint8_t font = font_for(escaped, large_text ? FNT_LAUNCHER : FNT_SMALL);
@@ -597,13 +603,17 @@ int launcher_game_details_wrapped (int x, int y, int width, int max_lines, menu_
             int n = b->end[i] - b->start[i];
             snprintf(line, sizeof(line), "%.*s", n, escaped + b->start[i]);
             // The last line allowed still ends in "..." if fields are left over.
-            text_box_font(font, x, y + i * line_h, width, line_h, ALIGN_LEFT, VALIGN_TOP, style,
+            text_box_font(font, x, y + i * line_h, width, line_h, align, VALIGN_TOP, style,
                 (i == lines - 1 && lines < b->lines) ? escaped + b->start[i] : line);
         }
         return lines * line_h;
     }
-    text_box_wrapped(font, x, y, width, line_h * max_lines, ALIGN_LEFT, VALIGN_TOP, style, escaped);
+    text_box_wrapped(font, x, y, width, line_h * max_lines, align, VALIGN_TOP, style, escaped);
     return last_layout_lines * line_h;
+}
+
+int launcher_game_details_wrapped (int x, int y, int width, int max_lines, menu_font_style_t style, const char *text) {
+    return launcher_game_details_wrapped_aligned(x, y, width, max_lines, ALIGN_LEFT, style, text);
 }
 
 int launcher_title (int x, int y, int width, rdpq_align_t align, menu_font_style_t style, const char *name) {
@@ -1573,7 +1583,7 @@ static void draw_arrow (int cx, int cy, int dx, int dy) {
     flat_end();
 }
 
-#define PROMPT_H            (34)    /* launcher_draw_prompt's pill */
+#define PROMPT_H            (LAUNCHER_PROMPT_H)    /* launcher_draw_prompt's pill */
 #define PROMPT_ICON         (22)
 #define PROMPT_PAD          (8)
 
@@ -1597,6 +1607,10 @@ static menu_font_style_t ink_style (color_t fill) {
     }
     fonts_set_fade_color(ink);
     return STL_FADE;
+}
+
+int launcher_prompt_width (const char *label) {
+    return PROMPT_PAD + PROMPT_ICON + PROMPT_PAD + text_width(label) + 2 + PROMPT_PAD + 4;
 }
 
 int launcher_draw_prompt (int x, int y, launcher_button_t kind, const char *button, const char *label, color_t pill) {

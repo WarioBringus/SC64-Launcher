@@ -1433,6 +1433,12 @@ static void binder_keep_others (menu_t *menu, int open_row, int x0, int x1, int 
         }
         int cols;
         int n = binder_layout(rows[r].count, x0, x1, cells, &cols);
+        if (n == 1) {
+            bool wall = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H);
+            keep_loaded(menu, &rows[r].items[0], wall ? LAUNCHER_WALL_W : LAUNCHER_HIRES_W,
+                wall ? LAUNCHER_WALL_H : LAUNCHER_HIRES_H, lookups_left);
+            continue;
+        }
         for (int i = 0; i < n; i++) {
             bool hires = cells[i].big && binder_wide() && launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W,
                 LAUNCHER_HIRES_H);
@@ -1578,7 +1584,7 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
     }
     binder_scroll_pos = motion_snap ? (float)binder_scroll : launcher_ease(binder_scroll_pos, (float)binder_scroll);
     int scroll = (int)lroundf(binder_scroll_pos);
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count && count > 1; i++) {     // (One game: its own page below.)
         binder_cell_t *c = &cells[i];
         home_item_t *h = &row->items[i];
         int y = c->y + dy - (c->big ? 0 : scroll);
@@ -1607,16 +1613,54 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
     char line[240];
     binder_details(menu, f, resume, line, sizeof(line));
     if (count == 1) {
-        int tx = cells[0].x + cells[0].w + BINDER_GAP + 4, tw = ix1 - tx, ty = iy0 + 4 + dy;
-        launcher_text_sized(LAUNCHER_SIZE_BODY, tx, ty, tw, 20, ALIGN_LEFT, STL_ACCENT, row_label(row->kind));
-        ty += 24;
-        ty += launcher_title_wrapped(tx, ty, tw, 3, STL_DEFAULT, f->title) + 4;
-        if (line[0]) {
-            ty += launcher_game_details_wrapped(tx, ty, tw, 3, STL_GRAY, line) + 10;
+        // One game: its cover centred and as large as fits, the name and details centred under it, A at the bottom
+        // right. The text keeps clear of the button on both sides (so it stays centred), taking more lines when it
+        // needs them; the cover shrinks to leave them room.
+        const char *label = resume ? "Resume" : (menu->settings.launcher_quick_launch ? "Play" : "Details");
+        int pw = launcher_prompt_width(label);
+        int tw = (ix1 - ix0) - 2 * (pw + BINDER_GAP);
+        int mid = (ix0 + ix1) / 2, tx = mid - tw / 2;
+        static const char *measured_title = NULL;
+        static int measured_tw = -1, title_h = 0, details_h = 0;
+        if (measured_title != f->title || measured_tw != tw) {
+            // Laid out once where nothing shows, for the heights.
+            rdpq_set_scissor(0, 0, 1, 1);
+            title_h = launcher_title_wrapped_aligned(tx, iy0, tw, 3, ALIGN_CENTER, STL_DEFAULT, f->title);
+            details_h = line[0] ? launcher_game_details_wrapped_aligned(tx, iy0, tw, 3, ALIGN_CENTER, STL_GRAY, line) : 0;
+            rdpq_set_scissor(clip_x0, CONTENT_TOP, clip_x1, CONTENT_BOTTOM);
+            measured_title = f->title;
+            measured_tw = tw;
         }
-        int py = cells[0].y + cells[0].h - 24 + dy;
-        launcher_draw_prompt(tx, ty > py ? ty : py, LAUNCHER_BUTTON_A, "A",
-            resume ? "Resume" : (menu->settings.launcher_quick_launch ? "Play" : "Details"), t->bg);
+        int text_h = title_h + (details_h ? 4 + details_h : 0);
+        int cover_h = (iy1 - iy0) - BINDER_GAP - text_h;
+        cover_h = (cover_h > LAUNCHER_WALL_H) ? LAUNCHER_WALL_H : cover_h;
+        int cover_w = cover_h * LAUNCHER_WALL_W / LAUNCHER_WALL_H;
+        if (cover_w > ix1 - ix0) {
+            cover_w = ix1 - ix0;
+            cover_h = cover_w * LAUNCHER_WALL_H / LAUNCHER_WALL_W;
+        }
+        // From the wallpaper pack (the largest) when the card has it, else the hi-res one.
+        bool wall = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_WALL_W, LAUNCHER_WALL_H);
+        int pack_w = wall ? LAUNCHER_WALL_W : LAUNCHER_HIRES_W, pack_h = wall ? LAUNCHER_WALL_H : LAUNCHER_HIRES_H;
+        float zoom = (float)cover_h / pack_h;
+        bool pending;
+        surface_t *image = item_image(menu, f, pack_w, pack_h, lookups_left, &pending);
+        int cx0 = mid - cover_w / 2, cy0 = iy0 + dy;
+        launcher_draw_tile_zoomed(cx0, cy0, cover_w, cover_h, image, pending, f->title, false, t->panel, zoom);
+        launcher_note_focused_cover_zoomed(image, cx0, cy0, cover_w, cover_h, zoom);
+        if (page_focus) {
+            launcher_draw_focus_ring_cover_zoomed(cx0, cy0, cover_w, cover_h, image, zoom);
+        }
+        if (row->kind != ROW_FAVORITES && launcher_is_favorite(menu, item_path(f))) {
+            launcher_draw_favorite_star(cx0, cy0, cover_w);
+        }
+        slot_add(cx0, iy0, cover_w, cover_h, tabs[cur].row, 0);
+        int ty = iy0 + cover_h + BINDER_GAP + dy;
+        ty += launcher_title_wrapped_aligned(tx, ty, tw, 3, ALIGN_CENTER, STL_DEFAULT, f->title);
+        if (line[0]) {
+            launcher_game_details_wrapped_aligned(tx, ty + 4, tw, 3, ALIGN_CENTER, STL_GRAY, line);
+        }
+        launcher_draw_prompt(ix1 - pw, iy1 - LAUNCHER_PROMPT_H + dy, LAUNCHER_BUTTON_A, "A", label, t->bg);
     } else {
         int tx = cells[0].x, tw = cells[0].w, ty = cells[0].y + cells[0].h + BINDER_GAP + dy;
         ty += launcher_title_wrapped(tx, ty, tw, 2, STL_DEFAULT, f->title) + 2;
