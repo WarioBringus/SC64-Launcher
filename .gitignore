@@ -28,3 +28,6 @@
 
 # Python bytecode from pc-tools
 __pycache__/
+/build-demo
+/output-demo
+build-demo.log

@@ -198,12 +198,20 @@ def main():
                     help='hi-res box fronts by cover path, from launchbox.py --fronts (optional)')
     ap.add_argument('--wide-only', action='store_true',
                     help='only the 16:9 packs (about half the space); in 4:3 the menu then decodes covers itself, slowly')
+    ap.add_argument('--narrow-only', action='store_true',
+                    help='only the 4:3 packs (about half the space), e.g. for a demo ROM shown in an emulator window')
     args = ap.parse_args()
     global PACKS, SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK, HIRES_PACKS
+    if args.wide_only and args.narrow_only:
+        sys.exit('--wide-only and --narrow-only together would pack nothing')
     if args.wide_only:
         PACKS = [p for p in PACKS if p[1].endswith('_w')]
         HIRES_PACKS = [p for p in HIRES_PACKS if p[1].endswith('_w')]
         SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK = SPINE_PACKS[1:], SPINE_UPRIGHT[1:], SPINE_FALLBACK[1:]
+    if args.narrow_only:
+        PACKS = [p for p in PACKS if not p[1].endswith('_w')]
+        HIRES_PACKS = [p for p in HIRES_PACKS if not p[1].endswith('_w')]
+        SPINE_PACKS, SPINE_UPRIGHT, SPINE_FALLBACK = SPINE_PACKS[:1], SPINE_UPRIGHT[:1], SPINE_FALLBACK[:1]
     card = args.card.rstrip('/\\') + '/'
     menu_dir = card + 'menu'
     out_dir = menu_dir + '/cache/launcher'
