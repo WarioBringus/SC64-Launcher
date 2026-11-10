@@ -1376,7 +1376,17 @@ static void draw_carousel (menu_t *menu, library_category_t *c, int sel) {
             surface_t *image = game_cover(menu, &c->games[i], rw, rh, &lookups_left, &pending);
             bool settled = (i == sel) && (carousel_position == (float)sel);
             if (settled) {
-                launcher_draw_tile_zoomed(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg, showcase_zoom(image, w, h));
+                // The tile is the cover's own drawn size: fitted to the slot it keeps its shape, so it can be a few
+                // pixels short on one side, and a ring around the slot showed the background in between.
+                float zoom = showcase_zoom(image, w, h);
+                if (image && !pending) {
+                    int iw = (int)(image->width * zoom), ih = (int)(image->height * zoom);
+                    x += (w - iw) / 2;
+                    y += (h - ih) / 2;
+                    w = iw;
+                    h = ih;
+                }
+                launcher_draw_tile_zoomed(x, y, w, h, image, pending, c->games[i].title, true, theme_current()->bg, zoom);
                 if (game_is_favorite(menu, &c->games[i])) {
                     launcher_draw_favorite_star(x, y, w);
                 }
@@ -1585,14 +1595,21 @@ static void draw_shelf (menu_t *menu, library_category_t *c, int sel) {
     }
 
     // The open box, lifted a little, with the selection ring.
-    int open_y = SHELF_BASE_Y - ch - lift;
+    // The box at its own drawn size, standing on the shelf (fitted, it can be a few pixels short of the slot).
     float zoom = showcase_zoom(front, cw, ch);
-    launcher_draw_tile_zoomed(open_x, open_y, cw, ch, front, front_pending, c->games[sel].title, false, theme_current()->bg, zoom);
-    launcher_note_focused_cover_zoomed(front, open_x, open_y, cw, ch, zoom);
-    if (game_is_favorite(menu, &c->games[sel])) {
-        launcher_draw_favorite_star(open_x, open_y, cw);
+    int bw = cw, bh = ch;
+    if (front && !front_pending) {
+        bw = (int)(front->width * zoom);
+        bh = (int)(front->height * zoom);
     }
-    launcher_draw_focus_ring_cover_zoomed(LAUNCHER_CENTER_X - cw / 2, SHELF_BASE_Y - ch - lift, cw, ch, front, zoom);
+    int open_y = SHELF_BASE_Y - bh - lift;
+    int box_x = open_x + (cw - bw) / 2;
+    launcher_draw_tile_zoomed(box_x, open_y, bw, bh, front, front_pending, c->games[sel].title, false, theme_current()->bg, zoom);
+    launcher_note_focused_cover_zoomed(front, box_x, open_y, bw, bh, zoom);
+    if (game_is_favorite(menu, &c->games[sel])) {
+        launcher_draw_favorite_star(box_x, open_y, bw);
+    }
+    launcher_draw_focus_ring_cover_zoomed(LAUNCHER_CENTER_X - cw / 2 + (cw - bw) / 2, open_y, bw, bh, front, zoom);
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 
     // The shelf itself.
