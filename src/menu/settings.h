@@ -192,6 +192,8 @@ void settings_save (settings_t *settings);
  * the Settings page writes once rather than on every press). Turning it off writes what's waiting.
  */
 void settings_defer_saves (bool defer);
+/** @brief Stop deferring, leaving a waiting write for settings_flush (or the next save) to make. */
+void settings_resume_saves (void);
 /** @brief Whether a deferred write is waiting. */
 bool settings_save_waiting (void);
 /** @brief Write a waiting deferred save now. */

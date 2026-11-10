@@ -81,6 +81,7 @@ typedef enum {
     LAUNCHER_BUTTON_START,
     LAUNCHER_BUTTON_C_UP_DOWN,      /**< Yellow "C" with up/down arrows */
     LAUNCHER_BUTTON_C_LEFT_RIGHT,   /**< Yellow "C" with left/right arrows */
+    LAUNCHER_BUTTON_LEFT_RIGHT,     /**< Left and right on the stick or D-pad: a pill with two arrows, no letter */
     LAUNCHER_BUTTON_OTHER,
 } launcher_button_t;
 
@@ -517,6 +518,9 @@ typedef enum {
 
 /** @brief Take (and clear) the pending Start menu request. */
 launcher_request_t launcher_take_request(void);
+
+/** @brief The waiting request, left waiting. */
+launcher_request_t launcher_peek_request(void);
 
 /** @brief The folder (category index) chosen in Start > Folder, for LAUNCHER_REQUEST_CATEGORY. */
 int launcher_requested_category(void);

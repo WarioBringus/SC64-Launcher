@@ -781,8 +781,6 @@ static const settings_row_t look_rows[] = {
     { .label = "Game titles", .choices = &set_launcher_titles_highlight_only_context_menu },
     { .label = "Covers", .choices = &set_launcher_cover_style_context_menu,
       .note = "Cartridge shows each game's cartridge label where there is one" },
-    { .label = "Background image", .action = remove_background_image, .does = "Remove",
-      .note = "Takes away the picture behind the menu (menu/background.png on the SD card)" },
 };
 
 static const settings_row_t home_rows[] = {
@@ -858,6 +856,8 @@ static const settings_row_t original_rows[] = {
     { .label = "Show cheat files", .choices = &set_show_cheat_files_type_context_menu },
     { .label = "Wrap file list", .choices = &set_wrap_file_list_scrolling_context_menu,
       .note = "Moving past the end of the list goes back to the top" },
+    { .label = "Background image", .action = remove_background_image, .does = "Remove",
+      .note = "Clears a picture set as the background from the file browser" },
 #ifdef BETA_SETTINGS
     { .label = "Hide ROM extensions", .choices = &set_show_browser_file_extensions_context_menu },
     { .label = "Hide ROM tags", .choices = &set_show_browser_rom_tags_context_menu },
@@ -929,6 +929,20 @@ static const char *settings_value (menu_t *menu, const settings_row_t *row) {
         }
     }
     return NULL;
+}
+
+/** @brief An On/Off row: A flips it (other values change only with left and right). */
+static bool settings_is_toggle (const settings_row_t *row) {
+    component_context_menu_t *c = row->choices;
+    if (!c || !c->list[0].text || !c->list[1].text || c->list[2].text) {
+        return false;
+    }
+    for (int i = 0; i < 2; i++) {
+        if (strcmp(c->list[i].text, "On") != 0 && strcmp(c->list[i].text, "Off") != 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /** @brief Step a row's value to the next (or previous) choice, wrapping round, and apply it straight away. */
@@ -1023,7 +1037,9 @@ static void launcher_settings_process (menu_t *menu) {
         settings_cycle(menu, row, menu->actions.go_left ? -1 : 1);
     } else if (menu->actions.enter && row) {
         if (row->choices) {
-            settings_cycle(menu, row, 1);
+            if (settings_is_toggle(row)) {
+                settings_cycle(menu, row, 1);
+            }
         } else if (row->action) {
             sound_play_effect(SFX_SETTING);
             row->action(menu, row->arg);
@@ -1164,15 +1180,22 @@ static void launcher_settings_draw (menu_t *menu, surface_t *d) {
     }
     launcher_draw_now_playing(LAUNCHER_X0, LAUNCHER_FOOTER_Y + 12, LAUNCHER_WIDTH / 2, ALIGN_LEFT);
 
-    // Each hint keeps its button beside it; A says what it does on this row.
-    static const launcher_hint_t change_hints[] = {
+    // Each hint keeps its button beside it: left/right for a value, A for On/Off or for what a row does.
+    static const launcher_hint_t value_hints[] = {
         { LAUNCHER_BUTTON_OTHER, "L R", "Tabs" },
-        { LAUNCHER_BUTTON_A, "A", "Change" },
+        { LAUNCHER_BUTTON_LEFT_RIGHT, "", "Change" },
+        { LAUNCHER_BUTTON_B, "B", "Back" },
+    };
+    static const launcher_hint_t toggle_hints[] = {
+        { LAUNCHER_BUTTON_OTHER, "L R", "Tabs" },
+        { LAUNCHER_BUTTON_A, "A", "On / Off" },
         { LAUNCHER_BUTTON_B, "B", "Back" },
     };
     launcher_hint_t hints[3];
-    memcpy(hints, change_hints, sizeof(hints));
+    memcpy(hints, (row && row->choices && settings_is_toggle(row)) ? toggle_hints : value_hints, sizeof(hints));
     if (row && !row->choices) {
+        hints[1].kind = LAUNCHER_BUTTON_A;
+        hints[1].button = "A";
         hints[1].label = row->does ? row->does : "Select";
     }
     launcher_draw_footer(hints, 3);

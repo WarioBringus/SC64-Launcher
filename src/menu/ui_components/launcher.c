@@ -1463,7 +1463,8 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
     // Measured widths are glyph extents; a little slack keeps the last letter from touching the next icon.
     for (int i = 0; i < count; i++) {
         // One letter sits on a circle (wider would be an oval); more letters ("L R", "C" and arrows) on a pill.
-        int bw = text_width_font(FNT_SMALL, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
+        int bw = (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) ? HINT_BUTTON_SIZE + 8 :
+            text_width_font(FNT_SMALL, hints[i].button) + 9 + (is_c_button(hints[i].kind) ? C_ARROWS_WIDTH : 0);
         bool single = strlen(hints[i].button) == 1 && !is_c_button(hints[i].kind);
         button_w[i] = (single || bw < HINT_BUTTON_SIZE) ? HINT_BUTTON_SIZE : bw;
         label_w[i] = text_width_font(FNT_SMALL, hints[i].label) + 2;
@@ -1497,6 +1498,10 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
                 draw_arrow(ax - 2, cy, -1, 0);
                 draw_arrow(ax + 3, cy, 1, 0);
             }
+        } else if (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) {
+            int cx = x + button_w[i] / 2, cy = y + HINT_BUTTON_SIZE / 2;
+            draw_arrow(cx - 4, cy, -1, 0);
+            draw_arrow(cx + 4, cy, 1, 0);
         } else {
             text_centered_ink(FNT_SMALL, x, text_y, button_w[i], HINT_TEXT_HEIGHT, STL_ON_BUTTON, hints[i].button);
         }
@@ -2017,6 +2022,9 @@ static void toggle_favorite (menu_t *menu, void *arg) {
 }
 
 static uint64_t last_input_ms = 0;
+static bool quick_visible(void);
+
+#define SAVE_IDLE_MS        (1000)
 
 void launcher_reset_idle (void) {
     last_input_ms = get_ticks_ms();
@@ -2030,6 +2038,10 @@ void launcher_track_idle (menu_t *menu) {
     if (input || last_input_ms == 0) {
         last_input_ms = now;
         return;
+    }
+    // A save the Quick menu left waiting: written once the controller has rested a moment, not as it closed.
+    if (settings_save_waiting() && now - last_input_ms > SAVE_IDLE_MS && !quick_visible()) {
+        settings_flush();
     }
     int minutes = menu->settings.launcher_attract_minutes;
     if (minutes > 0 && now - last_input_ms > (uint64_t)minutes * 60 * 1000 && menu->next_mode == menu->mode) {
@@ -2103,6 +2115,10 @@ static void open_search (menu_t *menu, void *arg) {
 
 int launcher_requested_category (void) {
     return requested_category;
+}
+
+launcher_request_t launcher_peek_request (void) {
+    return pending_request;
 }
 
 launcher_request_t launcher_take_request (void) {
@@ -2242,91 +2258,73 @@ static void prepare_menus (menu_t *menu, path_t *rom) {
 }
 
 /*
- * Start: the Quick menu, a panel sliding in from the right. Big buttons for the things to do now, the folder and
- * filter (each a page of the panel listing its choices), the view's settings changed in place with left and right,
- * the music, and the way into Settings.
+ * Start: the Quick menu, a panel sliding in from the right. Its rows follow the screen it was opened on: Home's own
+ * (style, theme) on Home, the view's (folder, filter, sort, layout, size, covers, theme) in the Library. Every value
+ * changes with left and right, in place; A is for the buttons and Settings.
  */
 typedef enum {
-    QUICK_SEARCH,
-    QUICK_SURPRISE,
-    QUICK_FOLDER,
-    QUICK_FILTER,
-    QUICK_SORT,
-    QUICK_LAYOUT,
-    QUICK_TILE_SIZE,
-    QUICK_COVERS,
-    QUICK_PAUSE,
-    QUICK_SKIP,
-    QUICK_SETTINGS,
-} quick_item_t;
+    QR_BUTTONS,         /* Search | Surprise me */
+    QR_FOLDER,
+    QR_FILTER_BY,
+    QR_FILTER_SHOW,     /* Only with a field to filter by */
+    QR_SORT,
+    QR_LAYOUT,
+    QR_TILE_SIZE,
+    QR_COVERS,
+    QR_HOME_STYLE,
+    QR_THEME,
+    QR_MUSIC,           /* Pause | Skip */
+    QR_SETTINGS,
+} quick_kind_t;
 
 typedef struct {
-    quick_item_t items[2];
-    int count;                              /**< 1 or 2 side by side */
-    component_context_menu_t *choices;      /**< A setting changed with left and right */
-    const char *label;
-    const char *heading;                    /**< Starts a group ("This view") */
+    quick_kind_t kind;
+    const char *heading;    /* Starts a group ("This view") */
 } quick_row_t;
 
-static const quick_row_t quick_rows[] = {
-    { .items = { QUICK_SEARCH, QUICK_SURPRISE }, .count = 2 },
-    { .items = { QUICK_FOLDER }, .count = 1, .label = "Folder" },
-    { .items = { QUICK_FILTER }, .count = 1, .label = "Filter" },
-    { .items = { QUICK_SORT }, .count = 1, .choices = &sort_menu, .label = "Sort", .heading = "This view" },
-    { .items = { QUICK_LAYOUT }, .count = 1, .choices = &layout_menu, .label = "Layout" },
-    { .items = { QUICK_TILE_SIZE }, .count = 1, .choices = &tile_size_menu, .label = "Tile size" },
-    { .items = { QUICK_COVERS }, .count = 1, .choices = &cover_style_menu, .label = "Covers" },
-    { .items = { QUICK_PAUSE, QUICK_SKIP }, .count = 2, .heading = "Music" },
-    { .items = { QUICK_SETTINGS }, .count = 1, .label = "Settings" },
-};
-
-/* The panel's pages: the main one, and the lists the Folder and Filter rows open. */
-typedef enum {
-    QUICK_PAGE_MAIN,
-    QUICK_PAGE_FOLDERS,
-    QUICK_PAGE_FILTER_FIELDS,
-    QUICK_PAGE_FILTER_GROUPS,
-} quick_page_t;
-
-static const char *filter_field_names[] = { "No filter", "Genre", "Developer", "Year", "Players" };
-static const int filter_field_ids[] = { -1, LAUNCHER_SORT_GENRE, LAUNCHER_SORT_DEVELOPER, LAUNCHER_SORT_YEAR, LAUNCHER_SORT_PLAYERS };
-#define FILTER_FIELD_COUNT  (5)
-
-#define QUICK_ROW_COUNT     ((int)(sizeof(quick_rows) / sizeof(quick_rows[0])))
-#define QUICK_W             (336)   /* Logical width of the panel */
+#define QUICK_MAX_ROWS      (16)
+#define QUICK_W             (320)   /* Logical width of the panel */
 #define QUICK_PAD           (18)
-#define QUICK_TOP           (14)
-#define QUICK_BUTTON_H      (42)
-#define QUICK_ROW_H         (32)
+#define QUICK_TOP           (12)
+#define QUICK_BOTTOM        (418)   /* Above the button hints */
+#define QUICK_BUTTON_H      (38)
+#define QUICK_ROW_H         (28)
 #define QUICK_ROW_GAP       (2)
 #define QUICK_GAP           (6)
 #define QUICK_HEADING_H     (22)
-#define QUICK_SONG_H        (20)
-#define QUICK_LIST_TOP      (62)    /* A page's first row, under its title */
-#define QUICK_LIST_BOTTOM   (418)
 #define QUICK_MS            (170)   /* Slide in or out */
-#define QUICK_PAGE_SLIDE    (36)    /* A page's rows slide in from the side it opened on */
+#define QUICK_REDRAW_MS     (1000)  /* Held, the picture is still redrawn this often (the clock) */
 
+static const char *filter_field_names[] = { "None", "Genre", "Developer", "Year", "Players" };
+static const int filter_field_ids[] = { -1, LAUNCHER_SORT_GENRE, LAUNCHER_SORT_DEVELOPER, LAUNCHER_SORT_YEAR, LAUNCHER_SORT_PLAYERS };
+#define FILTER_FIELD_COUNT  (5)
+
+static const int quick_home_styles[] = { LAUNCHER_HOME_CLASSIC, LAUNCHER_HOME_SPOTLIGHT, LAUNCHER_HOME_CARTRIDGE, LAUNCHER_HOME_MINIMAL };
+static const char *quick_home_style_names[] = { "Classic", "Spotlight", "Cartridge", "Minimal" };
+#define QUICK_HOME_STYLES   (4)
+
+static quick_row_t quick_rows[QUICK_MAX_ROWS];
+static int quick_row_count = 0;
 static bool quick_open = false;
 static uint64_t quick_changed_ms = 0;       /* When it last started opening or closing */
 static int quick_row = 0;
 static int quick_col = 0;
 static menu_mode_t quick_mode = MENU_MODE_NONE;    /* The screen it was opened on */
-static quick_page_t quick_page = QUICK_PAGE_MAIN;
-static int quick_list_sel = 0;
-static int quick_list_top = 0;
-static float quick_list_scroll = 0.0f;
-static float quick_slide = 0.0f;
-static int quick_filter_field = -1;         /* The field whose groups the groups page lists */
+static float quick_scroll_pos = 0.0f;
+static int quick_scroll = 0;
+static int quick_folder = 0;                /* The folder shown (changed here before the Library catches up) */
+static int quick_filter_field = -1;         /* Filtering by (a field whose Show is still "All" counts) */
 static library_group_t *quick_groups = NULL;
 static int quick_group_count = 0;
+static int quick_groups_field = -1, quick_groups_folder = -1;   /* What quick_groups were listed for */
 static uint64_t quick_drawn_ms = 0;         /* The last frame drawn with the panel fully in */
 static uint32_t quick_drawn_song = 0;       /* The track playing when it was drawn */
 static int quick_settled_frames = 0;        /* Frames drawn in a row with nothing moving */
 static int quick_frames_drawn = 0;          /* While open, for the performance log */
 static menu_t *quick_owner;                 /* The menu it was opened with (defined with launcher_menu_show) */
-
-#define QUICK_REDRAW_MS     (1000)  /* Held, the picture is still redrawn this often (the clock) */
+static uint32_t quick_draw_us = 0;
+static int quick_draw_frames = 0;
+static bool quick_draw_logged = false;
 
 /** @brief 0 (off screen) to 1 (fully in), eased; it slides back out after closing. */
 static float quick_progress (void) {
@@ -2343,6 +2341,45 @@ static void quick_free_groups (void) {
     free(quick_groups);
     quick_groups = NULL;
     quick_group_count = 0;
+    quick_groups_field = quick_groups_folder = -1;
+}
+
+/** @brief The groups of the field being filtered by, in the folder shown (listed once for each). */
+static void quick_need_groups (void) {
+    if (quick_filter_field < 0 || (quick_groups_field == quick_filter_field && quick_groups_folder == quick_folder)) {
+        return;
+    }
+    quick_free_groups();
+    library_category_t *c = library_category(quick_folder);
+    quick_group_count = c ? library_category_groups(c, quick_filter_field, &quick_groups) : 0;
+    quick_groups_field = quick_filter_field;
+    quick_groups_folder = quick_folder;
+}
+
+static void quick_build_rows (void) {
+    int n = 0;
+    quick_rows[n++] = (quick_row_t) { QR_BUTTONS, NULL };
+    if (quick_mode == MENU_MODE_HOME) {
+        quick_rows[n++] = (quick_row_t) { QR_HOME_STYLE, "Home" };
+        quick_rows[n++] = (quick_row_t) { QR_THEME, NULL };
+    } else {
+        quick_rows[n++] = (quick_row_t) { QR_FOLDER, "This view" };
+        quick_rows[n++] = (quick_row_t) { QR_FILTER_BY, NULL };
+        if (quick_filter_field >= 0) {
+            quick_rows[n++] = (quick_row_t) { QR_FILTER_SHOW, NULL };
+        }
+        quick_rows[n++] = (quick_row_t) { QR_SORT, NULL };
+        quick_rows[n++] = (quick_row_t) { QR_LAYOUT, NULL };
+        quick_rows[n++] = (quick_row_t) { QR_TILE_SIZE, NULL };
+        quick_rows[n++] = (quick_row_t) { QR_COVERS, NULL };
+        quick_rows[n++] = (quick_row_t) { QR_THEME, NULL };
+    }
+    quick_rows[n++] = (quick_row_t) { QR_MUSIC, "Music" };
+    quick_rows[n++] = (quick_row_t) { QR_SETTINGS, NULL };
+    quick_row_count = n;
+    if (quick_row >= n) {
+        quick_row = n - 1;
+    }
 }
 
 static void quick_close (bool slide) {
@@ -2353,180 +2390,191 @@ static void quick_close (bool slide) {
         quick_frames_drawn);
     quick_open = false;
     quick_changed_ms = slide ? get_ticks_ms() : 0;
-    settings_defer_saves(false);    // One write for everything changed while it was open.
+    quick_free_groups();
+    settings_resume_saves();    // What changed is written in one go once the controller rests, not as it closes.
 }
 
 bool launcher_frame_held (void) {
     if (!quick_open || quick_owner == NULL || quick_owner->mode != quick_mode || quick_owner->next_mode != quick_mode) {
         return false;
     }
-    // Something moving (the slide in, a page sliding or scrolling), a new song, or a while since the last frame.
-    return quick_settled_frames >= 3 && sound_bgm_track_generation() == quick_drawn_song &&
+    // Something moving (the slide in, a scroll), a new song, or a while since the last frame.
+    return quick_settled_frames >= 4 && sound_bgm_track_generation() == quick_drawn_song &&
         get_ticks_ms() - quick_drawn_ms < QUICK_REDRAW_MS;
 }
 
-static bool quick_is_button_row (const quick_row_t *row) {
-    return row->count == 2;
+static bool quick_is_pair (quick_kind_t kind) {
+    return kind == QR_BUTTONS || kind == QR_MUSIC;
 }
 
-static const char *quick_item_label (quick_item_t item) {
-    switch (item) {
-        case QUICK_SEARCH: return "Search";
-        case QUICK_SURPRISE: return "Surprise me";
-        case QUICK_PAUSE: return sound_bgm_is_paused() ? "Play" : "Pause";
-        case QUICK_SKIP: return "Skip";
+static bool quick_is_value (quick_kind_t kind) {
+    return !quick_is_pair(kind) && kind != QR_SETTINGS;
+}
+
+static const char *quick_label (quick_kind_t kind) {
+    switch (kind) {
+        case QR_FOLDER: return "Folder";
+        case QR_FILTER_BY: return "Filter by";
+        case QR_FILTER_SHOW: return "Show";
+        case QR_SORT: return "Sort";
+        case QR_LAYOUT: return "Layout";
+        case QR_TILE_SIZE: return "Tile size";
+        case QR_COVERS: return "Covers";
+        case QR_HOME_STYLE: return "Home style";
+        case QR_THEME: return "Theme";
+        case QR_SETTINGS: return "Settings";
         default: return "";
     }
 }
 
-/** @brief How many rows the current page lists. */
-static int quick_list_count (void) {
-    switch (quick_page) {
-        case QUICK_PAGE_FOLDERS: return library_category_count();
-        case QUICK_PAGE_FILTER_FIELDS: return FILTER_FIELD_COUNT;
-        case QUICK_PAGE_FILTER_GROUPS: return quick_group_count;
-        default: return 0;
+static int quick_home_style_index (menu_t *menu) {
+    for (int i = 0; i < QUICK_HOME_STYLES; i++) {
+        if (quick_home_styles[i] == menu->settings.launcher_home_style) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+/** @brief A row's value as shown. */
+static const char *quick_value (menu_t *menu, quick_kind_t kind) {
+    static char show[80];
+    switch (kind) {
+        case QR_FOLDER: {
+            const char *name = library_category_name(quick_folder);
+            return name ? name : "-";
+        }
+        case QR_FILTER_BY:
+            for (int i = 0; i < FILTER_FIELD_COUNT; i++) {
+                if (filter_field_ids[i] == quick_filter_field) {
+                    return filter_field_names[i];
+                }
+            }
+            return "None";
+        case QR_FILTER_SHOW:
+            if (launcher_filter_field() < 0) {
+                return "All";
+            }
+            quick_need_groups();
+            for (int i = 0; i < quick_group_count; i++) {
+                if (strcmp(quick_groups[i].label, launcher_filter_value()) == 0) {
+                    snprintf(show, sizeof(show), "%s (%d)", quick_groups[i].label, quick_groups[i].count);
+                    return show;
+                }
+            }
+            return launcher_filter_value();
+        case QR_SORT: return current_choice(menu, &sort_menu);
+        case QR_LAYOUT: return current_choice(menu, &layout_menu);
+        case QR_TILE_SIZE: return current_choice(menu, &tile_size_menu);
+        case QR_COVERS: return current_choice(menu, &cover_style_menu);
+        case QR_HOME_STYLE: return quick_home_style_names[quick_home_style_index(menu)];
+        case QR_THEME: return theme_current()->name;
+        default: return NULL;
     }
 }
 
-static int quick_list_rows (void) {
-    return (QUICK_LIST_BOTTOM - QUICK_LIST_TOP) / (QUICK_ROW_H + QUICK_ROW_GAP);
+static int wrap_index (int i, int n) {
+    return ((i % n) + n) % n;
 }
 
-static void quick_show_page (quick_page_t page, int selected, int direction) {
-    quick_page = page;
-    quick_list_sel = selected;
-    int rows = quick_list_rows();
-    quick_list_top = (selected >= rows) ? selected - rows / 2 : 0;
-    quick_list_scroll = (float)quick_list_top;
-    quick_slide = (float)(direction * QUICK_PAGE_SLIDE);
-}
-
-static void quick_back_to_main (void) {
-    quick_free_groups();
-    quick_show_page(QUICK_PAGE_MAIN, 0, -1);
-}
-
-/** @brief The filter shown as a value: "None", or the group it keeps. */
-static const char *quick_filter_text (void) {
-    return (launcher_filter_field() >= 0) ? launcher_filter_value() : "None";
-}
-
-/** @brief Step a setting to its next (or previous) choice, wrapping round. */
-static void quick_cycle (menu_t *menu, component_context_menu_t *c, int step) {
+/** @brief Step a choice menu to its next (or previous) choice, wrapping round. */
+static void quick_cycle_menu (menu_t *menu, component_context_menu_t *c, int step) {
     int n = 0;
     while (c->list[n].text) {
         n++;
     }
-    if (n == 0) {
-        return;
+    if (n > 0) {
+        int i = wrap_index(c->get_default_selection(menu) + step, n);
+        c->list[i].action(menu, c->list[i].arg);
     }
-    int i = (((c->get_default_selection(menu) + step) % n) + n) % n;
-    c->list[i].action(menu, c->list[i].arg);
+}
+
+/** @brief Left or right on a value row: the next or previous value, applied straight away. */
+static void quick_change (menu_t *menu, quick_kind_t kind, int step) {
+    switch (kind) {
+        case QR_FOLDER: {
+            int n = library_category_count();
+            if (n <= 1) {
+                return;
+            }
+            quick_folder = wrap_index(quick_folder + step, n);
+            choose_folder(menu, (void *)(uintptr_t)(quick_folder));     // The Library shows it at once.
+            if (launcher_filter_field() >= 0) {
+                launcher_filter_set(-1, NULL);      // Its groups differ: Show starts again at All.
+            }
+            break;
+        }
+        case QR_FILTER_BY: {
+            int i = 0;
+            for (int k = 0; k < FILTER_FIELD_COUNT; k++) {
+                i = (filter_field_ids[k] == quick_filter_field) ? k : i;
+            }
+            quick_filter_field = filter_field_ids[wrap_index(i + step, FILTER_FIELD_COUNT)];
+            launcher_filter_set(-1, NULL);          // A new field shows everything until a group is picked.
+            break;
+        }
+        case QR_FILTER_SHOW: {
+            quick_need_groups();
+            int n = quick_group_count + 1;          // "All", then each group
+            int i = 0;
+            if (launcher_filter_field() >= 0) {
+                for (int k = 0; k < quick_group_count; k++) {
+                    i = (strcmp(quick_groups[k].label, launcher_filter_value()) == 0) ? k + 1 : i;
+                }
+            }
+            i = wrap_index(i + step, n);
+            if (i == 0) {
+                launcher_filter_set(-1, NULL);
+            } else {
+                launcher_filter_set(quick_filter_field, quick_groups[i - 1].label);
+            }
+            break;
+        }
+        case QR_SORT: quick_cycle_menu(menu, &sort_menu, step); break;
+        case QR_LAYOUT: quick_cycle_menu(menu, &layout_menu, step); break;
+        case QR_TILE_SIZE: quick_cycle_menu(menu, &tile_size_menu, step); break;
+        case QR_COVERS: quick_cycle_menu(menu, &cover_style_menu, step); break;
+        case QR_HOME_STYLE:
+            menu->settings.launcher_home_style = quick_home_styles[wrap_index(quick_home_style_index(menu) + step, QUICK_HOME_STYLES)];
+            settings_save(&menu->settings);
+            break;
+        case QR_THEME: {
+            int i = theme_current_index();
+            for (int k = 0; k < THEME_BUILTIN_COUNT; k++) {
+                i = wrap_index(i + step, THEME_BUILTIN_COUNT);
+                if (theme_at(i)) {
+                    break;
+                }
+            }
+            launcher_apply_theme(menu, i);
+            break;
+        }
+        default:
+            return;
+    }
     sound_play_effect(SFX_SETTING);
 }
 
-/** @brief After a filter is chosen: the Library shows it (from Home, it goes there). */
-static void quick_filter_chosen (menu_t *menu, int field, const char *value) {
-    launcher_filter_set(field, value);
-    quick_close(false);
-    if (menu->mode == MENU_MODE_HOME) {
-        launcher_transition(menu->mode, MENU_MODE_LIBRARY);
-        menu->next_mode = MENU_MODE_LIBRARY;
-    }
-}
-
-static void quick_run (menu_t *menu, quick_item_t item) {
-    switch (item) {
-        case QUICK_SEARCH: quick_close(false); open_search(menu, NULL); break;
-        case QUICK_SURPRISE: quick_close(false); surprise_me(menu, NULL); break;
-        case QUICK_SETTINGS: quick_close(false); open_screen(menu, (void *)(MENU_MODE_SETTINGS_EDITOR)); break;
-        case QUICK_FOLDER: quick_show_page(QUICK_PAGE_FOLDERS, get_folder_selection(menu), 1); break;
-        case QUICK_FILTER: {
-            int selected = 0;
-            for (int i = 0; i < FILTER_FIELD_COUNT; i++) {
-                selected = (filter_field_ids[i] == launcher_filter_field()) ? i : selected;
-            }
-            quick_show_page(QUICK_PAGE_FILTER_FIELDS, selected, 1);
-            break;
-        }
-        case QUICK_PAUSE: toggle_pause(menu, NULL); break;
-        case QUICK_SKIP: next_track(menu, NULL); break;
-        default: break;
-    }
+/** @brief A on a button or on Settings. */
+static void quick_run (menu_t *menu, const quick_row_t *row) {
     sound_play_effect(SFX_ENTER);
-}
-
-/** @brief A on a page's row. */
-static void quick_choose (menu_t *menu) {
-    sound_play_effect(SFX_ENTER);
-    if (quick_page == QUICK_PAGE_FOLDERS) {
+    if (row->kind == QR_BUTTONS) {
         quick_close(false);
-        choose_folder(menu, (void *)(uintptr_t)(quick_list_sel));
-    } else if (quick_page == QUICK_PAGE_FILTER_FIELDS) {
-        int field = filter_field_ids[quick_list_sel];
-        if (field < 0) {
-            quick_filter_chosen(menu, -1, NULL);
-            return;
-        }
-        // Its groups, from the folder being shown.
-        quick_free_groups();
-        library_category_t *c = library_category(get_folder_selection(menu));
-        quick_group_count = c ? library_category_groups(c, field, &quick_groups) : 0;
-        quick_filter_field = field;
-        int selected = 0;
-        for (int i = 0; i < quick_group_count; i++) {
-            if (launcher_filter_field() == field && strcmp(quick_groups[i].label, launcher_filter_value()) == 0) {
-                selected = i;
-            }
-        }
-        quick_show_page(QUICK_PAGE_FILTER_GROUPS, selected, 1);
-    } else if (quick_page == QUICK_PAGE_FILTER_GROUPS && quick_group_count > 0) {
-        char value[64];
-        snprintf(value, sizeof(value), "%s", quick_groups[quick_list_sel].label);
-        quick_free_groups();
-        quick_filter_chosen(menu, quick_filter_field, value);
-    }
-}
-
-static bool quick_page_process (menu_t *menu) {
-    int count = quick_list_count();
-    int step = menu->actions.go_fast ? quick_list_rows() : 1;
-    if (menu->actions.back) {
-        sound_play_effect(SFX_EXIT);
-        if (quick_page == QUICK_PAGE_FILTER_GROUPS) {
-            quick_free_groups();
-            int selected = 0;
-            for (int i = 0; i < FILTER_FIELD_COUNT; i++) {
-                selected = (filter_field_ids[i] == quick_filter_field) ? i : selected;
-            }
-            quick_show_page(QUICK_PAGE_FILTER_FIELDS, selected, -1);
+        if (quick_col == 0) {
+            open_search(menu, NULL);
         } else {
-            int row = quick_row;
-            quick_back_to_main();
-            quick_row = row;
+            surprise_me(menu, NULL);
         }
-    } else if (menu->actions.settings) {
-        sound_play_effect(SFX_EXIT);
-        quick_free_groups();
-        quick_close(true);
-    } else if (menu->actions.go_up && quick_list_sel > 0) {
-        quick_list_sel = (quick_list_sel - step < 0) ? 0 : quick_list_sel - step;
-        sound_play_effect(SFX_TICK);
-    } else if (menu->actions.go_down && quick_list_sel < count - 1) {
-        quick_list_sel = (quick_list_sel + step > count - 1) ? count - 1 : quick_list_sel + step;
-        sound_play_effect(SFX_TICK);
-    } else if (menu->actions.enter && count > 0) {
-        quick_choose(menu);
+    } else if (row->kind == QR_MUSIC) {
+        if (quick_col == 0) {
+            toggle_pause(menu, NULL);
+        } else {
+            next_track(menu, NULL);
+        }
+    } else if (row->kind == QR_SETTINGS) {
+        quick_close(false);
+        open_screen(menu, (void *)(MENU_MODE_SETTINGS_EDITOR));
     }
-    int rows = quick_list_rows();
-    if (quick_list_sel < quick_list_top) {
-        quick_list_top = quick_list_sel;
-    }
-    if (quick_list_sel >= quick_list_top + rows) {
-        quick_list_top = quick_list_sel - rows + 1;
-    }
-    return true;
 }
 
 static bool quick_process (menu_t *menu) {
@@ -2536,9 +2584,12 @@ static bool quick_process (menu_t *menu) {
     if (!quick_open) {
         return quick_visible() && menu->mode == quick_mode;    // Sliding out: the screen behind waits for it.
     }
-    if (quick_page != QUICK_PAGE_MAIN) {
-        return quick_page_process(menu);
+    bool input = menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
+        menu->actions.enter || menu->actions.back || menu->actions.settings;
+    if (input) {
+        quick_settled_frames = 0;   // Draw a few frames: the screen behind catches up with a change.
     }
+    quick_build_rows();
     const quick_row_t *row = &quick_rows[quick_row];
     if (menu->actions.back || menu->actions.settings) {
         sound_play_effect(SFX_EXIT);
@@ -2546,25 +2597,20 @@ static bool quick_process (menu_t *menu) {
     } else if (menu->actions.go_up && quick_row > 0) {
         quick_row--;
         sound_play_effect(SFX_TICK);
-    } else if (menu->actions.go_down && quick_row + 1 < QUICK_ROW_COUNT) {
+    } else if (menu->actions.go_down && quick_row + 1 < quick_row_count) {
         quick_row++;
         sound_play_effect(SFX_TICK);
-    } else if ((menu->actions.go_left || menu->actions.go_right) && row->choices) {
-        quick_cycle(menu, row->choices, menu->actions.go_left ? -1 : 1);
-    } else if ((menu->actions.go_left || menu->actions.go_right) && quick_is_button_row(row)) {
+    } else if ((menu->actions.go_left || menu->actions.go_right) && quick_is_value(row->kind)) {
+        quick_change(menu, row->kind, menu->actions.go_left ? -1 : 1);
+        quick_build_rows();         // Filter by None hides Show; a field brings it back.
+    } else if ((menu->actions.go_left || menu->actions.go_right) && quick_is_pair(row->kind)) {
         int col = menu->actions.go_left ? 0 : 1;
         if (col != quick_col) {
             quick_col = col;
             sound_play_effect(SFX_TICK);
         }
-    } else if (menu->actions.go_right && (row->items[0] == QUICK_FOLDER || row->items[0] == QUICK_FILTER)) {
-        quick_run(menu, row->items[0]);     // Right opens the Folder and Filter pages too.
-    } else if (menu->actions.enter) {
-        if (row->choices) {
-            quick_cycle(menu, row->choices, 1);
-        } else {
-            quick_run(menu, row->items[quick_is_button_row(row) ? quick_col : 0]);
-        }
+    } else if (menu->actions.enter && !quick_is_value(row->kind)) {
+        quick_run(menu, row);
     }
     return true;
 }
@@ -2576,149 +2622,102 @@ static void quick_draw_button (int x0, int y, int x1, int h, bool on, const char
     launcher_text_sized(LAUNCHER_SIZE_LARGE, x0, y, x1 - x0, h, ALIGN_CENTER, on ? STL_ON_ACCENT : STL_DEFAULT, label);
 }
 
-/** @brief The selected row's highlight, with the accent bar on its left. */
-static void quick_draw_highlight (int left, int right, int y) {
-    const theme_t *theme = theme_current();
-    launcher_fill_rounded(left - 8, y, right + 8, y + QUICK_ROW_H, 6, theme->highlight);
-    launcher_fill_rounded(left - 8, y + 4, left - 4, y + QUICK_ROW_H - 4, 2, theme->accent2);
-}
-
-/** @brief A value at the right of a row, cut short to fit beside its name. */
-static void quick_draw_value (int label_end, int right, int y, bool on, const char *value, bool arrows) {
-    int room = right - (arrows ? 22 : 18) - label_end - 16;
-    int w = launcher_text_sized_width(LAUNCHER_SIZE_TITLE, value);
-    w = (w > room) ? room : w;
-    int vx = right - (arrows ? 22 : 18) - w;
-    launcher_text_sized(LAUNCHER_SIZE_TITLE, vx, y, w + 2, QUICK_ROW_H, ALIGN_LEFT, on ? STL_ACCENT : STL_GRAY, value);
-    if (on && arrows) {
-        launcher_draw_arrow(vx - 16, y + QUICK_ROW_H / 2, 12, false, theme_current()->accent);
-    }
-}
-
-static void quick_draw_main (menu_t *menu, int left, int right) {
-    const theme_t *theme = theme_current();
+/** @brief Each row's top and height (headings above it included in its top), and the bottom of them all. */
+static int quick_layout (int *top, int *height) {
     int y = QUICK_TOP;
-    for (int r = 0; r < QUICK_ROW_COUNT; r++) {
+    for (int r = 0; r < quick_row_count; r++) {
+        if (quick_rows[r].heading) {
+            y += QUICK_GAP + QUICK_HEADING_H;
+        }
+        top[r] = y;
+        height[r] = (quick_rows[r].kind == QR_BUTTONS) ? QUICK_BUTTON_H : (quick_rows[r].kind == QR_MUSIC) ? QUICK_ROW_H + 4 :
+            QUICK_ROW_H;
+        y += height[r] + (quick_is_pair(quick_rows[r].kind) ? QUICK_GAP : QUICK_ROW_GAP);
+    }
+    return y;
+}
+
+static void quick_draw_rows (menu_t *menu, int left, int right) {
+    const theme_t *theme = theme_current();
+    int top[QUICK_MAX_ROWS], height[QUICK_MAX_ROWS];
+    int bottom = quick_layout(top, height);
+
+    // Keep the selected row (and its group's heading) in view; the list glides there.
+    int first = top[quick_row] - (quick_rows[quick_row].heading ? QUICK_HEADING_H + QUICK_GAP : 0);
+    if (first - quick_scroll < QUICK_TOP) {
+        quick_scroll = first - QUICK_TOP;
+    }
+    if (top[quick_row] + height[quick_row] - quick_scroll > QUICK_BOTTOM) {
+        quick_scroll = top[quick_row] + height[quick_row] - QUICK_BOTTOM;
+    }
+    int max_scroll = bottom - QUICK_BOTTOM;
+    quick_scroll = (quick_scroll > max_scroll) ? max_scroll : quick_scroll;
+    quick_scroll = (quick_scroll < 0) ? 0 : quick_scroll;
+    quick_scroll_pos = launcher_ease(quick_scroll_pos, (float)quick_scroll);
+    int scroll = (int)(quick_scroll_pos + 0.5f);
+
+    rdpq_set_scissor(0, 2, display_get_width(), QUICK_BOTTOM + 2);
+    for (int r = 0; r < quick_row_count; r++) {
         const quick_row_t *row = &quick_rows[r];
-        bool row_on = (r == quick_row);
+        int y = top[r] - scroll;
+        bool on = (r == quick_row);
         if (row->heading) {
-            y += QUICK_GAP;
-            launcher_text_sized(LAUNCHER_SIZE_BODY, left, y, 0, QUICK_HEADING_H, ALIGN_LEFT, STL_ACCENT, row->heading);
-            y += QUICK_HEADING_H;
-            if (row->items[0] == QUICK_PAUSE) {
-                // What's playing, above its buttons.
+            int hy = y - QUICK_HEADING_H;
+            int w = launcher_text_sized(LAUNCHER_SIZE_BODY, left, hy, 0, QUICK_HEADING_H, ALIGN_LEFT, STL_ACCENT, row->heading);
+            if (row->kind == QR_MUSIC) {
+                // What's playing, beside its heading.
                 const char *name = sound_bgm_track_name();
                 const char *song = (!menu->settings.bgm_enabled || !name) ? "Music is off" : name;
-                launcher_text_sized(LAUNCHER_SIZE_BODY, left, y, right - left, QUICK_SONG_H, ALIGN_LEFT, STL_GRAY, song);
-                y += QUICK_SONG_H + 2;
+                launcher_text_sized(LAUNCHER_SIZE_BODY, left + w + 12, hy, right - left - w - 12, QUICK_HEADING_H, ALIGN_LEFT,
+                    STL_GRAY, song);
             }
         }
-        if (quick_is_button_row(row)) {
-            int h = (row->items[0] == QUICK_PAUSE) ? QUICK_ROW_H + 2 : QUICK_BUTTON_H;
+        if (y + height[r] < 0 || y > QUICK_BOTTOM) {
+            continue;
+        }
+        if (quick_is_pair(row->kind)) {
             int mid = (left + right) / 2;
-            quick_draw_button(left, y, mid - 4, h, row_on && quick_col == 0, quick_item_label(row->items[0]));
-            quick_draw_button(mid + 4, y, right, h, row_on && quick_col == 1, quick_item_label(row->items[1]));
-            y += h + QUICK_GAP;
+            bool buttons = (row->kind == QR_BUTTONS);
+            quick_draw_button(left, y, mid - 4, height[r], on && quick_col == 0,
+                buttons ? "Search" : (sound_bgm_is_paused() ? "Play" : "Pause"));
+            quick_draw_button(mid + 4, y, right, height[r], on && quick_col == 1, buttons ? "Surprise me" : "Skip");
             continue;
-        }
-        if (row_on) {
-            quick_draw_highlight(left, right, y);
-        }
-        int label_w = launcher_text_sized(LAUNCHER_SIZE_TITLE, left + 4, y, 0, QUICK_ROW_H, ALIGN_LEFT,
-            row_on ? STL_DEFAULT : STL_GRAY, row->label);
-        const char *value = NULL;
-        if (row->choices) {
-            value = current_choice(menu, row->choices);
-        } else if (row->items[0] == QUICK_FOLDER) {
-            value = library_category_name(get_folder_selection(menu));
-        } else if (row->items[0] == QUICK_FILTER) {
-            value = quick_filter_text();
-        }
-        if (value) {
-            quick_draw_value(left + 4 + label_w, right, y, row_on, value, row->choices != NULL);
-        }
-        if (row_on) {
-            launcher_draw_arrow(right - 6, y + QUICK_ROW_H / 2, 12, true, theme->accent);
-        }
-        y += QUICK_ROW_H + QUICK_ROW_GAP;
-    }
-}
-
-/** @brief A page: its title, and its list with the current choice in the accent colour. */
-static void quick_draw_page (menu_t *menu, int left, int right) {
-    const theme_t *theme = theme_current();
-    const char *title = (quick_page == QUICK_PAGE_FOLDERS) ? "Folder" : "Filter";
-    char by[48];
-    if (quick_page == QUICK_PAGE_FILTER_GROUPS) {
-        for (int i = 0; i < FILTER_FIELD_COUNT; i++) {
-            if (filter_field_ids[i] == quick_filter_field) {
-                snprintf(by, sizeof(by), "Filter by %s", filter_field_names[i]);
-                title = by;
-            }
-        }
-    }
-    launcher_text_sized(LAUNCHER_SIZE_TITLE, left, QUICK_TOP, 0, 36, ALIGN_LEFT, STL_DEFAULT, title);
-    ui_components_box_draw(launcher_px(left), QUICK_LIST_TOP - 10, launcher_px(right), QUICK_LIST_TOP - 9, theme->line);
-
-    int count = quick_list_count();
-    if (count == 0) {
-        launcher_text_sized(LAUNCHER_SIZE_BODY, left, QUICK_LIST_TOP + 20, right - left, 24, ALIGN_LEFT, STL_GRAY,
-            "No game details here");
-        return;
-    }
-    quick_list_scroll = launcher_ease(quick_list_scroll, (float)quick_list_top);
-    int row_step = QUICK_ROW_H + QUICK_ROW_GAP;
-    int scroll = (int)(quick_list_scroll * row_step + 0.5f);
-    rdpq_set_scissor(0, QUICK_LIST_TOP - 2, display_get_width(), QUICK_LIST_BOTTOM + 2);
-    int current_folder = get_folder_selection(menu);
-    for (int i = 0; i < count; i++) {
-        int y = QUICK_LIST_TOP + i * row_step - scroll;
-        if (y + row_step < QUICK_LIST_TOP || y > QUICK_LIST_BOTTOM) {
-            continue;
-        }
-        bool on = (i == quick_list_sel);
-        bool current = false;
-        const char *name = "";
-        const char *count_text = NULL;
-        char count_buffer[12];
-        if (quick_page == QUICK_PAGE_FOLDERS) {
-            name = library_category_name(i);
-            current = (i == current_folder);
-        } else if (quick_page == QUICK_PAGE_FILTER_FIELDS) {
-            name = filter_field_names[i];
-            current = (filter_field_ids[i] == launcher_filter_field());
-        } else {
-            name = quick_groups[i].label;
-            current = launcher_filter_field() == quick_filter_field && strcmp(name, launcher_filter_value()) == 0;
-            snprintf(count_buffer, sizeof(count_buffer), "%d", quick_groups[i].count);
-            count_text = count_buffer;
         }
         if (on) {
-            quick_draw_highlight(left, right, y);
+            launcher_fill_rounded(left - 8, y, right + 8, y + QUICK_ROW_H, 6, theme->highlight);
+            launcher_fill_rounded(left - 8, y + 4, left - 4, y + QUICK_ROW_H - 4, 2, theme->accent2);
         }
-        int name_room = right - left - 8 - (count_text ? 56 : 0) - (current ? 22 : 0);
-        launcher_text_sized(LAUNCHER_SIZE_TITLE, left + 4, y, name_room, QUICK_ROW_H, ALIGN_LEFT,
-            current ? STL_ACCENT : (on ? STL_DEFAULT : STL_GRAY), name ? name : "");
-        if (count_text) {
-            launcher_text_sized(LAUNCHER_SIZE_BODY, right - 60, y, 56, QUICK_ROW_H, ALIGN_RIGHT, STL_GRAY, count_text);
+        int label_w = launcher_text_sized(LAUNCHER_SIZE_LARGE, left + 4, y, 0, QUICK_ROW_H, ALIGN_LEFT,
+            on ? STL_DEFAULT : STL_GRAY, quick_label(row->kind));
+        const char *value = quick_value(menu, row->kind);
+        int cy = y + QUICK_ROW_H / 2;
+        if (value) {
+            // Right-aligned, cut short to fit beside its name; arrows either side when selected.
+            int end = right - (on ? 20 : 4);
+            int room = end - (left + 4 + label_w + 30);
+            int w = launcher_text_sized_width(LAUNCHER_SIZE_LARGE, value);
+            w = (w > room) ? room : w;
+            launcher_text_sized(LAUNCHER_SIZE_LARGE, end - w, y, w + 2, QUICK_ROW_H, ALIGN_LEFT, on ? STL_ACCENT : STL_GRAY, value);
+            if (on) {
+                launcher_draw_arrow(end - w - 14, cy, 11, false, theme->accent);
+                launcher_draw_arrow(right - 6, cy, 11, true, theme->accent);
+            }
+        } else if (on) {
+            launcher_draw_arrow(right - 6, cy, 11, true, theme->accent);
         }
     }
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
-    if (quick_list_top + quick_list_rows() < count) {
-        launcher_draw_arrow((left + right) / 2, QUICK_LIST_BOTTOM + 6, 8, true, theme->text_muted);
+    if (quick_scroll < max_scroll) {
+        launcher_draw_arrow((left + right) / 2, QUICK_BOTTOM + 4, 7, true, theme->text_muted);
     }
 }
-
-static uint32_t quick_draw_us = 0, quick_fade_us = 0;
-static int quick_draw_frames = 0;
-static bool quick_draw_logged = false;
 
 static void quick_draw (menu_t *menu) {
     float t = quick_progress();
     if (t <= 0.0f) {
         quick_draw_logged = false;
         quick_draw_frames = 0;
-        quick_draw_us = quick_fade_us = 0;
+        quick_draw_us = 0;
         return;
     }
     uint64_t started = get_ticks_us();
@@ -2734,19 +2733,13 @@ static void quick_draw (menu_t *menu) {
         rdpq_set_prim_color(dim);
         rdpq_fill_rectangle(0, 0, launcher_px(x0), display_get_height());
     rdpq_mode_pop();
-    uint64_t faded = get_ticks_us();
     ui_components_box_draw(launcher_px(x0), 0, display_get_width(), display_get_height(), theme->panel);
     ui_components_box_draw(launcher_px(x0), 0, launcher_px(x0) + 1, display_get_height(), theme->line);
 
-    quick_slide = launcher_ease(quick_slide, 0.0f);
-    int dx = (int)(quick_slide + (quick_slide < 0 ? -0.5f : 0.5f));
-    int left = x0 + QUICK_PAD + dx;
-    int right = x0 + QUICK_W - QUICK_PAD - (launcher_is_widescreen() ? 6 : 0) + dx;
-    if (quick_page == QUICK_PAGE_MAIN) {
-        quick_draw_main(menu, left, right);
-    } else {
-        quick_draw_page(menu, left, right);
-    }
+    quick_build_rows();
+    int left = x0 + QUICK_PAD;
+    int right = x0 + QUICK_W - QUICK_PAD - (launcher_is_widescreen() ? 6 : 0);
+    quick_draw_rows(menu, left, right);
 
     if (quick_open && t >= 1.0f) {
         static const launcher_hint_t select_hints[] = {
@@ -2754,35 +2747,25 @@ static void quick_draw (menu_t *menu) {
             { LAUNCHER_BUTTON_B, "B", "Close" },
         };
         static const launcher_hint_t change_hints[] = {
-            { LAUNCHER_BUTTON_A, "A", "Change" },
+            { LAUNCHER_BUTTON_LEFT_RIGHT, "", "Change" },
             { LAUNCHER_BUTTON_B, "B", "Close" },
         };
-        static const launcher_hint_t page_hints[] = {
-            { LAUNCHER_BUTTON_A, "A", "Choose" },
-            { LAUNCHER_BUTTON_B, "B", "Back" },
-        };
-        const launcher_hint_t *hints = (quick_page != QUICK_PAGE_MAIN) ? page_hints :
-            quick_rows[quick_row].choices ? change_hints : select_hints;
         launcher_hide_footer_line();
-        launcher_draw_footer(hints, 2);
+        launcher_draw_footer(quick_is_value(quick_rows[quick_row].kind) ? change_hints : select_hints, 2);
     }
 
-    // Settled: fully in, and the page's slide and scroll have landed.
-    bool settled = quick_open && t >= 1.0f && fabsf(quick_slide) < 0.5f &&
-        (quick_page == QUICK_PAGE_MAIN || fabsf(quick_list_scroll - (float)quick_list_top) < 0.01f);
+    // Settled: fully in, and the list's glide has landed.
+    bool settled = quick_open && t >= 1.0f && fabsf(quick_scroll_pos - (float)quick_scroll) < 0.5f;
     quick_settled_frames = settled ? quick_settled_frames + 1 : 0;
     quick_drawn_ms = get_ticks_ms();
     quick_drawn_song = sound_bgm_track_generation();
     quick_frames_drawn++;
 
     // For the performance log: what the panel costs a frame, once per opening.
-    uint64_t now = get_ticks_us();
     if (quick_open && t >= 1.0f && !quick_draw_logged) {
-        quick_draw_us += (uint32_t)(now - started);
-        quick_fade_us += (uint32_t)(faded - started);
+        quick_draw_us += (uint32_t)(get_ticks_us() - started);
         if (++quick_draw_frames == 30) {
-            perf_log_event("quick menu: %.1f ms a frame to draw (backdrop %.1f ms)", quick_draw_us / 30000.0f,
-                quick_fade_us / 30000.0f);
+            perf_log_event("quick menu: %.1f ms a frame to draw", quick_draw_us / 30000.0f);
             quick_draw_logged = true;
         }
     }
@@ -2803,8 +2786,11 @@ void launcher_menu_show (menu_t *menu, path_t *rom) {
     quick_settled_frames = 0;
     quick_frames_drawn = 0;
     quick_free_groups();
-    quick_page = QUICK_PAGE_MAIN;
-    quick_slide = 0.0f;
+    quick_folder = get_folder_selection(menu);
+    quick_filter_field = launcher_filter_field();
+    quick_scroll = 0;
+    quick_scroll_pos = 0.0f;
+    quick_build_rows();
     settings_defer_saves(true);
     sound_play_effect(SFX_POP);
 }

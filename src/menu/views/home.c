@@ -1202,6 +1202,7 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_home_init (menu_t *menu) {
+    launcher_reset_idle();  // Time spent on other screens isn't idle time here (attract mode started on arrival).
     packs_open = false;     // Leaving the launcher closes them.
     launcher_covers_pin_new_set();
     if (reveal == REVEAL_HIDDEN) {

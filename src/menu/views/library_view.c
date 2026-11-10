@@ -688,11 +688,13 @@ static void process (menu_t *menu) {
         last_input_ms = get_ticks_ms();
     }
     search_scope_update();
-    if (launcher_menu_process(menu)) {
-        return;
+    // A folder changed in the Quick menu: shown behind it at once, while the panel stays open.
+    if (launcher_peek_request() == LAUNCHER_REQUEST_CATEGORY) {
+        launcher_take_request();
+        set_category(menu, launcher_requested_category());
     }
-
-    // Layout changed from the Start menu: start the new one at the highlighted game.
+    // Before the Quick menu takes the input: what it changes shows behind it while it stays open.
+    // Layout changed from the Quick menu: start the new one at the highlighted game.
     static int shown_layout = -1;
     if (menu->settings.launcher_layout != shown_layout) {
         shown_layout = menu->settings.launcher_layout;
@@ -703,6 +705,10 @@ static void process (menu_t *menu) {
     library_category_t *current = library_category(category_index);
     if (current) {
         apply_sort(current, category_index);
+    }
+
+    if (launcher_menu_process(menu)) {
+        return;
     }
 
     if (search_open) {
@@ -1697,6 +1703,7 @@ void view_library_preload (menu_t *menu, int *lookups_left) {
 
 void view_library_init (menu_t *menu) {
     last_input_ms = get_ticks_ms();     // Arriving counts as input: idle work waits until it rests.
+    launcher_reset_idle();
     motion_snap = true;
     launcher_focus_reset();
     library_init(menu);

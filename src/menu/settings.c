@@ -171,6 +171,10 @@ void settings_save (settings_t *settings) {
     settings_write(settings);
 }
 
+void settings_resume_saves (void) {
+    saves_deferred = false;     // What's waiting is written by settings_flush, at a quiet moment.
+}
+
 void settings_defer_saves (bool defer) {
     saves_deferred = defer;
     if (!defer) {
@@ -191,6 +195,7 @@ void settings_flush (void) {
 }
 
 static void settings_write (settings_t *settings) {
+    save_waiting = NULL;        // Written now, with everything changed so far.
     ini_t *ini = ini_create();
 
     ini_set_int(ini, "menu", "schema_revision", settings->schema_revision);
