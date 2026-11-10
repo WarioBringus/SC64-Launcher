@@ -553,13 +553,6 @@ static void item_folder (home_item_t *h, char *buffer, size_t size) {
     path_free(dir);
 }
 
-/** @brief Clip drawing to the content area (the left edge stays at 0: see draw). */
-static void clip_content (void) {
-    int clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
-    rdpq_set_scissor(0, CONTENT_TOP - LAUNCHER_RING - 2,
-        clip_x1 > display_get_width() ? display_get_width() : (clip_x1 < 1 ? 1 : clip_x1), CONTENT_BOTTOM + 2);
-}
-
 static void clip_none (void) {
     rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
 }
@@ -974,7 +967,10 @@ static void draw_cartridge (menu_t *menu, int *lookups_left) {
     // Every game in one row; a label (and a divider) where each list starts.
     game_ref_t refs[ROW_KINDS * MAX_ROW_ITEMS];
     int n = home_games(refs, ROW_KINDS * MAX_ROW_ITEMS);
-    clip_content();
+    // The row ends below the content area: clipped under it and its selection ring (the ring's foot was cut).
+    int row_clip_x1 = launcher_px(LAUNCHER_X1 + LAUNCHER_RING + 2);
+    rdpq_set_scissor(0, CONTENT_TOP - LAUNCHER_RING - 2, row_clip_x1 > display_get_width() ? display_get_width() :
+        (row_clip_x1 < 1 ? 1 : row_clip_x1), CART_STRIP_Y + CART_ROW_H + LAUNCHER_RING + 2);
     draw_strip(menu, refs, n, LAUNCHER_X0, LAUNCHER_X1, CART_STRIP_Y, CART_ROW_W, CART_ROW_H, CART_ROW_STEP,
         &cart_row_strip, t->bg, lookups_left);
     int scroll_px = (int)lroundf(cart_row_strip.pos);
@@ -1532,6 +1528,12 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
         binder_draw_tabs(tabs, n, cur, x0);
     }
     launcher_fill_rounded(x0, CONTENT_TOP, x1, CONTENT_BOTTOM, CARD_RADIUS, t->panel);
+    if (rail && !binder_rail) {
+        // Where the open tab joins the page, square: the page's round corner and the tab's left a pixel of the outline
+        // showing between them (the first tab meets the page's top corner).
+        int ty = CONTENT_TOP + cur * (BINDER_TAB_H + BINDER_TAB_GAP);
+        launcher_fill_rounded(x0 - 1, ty, x0 + CARD_RADIUS + 1, ty + BINDER_TAB_H, 0, t->panel);
+    }
 
     binder_slide = motion_snap ? 0.0f : launcher_ease(binder_slide, 0.0f);
     int dy = (int)lroundf(binder_slide);
