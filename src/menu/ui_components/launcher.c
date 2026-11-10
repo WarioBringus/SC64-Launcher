@@ -1577,6 +1577,28 @@ static void draw_arrow (int cx, int cy, int dx, int dy) {
 #define PROMPT_ICON         (22)
 #define PROMPT_PAD          (8)
 
+static float color_contrast(color_t a, color_t b);
+
+/** @brief What goes on a button: white, or the theme's darker colour when the button is too light for white. */
+static color_t ink_color (color_t fill) {
+    color_t white = RGBA32(0xFF, 0xFF, 0xFF, 0xFF);
+    if (color_contrast(white, fill) >= 3.0f) {
+        return white;
+    }
+    const theme_t *t = theme_current();
+    return (color_contrast(t->bg, fill) >= color_contrast(t->text, fill)) ? t->bg : t->text;
+}
+
+/** @brief The text style for a button's letter (see ink_color). */
+static menu_font_style_t ink_style (color_t fill) {
+    color_t ink = ink_color(fill);
+    if (ink.r == 0xFF && ink.g == 0xFF && ink.b == 0xFF) {
+        return STL_ON_BUTTON;
+    }
+    fonts_set_fade_color(ink);
+    return STL_FADE;
+}
+
 int launcher_draw_prompt (int x, int y, launcher_button_t kind, const char *button, const char *label, color_t pill) {
     color_t color;
     switch (kind) {
@@ -1591,7 +1613,7 @@ int launcher_draw_prompt (int x, int y, launcher_button_t kind, const char *butt
     // The button as the hints draw it: a colored circle with its letter.
     int ix = x + PROMPT_PAD, iy = y + (PROMPT_H - PROMPT_ICON) / 2;
     fill_smooth_rounded(ix, iy, ix + PROMPT_ICON, iy + PROMPT_ICON, PROMPT_ICON / 2, color);
-    text_centered_ink(font_for(button, FNT_LAUNCHER), ix, iy, PROMPT_ICON, PROMPT_ICON, STL_ON_BUTTON, button);
+    text_centered_ink(font_for(button, FNT_LAUNCHER), ix, iy, PROMPT_ICON, PROMPT_ICON, ink_style(color), button);
     text_box(ix + PROMPT_ICON + PROMPT_PAD, y, 0, PROMPT_H, ALIGN_LEFT, VALIGN_CENTER, STL_DEFAULT, label);
     return w;
 }
@@ -1724,21 +1746,21 @@ static void draw_shaped_button (button_shape_t shape, int x, int y, int size, co
     if (shape == SHAPE_TRIGGER) {
         int y0 = cy - TRIGGER_H / 2;
         fill_smooth_rounded(x, y0, x + TRIGGER_W, y0 + TRIGGER_H, SHOULDER_RADIUS, color);
-        text_centered_ink(FNT_LAUNCHER, x, y0, TRIGGER_W, TRIGGER_H, STL_ON_BUTTON, text);
+        text_centered_ink(FNT_LAUNCHER, x, y0, TRIGGER_W, TRIGGER_H, ink_style(color), text);
         return;
     }
     int y0 = cy - SHOULDER_H / 2;
     if (shape == SHAPE_SHOULDER) {
         shoulder_bar(x, y0, SHOULDER_W, text[0] == 'R', color);
-        text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_W, SHOULDER_H, STL_ON_BUTTON, text);
+        text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_W, SHOULDER_H, ink_style(color), text);
         return;
     }
     // "L R": the two shoulders, mirrored.
     int x1 = x + SHOULDER_PAIR_W + SHOULDER_PAIR_GAP;
     shoulder_bar(x, y0, SHOULDER_PAIR_W, false, color);
     shoulder_bar(x1, y0, SHOULDER_PAIR_W, true, color);
-    text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_PAIR_W, SHOULDER_H, STL_ON_BUTTON, "L");
-    text_centered_ink(FNT_LAUNCHER, x1, y0, SHOULDER_PAIR_W, SHOULDER_H, STL_ON_BUTTON, "R");
+    text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_PAIR_W, SHOULDER_H, ink_style(color), "L");
+    text_centered_ink(FNT_LAUNCHER, x1, y0, SHOULDER_PAIR_W, SHOULDER_H, ink_style(color), "R");
 }
 
 void launcher_draw_footer (const launcher_hint_t *hints, int count) {
@@ -1808,10 +1830,10 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
         } else if (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) {
             // Two arrow heads, each centred on its half of the pill.
             int cx = x + button_w[i] / 2, cy = y + FOOTER_BUTTON_SIZE / 2;
-            launcher_draw_arrow(cx - 5, cy, 9, false, RGBA32(0xFF, 0xFF, 0xFF, 0xFF));
-            launcher_draw_arrow(cx + 5, cy, 9, true, RGBA32(0xFF, 0xFF, 0xFF, 0xFF));
+            launcher_draw_arrow(cx - 5, cy, 9, false, ink_color(color));
+            launcher_draw_arrow(cx + 5, cy, 9, true, ink_color(color));
         } else {
-            text_centered_ink(FNT_LAUNCHER, x, text_y, button_w[i], FOOTER_TEXT_H, STL_ON_BUTTON, hints[i].button);
+            text_centered_ink(FNT_LAUNCHER, x, text_y, button_w[i], FOOTER_TEXT_H, ink_style(color), hints[i].button);
         }
         x += button_w[i] + FOOTER_ICON_GAP;
         // No width: the label is never cut short, whatever the measurement said.
