@@ -30,6 +30,8 @@ typedef enum {
     PERF_SHAPES,    /**< Rounded fills, rings and cover corner masks (partly inside PERF_COVERS) */
     PERF_CHROME,    /**< The header and the hints bar (its text and shapes included) */
     PERF_LAYOUTS,   /**< Text layouts built (a count, not microseconds): text cache misses */
+    PERF_BACKGROUND, /**< Drawing the screen's background (colour, image, a style's band) */
+    PERF_TEXT_DRAWS, /**< Text draws (a count) */
     PERF_PARTS,
 } perf_part_t;
 

@@ -172,6 +172,16 @@ void perf_log_frame_end (void) {
     }
     work_total_us += work_us;
     work_max_us = (work_us > work_max_us) ? work_us : work_max_us;
+    // Over budget (but not a slow frame): one frame's breakdown every 10 s, to see where the time goes.
+    static uint64_t last_sample_us = 0;
+    if (work_us > 16700 && work_us <= SLOW_FRAME_US && now - last_sample_us > 10000000) {
+        last_sample_us = now;
+        perf_log_event("frame on %s: %.1f ms (background %.1f, text %.1f in %lu draws, covers %.1f, shapes %.1f, "
+            "header+hints %.1f)", screen, work_us / 1000.0f, frame_part_us[PERF_BACKGROUND] / 1000.0f,
+            frame_part_us[PERF_TEXT] / 1000.0f, (unsigned long)frame_part_us[PERF_TEXT_DRAWS],
+            frame_part_us[PERF_COVERS] / 1000.0f, frame_part_us[PERF_SHAPES] / 1000.0f,
+            frame_part_us[PERF_CHROME] / 1000.0f);
+    }
     if (work_us > SLOW_FRAME_US) {
         uint32_t input_us = draw_start_us ? (uint32_t)(draw_start_us - work_start_us) : 0;
         perf_log_event("slow frame on %s: %.1f ms (input %.1f, drawing %.1f: text %.1f, covers %.1f, shapes %.1f, "

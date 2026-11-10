@@ -251,6 +251,7 @@ static int last_layout_lines = 1;   /* Lines of the text last drawn */
 
 static int text_box_font (uint8_t font, int x, int y, int w, int h, rdpq_align_t align, rdpq_valign_t valign, menu_font_style_t style, const char *text) {
     uint64_t started = get_ticks_us();
+    perf_log_add(PERF_TEXT_DRAWS, 1);
     int width = text_box_wrap_untimed(font, x, y, w, h, align, valign, style, WRAP_ELLIPSES, text);
     perf_log_add(PERF_TEXT, (uint32_t)(get_ticks_us() - started));
     return width;
@@ -850,6 +851,7 @@ void launcher_set_background_band (int x_top, int x_bottom, int y1, color_t colo
 }
 
 void launcher_draw_background (void) {
+    uint64_t started = get_ticks_us();
     if (background_override) {
         background_override = false;    // Only for the frame it was set in.
         ui_components_box_draw(0, 0, display_get_width(), display_get_height(), background_override_color);
@@ -861,6 +863,7 @@ void launcher_draw_background (void) {
         launcher_fill_slanted(band_x_top + band_edge_w, band_x_bottom + band_edge_w, 0, band_y1, band_edge);
         launcher_fill_slanted(band_x_top, band_x_bottom, 0, band_y1, band_color);
     }
+    perf_log_add(PERF_BACKGROUND, (uint32_t)(get_ticks_us() - started));
 }
 
 #define COLOR_SAMPLES       (12)    /* Across and down: 144 pixels read, a few tens of microseconds */
@@ -1685,6 +1688,21 @@ static int shape_width (button_shape_t shape) {
     }
 }
 
+/**
+ * @brief A shoulder bar: round at its outer end (left for L, right for R), squarer at the inner end, like the
+ * controller's shoulders seen from the front.
+ */
+static void shoulder_bar (int x, int y0, int w, bool right, color_t color) {
+    int round_w = w * 2 / 3;
+    if (right) {
+        fill_smooth_rounded(x, y0, x + w - round_w + 4, y0 + SHOULDER_H, 3, color);
+        fill_smooth_rounded(x + w - round_w, y0, x + w, y0 + SHOULDER_H, SHOULDER_H / 2, color);
+    } else {
+        fill_smooth_rounded(x, y0, x + round_w, y0 + SHOULDER_H, SHOULDER_H / 2, color);
+        fill_smooth_rounded(x + round_w - 4, y0, x + w, y0 + SHOULDER_H, 3, color);
+    }
+}
+
 /** @brief A shoulder button or trigger centred on the row (y is the top of the round icons, size their height). */
 static void draw_shaped_button (button_shape_t shape, int x, int y, int size, color_t color, const char *text) {
     int cy = y + size / 2;
@@ -1696,14 +1714,14 @@ static void draw_shaped_button (button_shape_t shape, int x, int y, int size, co
     }
     int y0 = cy - SHOULDER_H / 2;
     if (shape == SHAPE_SHOULDER) {
-        fill_smooth_rounded(x, y0, x + SHOULDER_W, y0 + SHOULDER_H, SHOULDER_RADIUS, color);
+        shoulder_bar(x, y0, SHOULDER_W, text[0] == 'R', color);
         text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_W, SHOULDER_H, STL_ON_BUTTON, text);
         return;
     }
-    // "L R": two bars.
+    // "L R": the two shoulders, mirrored.
     int x1 = x + SHOULDER_PAIR_W + SHOULDER_PAIR_GAP;
-    fill_smooth_rounded(x, y0, x + SHOULDER_PAIR_W, y0 + SHOULDER_H, SHOULDER_RADIUS, color);
-    fill_smooth_rounded(x1, y0, x1 + SHOULDER_PAIR_W, y0 + SHOULDER_H, SHOULDER_RADIUS, color);
+    shoulder_bar(x, y0, SHOULDER_PAIR_W, false, color);
+    shoulder_bar(x1, y0, SHOULDER_PAIR_W, true, color);
     text_centered_ink(FNT_LAUNCHER, x, y0, SHOULDER_PAIR_W, SHOULDER_H, STL_ON_BUTTON, "L");
     text_centered_ink(FNT_LAUNCHER, x1, y0, SHOULDER_PAIR_W, SHOULDER_H, STL_ON_BUTTON, "R");
 }
@@ -1765,8 +1783,8 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
             int ax = x + letter_w + 1;
             int cy = y + FOOTER_BUTTON_SIZE / 2;
             if (hints[i].kind == LAUNCHER_BUTTON_C_UP_DOWN) {
-                draw_arrow(ax, cy - 3, 0, -1);
-                draw_arrow(ax, cy + 3, 0, 1);
+                draw_arrow(ax + C_ARROWS_WIDTH / 2 - 2, cy - 3, 0, -1);
+                draw_arrow(ax + C_ARROWS_WIDTH / 2 - 2, cy + 3, 0, 1);
             } else {
                 // Two arrow heads apart, not touching tips.
                 launcher_draw_arrow(ax + 3, cy, 8, false, BUTTON_C_INK);

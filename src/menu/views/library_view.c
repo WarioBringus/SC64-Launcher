@@ -52,7 +52,8 @@
 /* The essentials only: R (view), C (jump, size) still work, and Start's Quick menu has the view's settings. */
 static launcher_hint_t hints_library[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },     /* "Details" without Quick launch (set as it's drawn) */
-    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
+    { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },  /* The filter's field ("Genre") while one is on */
+    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Size" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
     { LAUNCHER_BUTTON_OTHER, "R", "View" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
@@ -246,6 +247,45 @@ static int group_start (library_category_t *c, int sel) {
  * @brief Move to the first game of the next group, or back to the start of this group / the previous one.
  * Groups are letters when sorted by title, otherwise genres, developers, years or player counts.
  */
+/** @brief What C left/right steps through: the filter's field while a filter is on ("Genre"), else "Jump". */
+static const char *filter_field_label (void) {
+    switch (filter_field) {
+        case LAUNCHER_SORT_GENRE: return "Genre";
+        case LAUNCHER_SORT_DEVELOPER: return "Developer";
+        case LAUNCHER_SORT_YEAR: return "Year";
+        case LAUNCHER_SORT_PLAYERS: return "Players";
+        default: return "Jump";
+    }
+}
+
+static void show_group_badge(library_category_t *c, int sel);
+static void set_badge_detail(const char *fmt, ...);
+
+/** @brief With a filter on, C left/right shows the field's next (or previous) group: Racing, then RPG... */
+static bool filter_step (library_category_t *c, int direction) {
+    if (filter_field < 0 || filter_field == LAUNCHER_FILTER_SEARCH || !c) {
+        return false;
+    }
+    library_group_t *groups = NULL;
+    int n = library_category_groups(c, filter_field, &groups);
+    if (n <= 0) {
+        free(groups);
+        return true;
+    }
+    int at = 0;
+    for (int i = 0; i < n; i++) {
+        at = (strcmp(groups[i].label, filter_value) == 0) ? i : at;
+    }
+    int next = (((at + direction) % n) + n) % n;
+    snprintf(filter_value, sizeof(filter_value), "%s", groups[next].label);
+    snprintf(group_badge, sizeof(group_badge), "%s", groups[next].label);
+    group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+    set_badge_detail(groups[next].count == 1 ? "1 game" : "%d games", groups[next].count);
+    free(groups);
+    sound_play_effect(SFX_TICK);
+    return true;   // The library is arranged for it next frame (apply_sort).
+}
+
 static int jump_group (library_category_t *c, int sel, int direction) {
     if (direction > 0) {
         for (int i = sel + 1; i < c->shown; i++) {
@@ -880,8 +920,10 @@ static void process (menu_t *menu) {
             // C left/right jump between groups and C up/down change the size, as in every view. Holding C marks
             // every frame as fast, including those between repeats that move nowhere: only the moving ones act.
             if (menu->actions.go_left || menu->actions.go_right) {
-                *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
-                show_group_badge(c, *sel);
+                if (!filter_step(c, menu->actions.go_right ? 1 : -1)) {
+                    *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
+                    show_group_badge(c, *sel);
+                }
             } else if (menu->actions.go_up || menu->actions.go_down) {
                 change_size(menu, menu->actions.go_up ? 1 : -1);
             }
@@ -903,8 +945,10 @@ static void process (menu_t *menu) {
     // frame as fast, including those between repeats that move nowhere: only the moving ones act.
     if (menu->actions.go_fast) {
         if (menu->actions.go_left || menu->actions.go_right) {
-            *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
-            show_group_badge(c, *sel);
+            if (!filter_step(c, menu->actions.go_right ? 1 : -1)) {
+                *sel = jump_group(c, *sel, menu->actions.go_right ? 1 : -1);
+                show_group_badge(c, *sel);
+            }
             if (*sel != previous) {
                 sound_play_effect(SFX_TICK);
             }
@@ -1688,6 +1732,7 @@ static void draw (menu_t *menu, surface_t *d) {
             launcher_draw_footer(hints_folders, HINT_COUNT(hints_folders));
         } else {
             hints_library[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
+            hints_library[1].label = filter_field_label();
             launcher_draw_footer(hints_library, HINT_COUNT(hints_library));
         }
 
