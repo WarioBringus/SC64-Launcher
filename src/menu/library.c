@@ -735,6 +735,7 @@ static void load_index_games (library_category_t *c) {
     int last = (c->index_first >= 0) ? c->index_first + c->index_count : index_rom_count;
     c->games = malloc(((last - first) > 0 ? (last - first) : 1) * sizeof(library_game_t));
     c->count = 0;
+    c->ranked = false;
     int japan = 0;
     int with_cover = 0;
 
@@ -802,6 +803,7 @@ static void load_folder_games_untimed (library_category_t *c) {
     int capacity = 64;
     c->games = malloc(capacity * sizeof(library_game_t));
     c->count = 0;
+    c->ranked = false;
 
     dir_t info;
     int result = dir_findfirst(path_get(c->directory), &info);
@@ -934,6 +936,7 @@ static void load_all_games (void) {
     // Shallow copies: names and directories stay owned by the folder entries.
     all_games.games = malloc((total > 0 ? total : 1) * sizeof(library_game_t));
     all_games.count = 0;
+    all_games.ranked = false;
     for (int k = 0; k < n; k++) {
         if (one_per_game && has_better_copy(everything, keys, ranks, n, k)) {
             continue;
@@ -1446,13 +1449,10 @@ static const char *sort_key (const library_game_t *g) {
 static int compare_sorted (const void *a, const void *b) {
     const library_game_t *ga = a;
     const library_game_t *gb = b;
-    {
-        // Games shown (not hidden, and kept by any filter) come first; only they are shown.
-        bool ma = game_matches_filter(ga);
-        bool mb = game_matches_filter(gb);
-        if (ma != mb) {
-            return ma ? -1 : 1;
-        }
+    // Games shown (not hidden, and kept by any filter) come first; only they are shown. Worked out once per game
+    // before the sort: per comparison it built each game's group label thousands of times (~90 ms in the log).
+    if (ga->shown_now != gb->shown_now) {
+        return ga->shown_now ? -1 : 1;
     }
     if (sort_order == LAUNCHER_SORT_PLAYERS) {
         // Most players first (party games together); unknown last.
@@ -1474,7 +1474,31 @@ static int compare_sorted (const void *a, const void *b) {
             }
         }
     }
-    return compare_titles(ga->title, gb->title);
+    return (int)ga->title_rank - (int)gb->title_rank;
+}
+
+static library_game_t *rank_games = NULL;
+
+static int compare_rank_titles (const void *a, const void *b) {
+    return compare_titles(rank_games[*(const int *)a].title, rank_games[*(const int *)b].title);
+}
+
+/** @brief Each game's place in title order, worked out once for a category (its titles don't change). */
+static void rank_titles (library_category_t *category) {
+    int *order = malloc((category->count > 0 ? category->count : 1) * sizeof(int));
+    if (!order) {
+        return;
+    }
+    for (int i = 0; i < category->count; i++) {
+        order[i] = i;
+    }
+    rank_games = category->games;
+    qsort(order, category->count, sizeof(int), compare_rank_titles);
+    for (int r = 0; r < category->count; r++) {
+        category->games[order[r]].title_rank = (uint16_t)r;
+    }
+    free(order);
+    category->ranked = true;
 }
 
 bool library_arrange_category (library_category_t *category, int sort, int filter_field, const char *filter_value) {
@@ -1495,10 +1519,16 @@ bool library_arrange_category (library_category_t *category, int sort, int filte
     filter_field_now = filter_field;
     filter_value_now = filter_value;
     squash_text(filter_value, search_now, sizeof(search_now));
+    if (!category->ranked) {
+        rank_titles(category);
+    }
+    for (int i = 0; i < category->count; i++) {
+        category->games[i].shown_now = game_matches_filter(&category->games[i]);
+    }
     qsort(category->games, category->count, sizeof(library_game_t), compare_sorted);
 
     category->shown = 0;
-    while (category->shown < category->count && game_matches_filter(&category->games[category->shown])) {
+    while (category->shown < category->count && category->games[category->shown].shown_now) {
         category->shown++;
     }
     category->hidden_generation = hidden_generation;

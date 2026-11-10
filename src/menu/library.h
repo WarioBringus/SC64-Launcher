@@ -37,6 +37,8 @@ typedef struct {
     bool favorite;              /**< In the favorites (valid when favorite_generation is current) */
     uint32_t hidden_generation; /**< Hidden list version when hidden was worked out */
     bool hidden;                /**< Hidden from the library (valid when hidden_generation is current) */
+    bool shown_now;             /**< Passes the filter being arranged for (worked out once before a sort) */
+    uint16_t title_rank;        /**< Place in title order within its category (when the category is ranked) */
 } library_game_t;
 
 /** @brief One category (a folder of ROMs). */
@@ -56,6 +58,7 @@ typedef struct {
     int shown;                  /**< Games to show: not hidden and matching the filter (they come first) */
     library_game_t *games;
     int count;
+    bool ranked;                /**< games[].title_rank is worked out (titles don't change once listed) */
 } library_category_t;
 
 /**
