@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "fonts.h"
 #include "launcher_ui.h"
 #include "settings.h"
 #include "theme.h"
@@ -131,6 +132,7 @@ static void finish (menu_t *menu) {
     bool resized = (menu->settings.launcher_widescreen != saved.launcher_widescreen);
     menu->settings = saved;
     theme_set(theme_find(menu->settings.theme));
+    fonts_apply_theme();
     settings_save_later(&menu->settings);   // In case a screen wrote a setting meanwhile: the player's go back on the card.
     if (resized) {
         launcher_covers_reset();
@@ -187,6 +189,7 @@ bool tour_before_frame (menu_t *menu) {
     scene_t *before = (scene_at > 0) ? &scenes[scene_at - 1] : NULL;
     launcher_menu_close();
     theme_set(s->theme);
+    fonts_apply_theme();     // The text colours follow the theme (as a theme picked in the menu does).
     bool resized = (menu->settings.launcher_widescreen != (bool)s->wide);
     menu->settings.launcher_widescreen = s->wide;
     menu->settings.launcher_home_style = s->style;
