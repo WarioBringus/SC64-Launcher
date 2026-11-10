@@ -131,6 +131,9 @@ typedef struct {
     /** @brief A starts the game straight away, skipping the ROM details screen */
     bool launcher_quick_launch;
 
+    /** @brief The clock in 24-hour time (13:45) instead of 12-hour (1:45 PM) */
+    bool launcher_clock_24h;
+
     /** @brief Open the launcher on the Library rather than Home */
     bool launcher_start_in_library;
 
@@ -194,6 +197,8 @@ void settings_save (settings_t *settings);
 void settings_defer_saves (bool defer);
 /** @brief Stop deferring, leaving a waiting write for settings_flush (or the next save) to make. */
 void settings_resume_saves (void);
+/** @brief Note that the settings changed: written once the controller rests, not now (an SD write is a stall). */
+void settings_save_later (settings_t *settings);
 /** @brief Whether a deferred write is waiting. */
 bool settings_save_waiting (void);
 /** @brief Write a waiting deferred save now. */

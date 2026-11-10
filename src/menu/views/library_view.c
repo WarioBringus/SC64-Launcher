@@ -207,11 +207,12 @@ static void set_category (menu_t *menu, int index) {
     carousel_position = (float)(*current_selection());
     sound_play_effect(SFX_CURSOR);
 
-    // Remember it, so the library opens here next time (saved when leaving the library).
+    // Remember it, so the library opens here next time (written once the controller rests).
     const char *name = library_category_name(category_index);
     if (name) {
         free(menu->settings.launcher_category);
         menu->settings.launcher_category = strdup(name);
+        settings_save_later(&menu->settings);
     }
 }
 
@@ -744,6 +745,85 @@ static void folders_draw (menu_t *menu) {
     }
 }
 
+/* Favorites order (Settings > Home): the favorites as a list, C up/down moving the highlighted one. */
+static bool favorites_open = false;
+static bool favorites_dirty = false;
+static int favorites_sel = 0;
+static int favorites_top = 0;
+
+static const launcher_hint_t hints_favorites[] = {
+    { LAUNCHER_BUTTON_C_UP_DOWN, "C", "Move" },
+    { LAUNCHER_BUTTON_B, "B", "Done" },
+};
+
+static int favorites_count (menu_t *menu) {
+    int n = 0;
+    while (n < FAVORITES_COUNT && menu->bookkeeping.favorite_items[n].bookkeeping_type != BOOKKEEPING_TYPE_EMPTY) {
+        n++;
+    }
+    return n;
+}
+
+static void favorites_close (menu_t *menu) {
+    favorites_open = false;
+    if (favorites_dirty) {
+        bookkeeping_save(&menu->bookkeeping);   // One write for all the moves.
+        launcher_favorites_touched();
+        favorites_dirty = false;
+    }
+}
+
+static void favorites_process (menu_t *menu) {
+    int count = favorites_count(menu);
+    if (menu->actions.back) {
+        sound_play_effect(SFX_EXIT);
+        favorites_close(menu);
+        return;
+    }
+    int step = menu->actions.go_up ? -1 : (menu->actions.go_down ? 1 : 0);
+    int next = favorites_sel + step;
+    if (step && next >= 0 && next < count) {
+        if (menu->actions.go_fast) {
+            // C up/down: the highlighted game moves with the highlight.
+            bookkeeping_item_t swap = menu->bookkeeping.favorite_items[favorites_sel];
+            menu->bookkeeping.favorite_items[favorites_sel] = menu->bookkeeping.favorite_items[next];
+            menu->bookkeeping.favorite_items[next] = swap;
+            favorites_dirty = true;
+        }
+        favorites_sel = next;
+        sound_play_effect(SFX_CURSOR);
+    }
+    if (favorites_sel < favorites_top) {
+        favorites_top = favorites_sel;
+    }
+    if (favorites_sel >= favorites_top + PAGE_ROWS) {
+        favorites_top = favorites_sel - PAGE_ROWS + 1;
+    }
+}
+
+static void favorites_draw (menu_t *menu) {
+    page_begin("Favorites order");
+    int count = favorites_count(menu);
+    if (count == 0) {
+        page_note("No favorites yet. Press Start on a game and choose Add to favorites.");
+        return;
+    }
+    for (int r = 0; r < PAGE_ROWS; r++) {
+        int i = favorites_top + r;
+        if (i >= count) {
+            break;
+        }
+        path_t *path = path_clone(menu->bookkeeping.favorite_items[i].primary_path);
+        char *title = library_title_from_path(menu, path);
+        path_pop(path);
+        bool on = (i == favorites_sel);
+        page_row(r, on, title ? title : "", on ? STL_DEFAULT : STL_GRAY, path_last_get(path), STL_GRAY);
+        free(title);
+        path_free(path);
+    }
+    page_note("C up and down move a game; Home shows your favorites in this order");
+}
+
 static void launch (menu_t *menu, library_game_t *game) {
     path_free(menu->load.launcher_rom_path);
     menu->load.launcher_rom_path = library_game_path(game);
@@ -828,6 +908,10 @@ static void process (menu_t *menu) {
         folders_process(menu);
         return;
     }
+    if (favorites_open) {
+        favorites_process(menu);
+        return;
+    }
 
     launcher_request_t request = launcher_take_request();
     if (request == LAUNCHER_REQUEST_HIDDEN) {
@@ -838,6 +922,13 @@ static void process (menu_t *menu) {
     }
     if (request == LAUNCHER_REQUEST_FOLDERS) {
         folders_show();
+        return;
+    }
+    if (request == LAUNCHER_REQUEST_FAVORITES) {
+        favorites_open = true;
+        favorites_dirty = false;
+        favorites_sel = 0;
+        favorites_top = 0;
         return;
     }
     if (request == LAUNCHER_REQUEST_CATEGORY) {
@@ -883,7 +974,8 @@ static void process (menu_t *menu) {
         group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
         launcher_transition_fade();
         sound_play_effect(SFX_SWISH);
-        return;     // Saved with the other view settings when the library is left.
+        settings_save_later(&menu->settings);   // Kept even if the console is turned off here.
+        return;
     }
 
     // With a search showing, B clears it first.
@@ -1297,6 +1389,7 @@ static void change_size (menu_t *menu, int direction) {
         return;
     }
     menu->settings.launcher_tile_size = size;
+    settings_save_later(&menu->settings);
     snprintf(group_badge, sizeof(group_badge), "%s", names[size]);
     group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
     sound_play_effect(SFX_SETTING);
@@ -1749,6 +1842,9 @@ static void draw (menu_t *menu, surface_t *d) {
         } else if (folders_open) {
             folders_draw(menu);
             launcher_draw_footer(hints_folders, HINT_COUNT(hints_folders));
+        } else if (favorites_open) {
+            favorites_draw(menu);
+            launcher_draw_footer(hints_favorites, HINT_COUNT(hints_favorites));
         } else {
             hints_library[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
             hints_library[1].label = filter_field_label();

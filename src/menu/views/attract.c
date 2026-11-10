@@ -198,9 +198,8 @@ static void draw (menu_t *menu, surface_t *d) {
 
     if (menu->current_time >= 0) {
         char clock[16];
-        struct tm *t = localtime(&menu->current_time);
-        strftime(clock, sizeof(clock), "%I:%M %p", t);
-        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock[0] == '0' ? clock + 1 : clock);
+        launcher_clock_text(menu, clock, sizeof(clock));
+        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock);
     }
     // The song, top left level with the clock: the covers reach under the clock's corner as they move.
     launcher_draw_now_playing(LAUNCHER_X0, LAUNCHER_HEADER_Y + 2, LAUNCHER_WIDTH / 2, ALIGN_LEFT);

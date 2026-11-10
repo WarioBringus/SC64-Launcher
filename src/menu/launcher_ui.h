@@ -293,6 +293,7 @@ void launcher_draw_arrow(int cx, int cy, int size, bool right, color_t color);
 typedef enum {
     LAUNCHER_DO_RESCAN,
     LAUNCHER_DO_FOLDERS,
+    LAUNCHER_DO_FAVORITES,
     LAUNCHER_DO_HIDDEN,
     LAUNCHER_DO_FILE_BROWSER,
 } launcher_do_t;
@@ -550,6 +551,7 @@ typedef enum {
     LAUNCHER_REQUEST_SEARCH,
     LAUNCHER_REQUEST_HIDDEN,
     LAUNCHER_REQUEST_FOLDERS,
+    LAUNCHER_REQUEST_FAVORITES,     /**< The Favorites order page */
     LAUNCHER_REQUEST_CATEGORY,      /**< Show the folder launcher_requested_category() returns */
 } launcher_request_t;
 

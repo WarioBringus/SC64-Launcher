@@ -1377,8 +1377,9 @@ void launcher_clock_text (menu_t *menu, char *buffer, size_t size) {
     if (menu->current_time >= 0) {
         char clock[16];
         struct tm *t = localtime(&menu->current_time);
-        strftime(clock, sizeof(clock), "%I:%M %p", t);
-        snprintf(buffer, size, "%s", clock[0] == '0' ? clock + 1 : clock);
+        // 13:45 or 1:45 PM (Settings > System > Clock).
+        strftime(clock, sizeof(clock), menu->settings.launcher_clock_24h ? "%H:%M" : "%I:%M %p", t);
+        snprintf(buffer, size, "%s", (clock[0] == '0' && !menu->settings.launcher_clock_24h) ? clock + 1 : clock);
     }
 }
 
@@ -1495,10 +1496,8 @@ static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
 
     if (menu->current_time >= 0) {
         char clock[16];
-        struct tm *t = localtime(&menu->current_time);
-        strftime(clock, sizeof(clock), "%I:%M %p", t);
-        const char *shown = (clock[0] == '0') ? clock + 1 : clock;
-        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", shown);
+        launcher_clock_text(menu, clock, sizeof(clock));
+        launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock);
     }
     // The music note takes the spot for its few seconds; the new games notice comes back after.
     if (!draw_now_playing()) {
@@ -2484,6 +2483,7 @@ void launcher_settings_do (menu_t *menu, launcher_do_t what) {
             return;
         case LAUNCHER_DO_RESCAN: rescan_folders(menu, NULL); break;
         case LAUNCHER_DO_FOLDERS: pending_request = LAUNCHER_REQUEST_FOLDERS; break;
+        case LAUNCHER_DO_FAVORITES: pending_request = LAUNCHER_REQUEST_FAVORITES; break;
         case LAUNCHER_DO_HIDDEN: pending_request = LAUNCHER_REQUEST_HIDDEN; break;
     }
     menu->next_mode = MENU_MODE_LIBRARY;

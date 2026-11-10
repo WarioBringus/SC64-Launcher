@@ -236,6 +236,23 @@ static component_context_menu_t set_launcher_cover_style_context_menu = {
     COMPONENT_CONTEXT_MENU_LIST_END,
 }};
 
+static void set_launcher_clock_24h_type (menu_t *menu, void *arg) {
+    menu->settings.launcher_clock_24h = (bool)(uintptr_t)(arg);
+    settings_save(&menu->settings);
+}
+
+static int get_launcher_clock_24h_current_selection (menu_t *menu) {
+    return menu->settings.launcher_clock_24h ? 1 : 0;
+}
+
+static component_context_menu_t set_launcher_clock_24h_context_menu = {
+    .get_default_selection = get_launcher_clock_24h_current_selection,
+    .list = {
+        { .text = "12-hour", .action = set_launcher_clock_24h_type, .arg = (void *)(uintptr_t)(false) },
+        { .text = "24-hour", .action = set_launcher_clock_24h_type, .arg = (void *)(uintptr_t)(true) },
+    COMPONENT_CONTEXT_MENU_LIST_END,
+}};
+
 static void remove_background_image (menu_t *menu, void *arg) {
     (void)arg;
     (void)menu;
@@ -790,6 +807,8 @@ static const settings_row_t home_rows[] = {
       .note = "The last game played, first on Home" },
     { .label = "Recent games", .choices = &set_launcher_home_recent_context_menu },
     { .label = "Favorites", .choices = &set_launcher_home_favorites_context_menu },
+    { .label = "Favorites order", .action = settings_library, .arg = (void *)(uintptr_t)(LAUNCHER_DO_FAVORITES),
+      .does = "Arrange", .note = "The order your favorites show in on Home" },
     { .label = "Attract mode", .choices = &set_launcher_attract_minutes_context_menu,
       .note = "After this long without a button press, covers drift across the screen" },
 };
@@ -839,6 +858,7 @@ static const settings_row_t system_rows[] = {
       .note = "Off shows the original menu and file browser instead" },
     { .label = "PAL60 mode", .choices = &set_pal60_type_context_menu,
       .note = "May turn the screen dark; if so, turn it off in menu/config.ini on the SD card" },
+    { .label = "Clock", .choices = &set_launcher_clock_24h_context_menu },
     { .label = "Time and date", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_RTC), .does = "Set" },
     { .label = "Menu information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_CREDITS), .does = "View" },
     { .label = "Flashcart", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_FLASHCART), .does = "View" },
