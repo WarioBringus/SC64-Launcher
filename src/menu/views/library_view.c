@@ -5,11 +5,13 @@
  */
 
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "views.h"
+#include "../fonts.h"
 #include "../launcher_ui.h"
 #include "../perf_log.h"
 #include "../library.h"
@@ -28,10 +30,11 @@
 #define CAROUSEL_FAST_STEP          (5)
 #define CAROUSEL_TITLE_Y            (334)
 
-#define GROUP_BADGE_HEIGHT          (64)
-#define GROUP_BADGE_MIN_WIDTH       (84)
-#define GROUP_BADGE_PADDING         (28)
-#define GROUP_BADGE_MS              (800)
+#define GROUP_BADGE_HEIGHT          (64)    /* With a detail line under the name: GROUP_BADGE_TALL */
+#define GROUP_BADGE_TALL            (100)
+#define GROUP_BADGE_MIN_WIDTH       (96)
+#define GROUP_BADGE_PADDING         (48)
+#define GROUP_BADGE_MS              (900)
 
 #define INFO_LINE_Y                 (398)   /* Game details under the grid, above the hints */
 #define NEW_GAMES_CHECK_US          (2000)  /* Time per frame spent looking for new ROMs */
@@ -79,6 +82,8 @@ static float grid_scroll = 0.0f;    /* Drawn scroll position in pixels, gliding 
 static bool motion_snap = true;     /* Next grid frame appears in place (screen opened, layout or list changed) */
 static float carousel_position = 0.0f;
 static char group_badge[48] = "";
+static char group_badge_detail[96] = "";        /* Under the line in the badge ("14 games"), for one badge */
+static uint64_t group_badge_detail_until = 0;    /* The badge the detail belongs to (its group_badge_until_ms) */
 static uint64_t group_badge_until_ms = 0;
 static void change_size(menu_t *menu, int direction);
 static int current_sort = LAUNCHER_SORT_TITLE;
@@ -256,9 +261,26 @@ static int jump_group (library_category_t *c, int sel, int direction) {
     return group_start(c, start - 1);
 }
 
+/** @brief The detail line for the badge just set (shown only with that badge). */
+static void set_badge_detail (const char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    vsnprintf(group_badge_detail, sizeof(group_badge_detail), fmt, va);
+    va_end(va);
+    group_badge_detail_until = group_badge_until_ms;
+}
+
 static void show_group_badge (library_category_t *c, int sel) {
     library_game_group(&c->games[sel], current_sort, group_badge, sizeof(group_badge));
     group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+    // How many games the group has, among those shown.
+    int count = 0;
+    char label[48];
+    for (int i = 0; i < c->shown; i++) {
+        library_game_group(&c->games[i], current_sort, label, sizeof(label));
+        count += (strcmp(label, group_badge) == 0);
+    }
+    set_badge_detail(count == 1 ? "1 game" : "%d games", count);
 }
 
 /**
@@ -752,6 +774,10 @@ static void process (menu_t *menu) {
         const char *name = library_category_name(category_index);
         snprintf(group_badge, sizeof(group_badge), "%s", name ? name : "");
         group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+        library_category_t *landed = library_category(category_index);
+        if (landed) {
+            set_badge_detail(landed->shown == 1 ? "1 game" : "%d games", landed->shown);
+        }
         return;
     }
     if (request == LAUNCHER_REQUEST_SEARCH) {
@@ -767,6 +793,7 @@ static void process (menu_t *menu) {
         *current_selection() = rand() % current->shown;
         snprintf(group_badge, sizeof(group_badge), "Surprise!");
         group_badge_until_ms = get_ticks_ms() + GROUP_BADGE_MS;
+        set_badge_detail("%s", current->games[*current_selection()].title);
         sound_play_effect(SFX_ENTER);
         return;
     }
@@ -1638,18 +1665,27 @@ static void draw (menu_t *menu, surface_t *d) {
         }
 
         if (group_badge[0] && get_ticks_ms() < group_badge_until_ms) {
-            // A pill wide enough for the group name ("M", "Racing", "1998"...).
-            int w = (int)strlen(group_badge) * 14 + GROUP_BADGE_PADDING;
-            if (w < GROUP_BADGE_MIN_WIDTH) {
-                w = GROUP_BADGE_MIN_WIDTH;
-            }
-            if (w > LAUNCHER_WIDTH - 40) {
-                w = LAUNCHER_WIDTH - 40;
-            }
+            // A pill wide enough for the group name ("M", "Racing", "1998"...) in the display size, and under a line
+            // in it, what the badge is about ("14 games", the game Surprise me picked).
+            fonts_load_display();
+            bool detail = group_badge_detail[0] && group_badge_detail_until == group_badge_until_ms;
+            int name_w = launcher_text_sized_width(LAUNCHER_SIZE_DISPLAY, group_badge);
+            int detail_w = detail ? launcher_text_sized_width(LAUNCHER_SIZE_BODY, group_badge_detail) : 0;
+            int w = ((name_w > detail_w) ? name_w : detail_w) + GROUP_BADGE_PADDING;
+            w = (w < GROUP_BADGE_MIN_WIDTH) ? GROUP_BADGE_MIN_WIDTH : w;
+            w = (w > LAUNCHER_WIDTH - 40) ? LAUNCHER_WIDTH - 40 : w;
+            int h = detail ? GROUP_BADGE_TALL : GROUP_BADGE_HEIGHT;
             int x0 = LAUNCHER_CENTER_X - w / 2;
-            int y0 = 222 - GROUP_BADGE_HEIGHT / 2;
-            launcher_fill_rounded(x0, y0, x0 + w, y0 + GROUP_BADGE_HEIGHT, 16, theme_current()->accent);
-            launcher_title(x0 + 8, y0 + (GROUP_BADGE_HEIGHT - 30) / 2, w - 16, ALIGN_CENTER, STL_ON_ACCENT, group_badge);
+            int y0 = 222 - h / 2;
+            const theme_t *t = theme_current();
+            launcher_fill_rounded(x0, y0, x0 + w, y0 + h, 18, t->accent);
+            int name_y = detail ? y0 + 10 : y0 + (h - 42) / 2;
+            launcher_text_sized(LAUNCHER_SIZE_DISPLAY, x0 + 12, name_y, w - 24, 42, ALIGN_CENTER, STL_ON_ACCENT, group_badge);
+            if (detail) {
+                launcher_fill_rounded(LAUNCHER_CENTER_X - 20, y0 + 56, LAUNCHER_CENTER_X + 20, y0 + 59, 1, t->on_accent);
+                launcher_text_sized(LAUNCHER_SIZE_BODY, x0 + 12, y0 + 66, w - 24, 22, ALIGN_CENTER, STL_ON_ACCENT,
+                    group_badge_detail);
+            }
         }
     }
 
