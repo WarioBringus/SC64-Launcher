@@ -807,8 +807,6 @@ static const settings_row_t home_rows[] = {
       .note = "The last game played, first on Home" },
     { .label = "Recent games", .choices = &set_launcher_home_recent_context_menu },
     { .label = "Favorites", .choices = &set_launcher_home_favorites_context_menu },
-    { .label = "Favorites order", .action = settings_library, .arg = (void *)(uintptr_t)(LAUNCHER_DO_FAVORITES),
-      .does = "Arrange", .note = "The order your favorites show in on Home" },
     { .label = "Attract mode", .choices = &set_launcher_attract_minutes_context_menu,
       .note = "After this long without a button press, covers drift across the screen" },
 };

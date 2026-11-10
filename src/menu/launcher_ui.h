@@ -293,7 +293,6 @@ void launcher_draw_arrow(int cx, int cy, int size, bool right, color_t color);
 typedef enum {
     LAUNCHER_DO_RESCAN,
     LAUNCHER_DO_FOLDERS,
-    LAUNCHER_DO_FAVORITES,
     LAUNCHER_DO_HIDDEN,
     LAUNCHER_DO_FILE_BROWSER,
 } launcher_do_t;
@@ -458,6 +457,15 @@ void launcher_draw_focus_ring(int x0, int y0, int x1, int y1, int radius);
 /** @brief The same for a tile's rectangle. */
 void launcher_draw_focus_ring_tile(int x, int y, int w, int h);
 
+/**
+ * @brief While true, the focus ring (and Minimal's lane bar) pulses between the theme's two accents and its text
+ * colour: Home's favorite being moved.
+ */
+void launcher_set_focus_moving(bool moving);
+
+/** @brief The focus ring's colour this frame (the accent, or the moving pulse). */
+color_t launcher_focus_color(void);
+
 /** @brief The focus ring around a tile's cover where it fills the tile (it may be a pixel short), else the tile. */
 void launcher_draw_focus_ring_cover(int x, int y, int w, int h, surface_t *image);
 
@@ -551,7 +559,6 @@ typedef enum {
     LAUNCHER_REQUEST_SEARCH,
     LAUNCHER_REQUEST_HIDDEN,
     LAUNCHER_REQUEST_FOLDERS,
-    LAUNCHER_REQUEST_FAVORITES,     /**< The Favorites order page */
     LAUNCHER_REQUEST_CATEGORY,      /**< Show the folder launcher_requested_category() returns */
 } launcher_request_t;
 

@@ -1921,6 +1921,7 @@ void launcher_focus_reset (void) {
 }
 
 static void draw_ring_around (int x0, int y0, int x1, int y1, int radius, bool cover);
+color_t launcher_focus_color(void);
 
 /** @brief The gliding focus ring, around a cover tile or around something else (a card). */
 static void focus_ring (int x0, int y0, int x1, int y1, int radius, bool cover) {
@@ -1944,6 +1945,25 @@ static void focus_ring (int x0, int y0, int x1, int y1, int radius, bool cover) 
 
 void launcher_draw_focus_ring (int x0, int y0, int x1, int y1, int radius) {
     focus_ring(x0, y0, x1, y1, radius, false);
+}
+
+static bool focus_moving = false;
+
+void launcher_set_focus_moving (bool moving) {
+    focus_moving = moving;
+}
+
+color_t launcher_focus_color (void) {
+    const theme_t *t = theme_current();
+    if (!focus_moving) {
+        return t->accent;
+    }
+    // Between the second accent and the text colour, about twice a second: different from the resting cursor in
+    // every theme, whatever its colours.
+    float phase = (float)(get_ticks_ms() % 600) / 600.0f;
+    float s = 0.5f - 0.5f * cosf(phase * 6.2831853f);
+    color_t a = t->accent2, b = t->text;
+    return RGBA32(a.r + (int)((b.r - a.r) * s), a.g + (int)((b.g - a.g) * s), a.b + (int)((b.b - a.b) * s), 0xFF);
 }
 
 void launcher_draw_focus_ring_tile (int x, int y, int w, int h) {
@@ -2017,10 +2037,11 @@ int launcher_focus_lift (int key) {
  */
 static void draw_ring_around (int x0, int y0, int x1, int y1, int radius, bool cover) {
     int t = (int)(LAUNCHER_RING * (widescreen ? WIDE_SQUEEZE : 1.0f) + 0.5f);
-    int rx0 = px(x0) - t;
-    int rx1 = (cover ? px(x0) + real_cover_width(x1 - x0) : px(x1)) + t;
-    outline_rounded_real(rx0, y0 - LAUNCHER_RING, rx1, y1 + LAUNCHER_RING,
-        radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, theme_current()->accent);
+    int in = cover ? 1 : 0;     // Around a cover, over its outer pixel
+    int rx0 = px(x0) - t + in;
+    int rx1 = (cover ? px(x0) + real_cover_width(x1 - x0) : px(x1)) + t - in;
+    outline_rounded_real(rx0, y0 - LAUNCHER_RING + in, rx1, y1 + LAUNCHER_RING - in,
+        radius + LAUNCHER_RING, LAUNCHER_RING, widescreen ? WIDE_SQUEEZE : 1.0f, launcher_focus_color());
 }
 
 void launcher_draw_ring (int x0, int y0, int x1, int y1, int radius) {
@@ -2091,16 +2112,6 @@ static void blit_cover_resized (surface_t *image, int x, int y, int w, int h) {
 void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bool pending, const char *title, bool selected, color_t behind, float zoom) {
     uint64_t started = get_ticks_us();
     color_t edge = behind;
-    if (selected) {
-        // Around the cover itself where it fills the tile (Carousel): around the tile it left a gap.
-        int rx, ry, rw, rh;
-        if (cover_rect_in_tile(x, y, w, h, image, zoom, &rx, &ry, &rw, &rh)) {
-            launcher_draw_ring(rx, ry, rx + rw, ry + rh, TILE_RADIUS);
-        } else {
-            launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
-        }
-        launcher_note_focused_cover_zoomed(image, x, y, w, h, zoom);
-    }
 
     // Covers that nearly fill the tile are drawn edge to edge; others sit on a rounded panel.
     int iw = image ? (int)(image->width * zoom) : 0;
@@ -2125,6 +2136,17 @@ void launcher_draw_tile_zoomed (int x, int y, int w, int h, surface_t *image, bo
         char escaped[256];
         escape_text_codes(title, escaped, sizeof(escaped));
         text_box_wrapped(font_for(escaped, FNT_LAUNCHER), x + 4, y + 4, w - 8, h - 8, ALIGN_CENTER, VALIGN_CENTER, STL_GRAY, escaped);
+    }
+    if (selected) {
+        // After the cover: its corner rounding is painted in the colour behind, which drawn over the ring left dark
+        // dots in the ring's corners (Carousel). Around the cover itself where it fills the tile.
+        int rx, ry, rw, rh;
+        if (cover_rect_in_tile(x, y, w, h, image, zoom, &rx, &ry, &rw, &rh)) {
+            launcher_draw_ring(rx, ry, rx + rw, ry + rh, TILE_RADIUS);
+        } else {
+            launcher_draw_ring(x, y, x + w, y + h, TILE_RADIUS);
+        }
+        launcher_note_focused_cover_zoomed(image, x, y, w, h, zoom);
     }
     perf_log_add(PERF_COVERS, (uint32_t)(get_ticks_us() - started));
 }
@@ -2483,7 +2505,6 @@ void launcher_settings_do (menu_t *menu, launcher_do_t what) {
             return;
         case LAUNCHER_DO_RESCAN: rescan_folders(menu, NULL); break;
         case LAUNCHER_DO_FOLDERS: pending_request = LAUNCHER_REQUEST_FOLDERS; break;
-        case LAUNCHER_DO_FAVORITES: pending_request = LAUNCHER_REQUEST_FAVORITES; break;
         case LAUNCHER_DO_HIDDEN: pending_request = LAUNCHER_REQUEST_HIDDEN; break;
     }
     menu->next_mode = MENU_MODE_LIBRARY;

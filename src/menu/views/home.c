@@ -43,6 +43,19 @@ static launcher_hint_t hints_home[] = {
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
+static launcher_hint_t hints_home_favorite[] = {
+    { LAUNCHER_BUTTON_A, "A", "Play" },
+    { LAUNCHER_BUTTON_OTHER, "Z", "Move" },
+    { LAUNCHER_BUTTON_OTHER, "R", "Library" },
+    { LAUNCHER_BUTTON_START, "S", "Menu" },
+};
+
+static const launcher_hint_t hints_moving[] = {
+    { LAUNCHER_BUTTON_LEFT_RIGHT, "", "Move" },
+    { LAUNCHER_BUTTON_A, "A", "Place" },
+    { LAUNCHER_BUTTON_B, "B", "Cancel" },
+};
+
 static const launcher_hint_t hints_empty[] = {
     { LAUNCHER_BUTTON_OTHER, "R", "Library" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
@@ -253,6 +266,77 @@ static bool packs_open = false;         /* Every cover pack opened ahead (again 
 
 static void process_styled(menu_t *menu, int style);
 
+/* Moving a favorite: Z picks up the highlighted one, the d-pad or stick moves it, A or Z places it, B puts it back. */
+static bool moving = false;
+static bookkeeping_item_t moving_backup[FAVORITES_COUNT];   /* The order before, for B */
+static int moving_from = 0;
+
+static int row_of_kind(row_kind_t kind);
+static home_item_t *focused_item(void);
+
+static void moving_end (menu_t *menu, bool keep) {
+    moving = false;
+    launcher_set_focus_moving(false);
+    if (keep) {
+        bookkeeping_save(&menu->bookkeeping);   // One write, when it's placed.
+        launcher_favorites_touched();
+        sound_play_effect(SFX_SETTING);
+    } else {
+        memcpy(menu->bookkeeping.favorite_items, moving_backup, sizeof(moving_backup));
+        int r = row_of_kind(ROW_FAVORITES);
+        build_rows(menu);
+        r = row_of_kind(ROW_FAVORITES);
+        if (r >= 0) {
+            row_selected = r;
+            rows[r].selected = (moving_from < rows[r].count) ? moving_from : 0;
+        }
+        sound_play_effect(SFX_EXIT);
+    }
+}
+
+/** @brief Z on a favorite: it's picked up (needs at least two to move between). */
+static bool moving_start (menu_t *menu) {
+    home_item_t *f = focused_item();
+    int r = row_of_kind(ROW_FAVORITES);
+    if (!f || !f->favorite || r < 0 || row_selected != r || rows[r].count < 2) {
+        return false;
+    }
+    memcpy(moving_backup, menu->bookkeeping.favorite_items, sizeof(moving_backup));
+    moving_from = rows[r].selected;
+    moving = true;
+    launcher_set_focus_moving(true);
+    sound_play_effect(SFX_POP);
+    return true;
+}
+
+/** @brief While moving: any direction moves the held favorite one place, the others making room. */
+static void moving_process (menu_t *menu) {
+    if (menu->actions.enter || menu->actions.trigger_z) {
+        moving_end(menu, true);
+        return;
+    }
+    if (menu->actions.back) {
+        moving_end(menu, false);
+        return;
+    }
+    int step = (menu->actions.go_left || menu->actions.go_up) ? -1 : ((menu->actions.go_right || menu->actions.go_down) ? 1 : 0);
+    home_row_t *row = &rows[row_selected];
+    int i = row->selected, j = i + step;
+    if (!step || j < 0 || j >= row->count) {
+        return;
+    }
+    // The row's entries point at their favorites slots: the two slots and the two titles change places.
+    bookkeeping_item_t *items = menu->bookkeeping.favorite_items;
+    bookkeeping_item_t swap = items[row->items[i].index];
+    items[row->items[i].index] = items[row->items[j].index];
+    items[row->items[j].index] = swap;
+    char *title = row->items[i].title;
+    row->items[i].title = row->items[j].title;
+    row->items[j].title = title;
+    row->selected = j;
+    sound_play_effect(SFX_TICK);
+}
+
 static void process (menu_t *menu) {
     if (menu->actions.go_up || menu->actions.go_down || menu->actions.go_left || menu->actions.go_right ||
         menu->actions.enter || menu->actions.back || menu->actions.settings || menu->actions.lz_context ||
@@ -260,6 +344,13 @@ static void process (menu_t *menu) {
         home_last_input_ms = get_ticks_ms();
     }
     if (launcher_menu_process(menu)) {
+        return;
+    }
+    if (moving) {
+        moving_process(menu);
+        return;
+    }
+    if (menu->actions.trigger_z && row_count > 0 && moving_start(menu)) {
         return;
     }
 
@@ -1119,7 +1210,8 @@ static void draw_minimal (menu_t *menu, int *lookups_left) {
     color_t bar = eased_color_step(&type_bar, t->feature);
     int ly0 = TYPE_CENTER_Y - TYPE_LANE_H / 2;
     ui_components_box_draw(0, ly0, display_get_width(), ly0 + TYPE_LANE_H, lane);
-    ui_components_box_draw(0, ly0, launcher_px(TYPE_LANE_BAR), ly0 + TYPE_LANE_H, bar);
+    ui_components_box_draw(0, ly0, launcher_px(TYPE_LANE_BAR * (moving ? 2 : 1)), ly0 + TYPE_LANE_H,
+        moving ? launcher_focus_color() : bar);     // Wider and pulsing while a favorite is being moved
 
     bool hires = launcher_covers_have_pack(menu->storage_prefix, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H);
     int clip_x1 = launcher_px(cover_x - 10);
@@ -1259,6 +1351,24 @@ static void set_style_chrome (int style) {
     }
 }
 
+/** @brief The hints: Z Move on a favorite (at least two), and while one is moving, how to move and place it. */
+static void draw_home_hints (menu_t *menu) {
+    if (moving) {
+        launcher_draw_footer(hints_moving, HINT_COUNT(hints_moving));
+        return;
+    }
+    const char *play = menu->settings.launcher_quick_launch ? "Play" : "Details";
+    home_item_t *f = focused_item();
+    int r = row_of_kind(ROW_FAVORITES);
+    if (f && f->favorite && r >= 0 && row_selected == r && rows[r].count > 1) {
+        hints_home_favorite[0].label = play;
+        launcher_draw_footer(hints_home_favorite, HINT_COUNT(hints_home_favorite));
+        return;
+    }
+    hints_home[0].label = play;
+    launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
+}
+
 static void draw (menu_t *menu, surface_t *d) {
     rdpq_attach(d, NULL);
 
@@ -1282,8 +1392,7 @@ static void draw (menu_t *menu, surface_t *d) {
         draw_styled(menu, menu->settings.launcher_home_style, &lookups_left);
         motion_snap = false;
         home_background_work(menu, &lookups_left);
-        hints_home[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
-        launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
+        draw_home_hints(menu);
     } else {
         // Keep the selected row on screen; rows above or below scroll out of the content area.
         int row_top = CONTENT_TOP;
@@ -1325,8 +1434,7 @@ static void draw (menu_t *menu, surface_t *d) {
         rdpq_set_scissor(0, 0, display_get_width(), display_get_height());
         motion_snap = false;
         home_background_work(menu, &lookups_left);
-        hints_home[0].label = menu->settings.launcher_quick_launch ? "Play" : "Details";
-        launcher_draw_footer(hints_home, HINT_COUNT(hints_home));
+        draw_home_hints(menu);
     }
 
     launcher_menu_draw();
@@ -1389,6 +1497,11 @@ static void draw (menu_t *menu, surface_t *d) {
 
 
 void view_home_init (menu_t *menu) {
+    if (moving) {
+        moving = false;
+        launcher_set_focus_moving(false);
+        memcpy(menu->bookkeeping.favorite_items, moving_backup, sizeof(moving_backup));
+    }
     launcher_reset_idle();  // Time spent on other screens isn't idle time here (attract mode started on arrival).
     packs_open = false;     // Leaving the launcher closes them.
     launcher_covers_pin_new_set();
