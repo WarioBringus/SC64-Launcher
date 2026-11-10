@@ -1450,6 +1450,18 @@ static void binder_details (menu_t *menu, home_item_t *h, bool resume, char *lin
     }
 }
 
+/**
+ * @brief The outline round a card that's drawn over it: only its edges are filled (filling the whole card, then the
+ * card over it, cost ~3 ms a frame for the page).
+ */
+static void binder_outline (int x0, int y0, int x1, int y1, int radius, color_t color) {
+    int f = BINDER_FRAME, band = 2 * (radius + f);
+    launcher_fill_rounded(x0 - f, y0 - f, x1 + f, y0 - f + band, radius + f, color);
+    launcher_fill_rounded(x0 - f, y1 + f - band, x1 + f, y1 + f, radius + f, color);
+    launcher_fill_rounded(x0 - f, y0 + radius, x0, y1 - radius, 0, color);
+    launcher_fill_rounded(x1, y0 + radius, x1 + f, y1 - radius, 0, color);
+}
+
 /** @brief The tabs down the left: the open one joins the page (or stands apart, ringed, while the tabs have the focus). */
 static void binder_draw_tabs (binder_tab_t *tabs, int n, int cur, int page_x0) {
     const theme_t *t = theme_current();
@@ -1462,8 +1474,7 @@ static void binder_draw_tabs (binder_tab_t *tabs, int n, int cur, int page_x0) {
         if (open && binder_rail) {
             launcher_draw_focus_ring(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS);
         } else {
-            launcher_fill_rounded(LAUNCHER_X0 - BINDER_FRAME, y - BINDER_FRAME, x1 + BINDER_FRAME, y + BINDER_TAB_H +
-                BINDER_FRAME, BINDER_TAB_RADIUS + BINDER_FRAME, frame);
+            binder_outline(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS, frame);
         }
         launcher_fill_rounded(LAUNCHER_X0, y, x1, y + BINDER_TAB_H, BINDER_TAB_RADIUS, open ? t->panel :
             color_mix(t->bg, t->text, 9));
@@ -1494,8 +1505,7 @@ static void draw_binder (menu_t *menu, int *lookups_left) {
         color_mix(t->feature, t->bg, 40));
     launcher_fill_slanted(0, BINDER_WEDGE_FOOT_W, BINDER_WEDGE_Y, foot, t->feature);
     // The page's outline goes under the tabs, so the open tab's runs into it with no line between them.
-    launcher_fill_rounded(x0 - BINDER_FRAME, CONTENT_TOP - BINDER_FRAME, x1 + BINDER_FRAME, CONTENT_BOTTOM + BINDER_FRAME,
-        CARD_RADIUS + BINDER_FRAME, launcher_frame_color());
+    binder_outline(x0, CONTENT_TOP, x1, CONTENT_BOTTOM, CARD_RADIUS, launcher_frame_color());
     if (rail) {
         binder_draw_tabs(tabs, n, cur, x0);
     }
