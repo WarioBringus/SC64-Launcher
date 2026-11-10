@@ -54,6 +54,7 @@ static launcher_hint_t hints_library[] = {
     { LAUNCHER_BUTTON_A, "A", "Play" },     /* "Details" without Quick launch (set as it's drawn) */
     { LAUNCHER_BUTTON_C_LEFT_RIGHT, "C", "Jump" },
     { LAUNCHER_BUTTON_OTHER, "L", "Home" },
+    { LAUNCHER_BUTTON_OTHER, "R", "View" },
     { LAUNCHER_BUTTON_START, "S", "Menu" },
 };
 
