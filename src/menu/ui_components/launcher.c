@@ -382,14 +382,26 @@ static void text_centered_ink (uint8_t font, int x, int y, int w, int h, menu_fo
     width_entry_t *e = text_measure(font, text);
     int rx0 = px(x), rx1 = px(x + w);
     int pen = rx0 + (rx1 - rx0 - e->width + 1) / 2 - e->ink_x0;
-    int left = widescreen ? ((pen - slide_dx) * 4) / 3 : pen - slide_dx;
-    while (px(left) < pen) {
-        left++;
+    // Down, by the letters' own ink too: the glyphs' top and bottom from the font, the baseline put so their middle
+    // is the box's middle (the font's line box, which a box centres, sits the capitals a pixel or two off).
+    uint8_t real_font = launcher_font(font);
+    const rdpq_font_t *f = rdpq_text_get_font(real_font);
+    int top = 127, bottom = -127;
+    for (const char *c = text; f && *c; c++) {
+        rdpq_font_gmetrics_t m;
+        if (*c != ' ' && rdpq_font_get_glyph_metrics(f, (unsigned char)*c, &m)) {
+            top = (m.y0 < top) ? m.y0 : top;
+            bottom = (m.y1 > bottom) ? m.y1 : bottom;
+        }
     }
-    while (px(left) > pen) {
-        left--;
+    if (top > bottom) {
+        int left = widescreen ? ((pen - slide_dx) * 4) / 3 : pen - slide_dx;
+        text_box_font(font, left, y, 0, h, ALIGN_LEFT, VALIGN_CENTER, style, text);
+        return;
     }
-    text_box_font(font, left, y, 0, h, ALIGN_LEFT, VALIGN_CENTER, style, text);
+    // The ink spans y0..y1 (exclusive), so its middle is (top + bottom - 1) / 2 from the baseline.
+    float baseline = (float)y + (float)(h - 1) / 2.0f - (float)(top + bottom - 1) / 2.0f;
+    rdpq_text_print(&(rdpq_textparms_t) { .style_id = style }, real_font, (float)pen, floorf(baseline + 0.5f), text);
 }
 
 static int text_width (const char *text) {
@@ -1680,9 +1692,10 @@ void launcher_draw_footer (const launcher_hint_t *hints, int count) {
                 draw_arrow(ax + 3, cy, 1, 0);
             }
         } else if (hints[i].kind == LAUNCHER_BUTTON_LEFT_RIGHT) {
+            // Two arrow heads, each centred on its half of the pill.
             int cx = x + button_w[i] / 2, cy = y + FOOTER_BUTTON_SIZE / 2;
-            draw_arrow(cx - 4, cy, -1, 0);
-            draw_arrow(cx + 4, cy, 1, 0);
+            launcher_draw_arrow(cx - 5, cy, 9, false, RGBA32(0xFF, 0xFF, 0xFF, 0xFF));
+            launcher_draw_arrow(cx + 5, cy, 9, true, RGBA32(0xFF, 0xFF, 0xFF, 0xFF));
         } else {
             text_centered_ink(FNT_LAUNCHER, x, text_y, button_w[i], FOOTER_TEXT_H, STL_ON_BUTTON, hints[i].button);
         }
