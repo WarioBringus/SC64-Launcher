@@ -1986,13 +1986,21 @@ void launcher_set_focus_moving (bool moving) {
     focus_moving = moving;
 }
 
-/** @brief Relative luminance (sRGB, as for text contrast). */
+/**
+ * @brief Relative luminance (sRGB, as for text contrast). Each channel's linear value comes from a table made once:
+ * powf is slow on the N64, and contrast is now checked every frame (button letters, Cartridge's text on its band).
+ */
 static float color_luminance (color_t c) {
-    float ch[3] = { c.r / 255.0f, c.g / 255.0f, c.b / 255.0f };
-    for (int i = 0; i < 3; i++) {
-        ch[i] = (ch[i] <= 0.03928f) ? ch[i] / 12.92f : powf((ch[i] + 0.055f) / 1.055f, 2.4f);
+    static float linear[256];
+    static bool ready = false;
+    if (!ready) {
+        for (int v = 0; v < 256; v++) {
+            float x = v / 255.0f;
+            linear[v] = (x <= 0.03928f) ? x / 12.92f : powf((x + 0.055f) / 1.055f, 2.4f);
+        }
+        ready = true;
     }
-    return 0.2126f * ch[0] + 0.7152f * ch[1] + 0.0722f * ch[2];
+    return 0.2126f * linear[c.r] + 0.7152f * linear[c.g] + 0.0722f * linear[c.b];
 }
 
 /** @brief Contrast ratio of two colours (1 = the same, 21 = black on white). */
