@@ -8,9 +8,9 @@ file list. Based on N64FlashcartMenu.
 
 WHAT'S IN THIS FOLDER
 ---------------------
-  SD card\                       Copy everything in here to the root of your SD card: the launcher
-                                 and empty game folders (N64 USA, N64 Europe, N64 Japan, N64 China,
-                                 N64 Hacks) for you to fill.
+  SD card\                       A template: copy everything in here to the root of your SD card (the
+                                 launcher, and empty game folders: N64 USA, N64 Europe, N64 Japan,
+                                 N64 China, N64 Hacks). Don't put games in this folder itself.
   Get covers and game info.bat   Double-click: box art and game details for your games.
   Music converter.bat            Double-click: turn MP3/WAV files into background music.
   tools\                         What those two use. Nothing to install; leave it next to them.
@@ -18,17 +18,38 @@ WHAT'S IN THIS FOLDER
 
 SETTING UP (about 10 minutes)
 -----------------------------
-1. Copy everything inside the "SD card" folder to the root of your SD card
-   (sc64menu.n64 must sit at the top level of the card, next to the game folders).
-2. Place your games in the matching folders on the card: N64 USA, N64 Europe, N64 Japan,
-   N64 China and N64 Hacks. Each folder becomes a tab in the Library; empty ones don't show.
-   (You can rename them or add your own folders too.)
-3. With the SD card in your PC, double-click "Get covers and game info.bat".
-   It finds your card, downloads box art and game details, and builds the covers the launcher uses.
+Everything below happens on your actual SD card, plugged into your PC. Do the steps in this order.
+
+1. PUT THE LAUNCHER ON THE CARD
+   Plug your SD card into your PC. Open the "SD card" folder here, select everything inside it,
+   and copy it to the top level (root) of your SD card.
+   Your card should now look like this:
+       E:\                      (your SD card's drive letter)
+         sc64menu.n64
+         menu\
+         N64 China\
+         N64 Europe\
+         N64 Hacks\
+         N64 Japan\
+         N64 USA\
+
+2. PUT YOUR GAMES ON THE CARD
+   Copy your games into the matching folders ON THE SD CARD (for example E:\N64 USA).
+   Each folder becomes a tab in the Library; empty ones don't show. You can rename them or add your
+   own folders too. Keep any "saves" folders you already have.
+
+3. GET COVERS AND GAME INFO
+   Leave the SD card plugged in and double-click "Get covers and game info.bat" (in this folder).
+   It finds your SD card by itself (it asks you to confirm the drive letter), downloads box art and
+   game details, and builds the covers the launcher uses, writing them straight onto the card.
    The first run downloads about 60 MB plus about 1 MB per game; later runs only fetch what's new.
-4. (Optional) Double-click "Music converter.bat", drop in MP3 or WAV files, pick your SD card and
-   press "Convert and copy to SD card". Songs play in the background, in the order you choose in Settings.
-5. Eject the SD card safely, put it in your SummerCart64 and turn the console on.
+
+4. MUSIC (OPTIONAL)
+   Double-click "Music converter.bat", drop in MP3 or WAV files, pick your SD card and press
+   "Convert and copy to SD card". Songs play in the background; the order is set in Settings.
+
+5. PLAY
+   Eject the SD card safely, put it in your SummerCart64 and turn the console on.
 
 Added games later? Run "Get covers and game info.bat" again.
 
