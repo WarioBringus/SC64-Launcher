@@ -38,6 +38,8 @@ typedef struct {
     uint32_t hidden_generation; /**< Hidden list version when hidden was worked out */
     bool hidden;                /**< Hidden from the library (valid when hidden_generation is current) */
     bool shown_now;             /**< Passes the filter being arranged for (worked out once before a sort) */
+    bool duplicate;             /**< Another copy of this game (same code and title) is in the same folder: left out
+                                     while "one entry per game" is on */
     uint16_t title_rank;        /**< Place in title order within its category (when the category is ranked) */
 } library_game_t;
 

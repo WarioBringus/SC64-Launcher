@@ -802,6 +802,8 @@ static char *index_cover_path (int id) {
     return full;
 }
 
+static void mark_duplicates(library_category_t *c);
+
 /**
  * @brief List a folder's games from the cover index: no SD card access, covers already known.
  */
@@ -852,6 +854,7 @@ static void load_index_games (library_category_t *c) {
     }
 
     qsort(c->games, c->count, sizeof(library_game_t), compare_games);
+    mark_duplicates(c);
     c->portrait = with_cover > 0 && (japan * 2 > with_cover);
     c->filter_field = -1;
     c->shown = c->count;
@@ -929,6 +932,33 @@ static bool game_identity (const library_game_t *g, char key[4]) {
     key[2] = m[4];
     key[3] = '\0';
     return true;
+}
+
+/**
+ * @brief With "one entry per game" on, a second copy of a game in the same folder is marked a duplicate: the same game
+ * code and the same title once tidied ("Super Mario 64 (U) [!]" and "Super Mario 64 (USA)"). A hack beside its original
+ * shares the code but not the title, so it stays. games[] is sorted by title, so copies sit together.
+ */
+static void mark_duplicates (library_category_t *c) {
+    for (int i = 0; i < c->count; i++) {
+        c->games[i].duplicate = false;
+    }
+    if (!one_per_game) {
+        return;
+    }
+    for (int i = 1; i < c->count; i++) {
+        char key_i[4];
+        if (!game_identity(&c->games[i], key_i)) {
+            continue;
+        }
+        for (int j = i - 1; j >= 0 && strcasecmp(c->games[j].title, c->games[i].title) == 0; j--) {
+            char key_j[4];
+            if (!c->games[j].duplicate && game_identity(&c->games[j], key_j) && strcmp(key_i, key_j) == 0) {
+                c->games[i].duplicate = true;
+                break;
+            }
+        }
+    }
 }
 
 /** @brief Whether a folder holds ROM hacks: its name contains "hack", in any case ("N64 Hacks", "ROM hacks"). */
@@ -1013,7 +1043,7 @@ static void load_all_games (void) {
     all_games.count = 0;
     all_games.ranked = false;
     for (int k = 0; k < n; k++) {
-        if (one_per_game && has_better_copy(everything, keys, ranks, n, k)) {
+        if (one_per_game && (everything[k].duplicate || has_better_copy(everything, keys, ranks, n, k))) {
             continue;
         }
         {
@@ -1486,7 +1516,7 @@ static void squash_text (const char *text, char *out, size_t size) {
 static char search_now[64];     /* The searched text, squashed, while a category is arranged */
 
 static bool game_matches_filter (const library_game_t *g) {
-    if (library_game_hidden((library_game_t *)g)) {
+    if (g->duplicate || library_game_hidden((library_game_t *)g)) {
         return false;
     }
     if (filter_field_now < 0) {
