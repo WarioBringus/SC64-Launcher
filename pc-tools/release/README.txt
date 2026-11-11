@@ -32,6 +32,15 @@ SETTING UP (about 10 minutes)
 
 Added games later? Run "Get covers and game info.bat" again.
 
+Your file names don't matter. Covers and details are found from the game's own code inside the ROM, so
+.z64, .v64 and .n64 files from any source and region all work, however they're named. Titles on screen
+come from the file name, tidied: "Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64" shows as
+"The Legend of Zelda: Ocarina of Time". To change a title (or fix a name like "zelda.z64"), add it to
+menu/game-fixes.txt on the SD card, for example:
+    [zelda.z64]
+    title = The Legend of Zelda: Majora's Mask
+ROM hacks show their file name and borrow the original game's cover and details.
+
 
 USING IT
 --------
