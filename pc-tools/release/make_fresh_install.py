@@ -3,7 +3,8 @@
     python -I make_fresh_install.py --out "G:/Emulators & Roms/Emulators/_FRESH INSTALL_" \
         --python-zip C:/n64/downloads/python-3.14.10/python-3.14.10-embed-amd64.zip
 
-  SD card/                      sc64menu.n64 (the current build) and game-fixes.txt
+  SD card/                      sc64menu.n64 (the current build), game-fixes.txt, and empty game folders
+                                (N64 China, N64 Europe, N64 Hacks, N64 Japan, N64 USA)
   Get covers and game info.bat  runs tools/scripts/get_covers.py with tools/python
   Music converter.bat           opens tools/scripts/music_converter.ps1
   tools/python                  the official portable Python (embeddable package)
@@ -13,6 +14,7 @@
 """
 import argparse, os, shutil, zipfile
 
+GAME_FOLDERS = ('N64 China', 'N64 Europe', 'N64 Hacks', 'N64 Japan', 'N64 USA')
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, '..', '..'))
 
@@ -40,6 +42,9 @@ def main():
 
     card = os.path.join(out, 'SD card')
     shutil.copy2(args.menu, card)
+    # The game folders, ready to fill (each becomes a tab in the Library).
+    for folder in GAME_FOLDERS:
+        os.makedirs(os.path.join(card, folder))
     if args.fixes:
         os.makedirs(os.path.join(card, 'menu'), exist_ok=True)
         shutil.copy2(args.fixes, os.path.join(card, 'menu', 'game-fixes.txt'))

@@ -8,7 +8,9 @@ file list. Based on N64FlashcartMenu.
 
 WHAT'S IN THIS FOLDER
 ---------------------
-  SD card\                       Copy everything in here to the root of your SD card.
+  SD card\                       Copy everything in here to the root of your SD card: the launcher
+                                 and empty game folders (N64 USA, N64 Europe, N64 Japan, N64 China,
+                                 N64 Hacks) for you to fill.
   Get covers and game info.bat   Double-click: box art and game details for your games.
   Music converter.bat            Double-click: turn MP3/WAV files into background music.
   tools\                         What those two use. Nothing to install; leave it next to them.
@@ -16,10 +18,11 @@ WHAT'S IN THIS FOLDER
 
 SETTING UP (about 10 minutes)
 -----------------------------
-1. Put your games on the SD card, in folders (for example "N64 USA", "N64 Japan", "N64 Hacks").
-   Each folder becomes a tab in the Library.
-2. Copy the contents of the "SD card" folder to the root of the SD card
-   (sc64menu.n64 must sit at the top level of the card, next to your game folders).
+1. Copy everything inside the "SD card" folder to the root of your SD card
+   (sc64menu.n64 must sit at the top level of the card, next to the game folders).
+2. Place your games in the matching folders on the card: N64 USA, N64 Europe, N64 Japan,
+   N64 China and N64 Hacks. Each folder becomes a tab in the Library; empty ones don't show.
+   (You can rename them or add your own folders too.)
 3. With the SD card in your PC, double-click "Get covers and game info.bat".
    It finds your card, downloads box art and game details, and builds the covers the launcher uses.
    The first run downloads about 60 MB plus about 1 MB per game; later runs only fetch what's new.
@@ -50,8 +53,9 @@ Replace sc64menu.n64 on the SD card with the new one. Your settings, favorites a
 
 REQUIREMENTS
 ------------
-  - SummerCart64 with current firmware.
-  - Analogue 3D with current firmware, or an N64 with an Expansion Pak (art loads more slowly there).
+  - SummerCart64 with firmware 2.17.0 or newer (tested with 2.20.2).
+  - Analogue 3D: tested with firmware 1.5.1; it should work with that version or newer.
+    Or an original N64 with an Expansion Pak (art loads more slowly there).
   - Windows 10 or 11 for the PC tools.
 
 
