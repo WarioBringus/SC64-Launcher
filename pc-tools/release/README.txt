@@ -1,0 +1,73 @@
+SC64 LAUNCHER
+=============
+
+A console-style front end for the SummerCart64, made for the Analogue 3D first (it also runs on an
+original N64 with an Expansion Pak). Your games as a Home screen and a Library of box art, instead of a
+file list. Based on N64FlashcartMenu.
+
+
+WHAT'S IN THIS FOLDER
+---------------------
+  SD card\                       Copy everything in here to the root of your SD card.
+  Get covers and game info.bat   Double-click: box art and game details for your games.
+  Music converter.bat            Double-click: turn MP3/WAV files into background music.
+  tools\                         What those two use. Nothing to install; leave it next to them.
+
+
+SETTING UP (about 10 minutes)
+-----------------------------
+1. Put your games on the SD card, in folders (for example "N64 USA", "N64 Japan", "N64 Hacks").
+   Each folder becomes a tab in the Library.
+2. Copy the contents of the "SD card" folder to the root of the SD card
+   (sc64menu.n64 must sit at the top level of the card, next to your game folders).
+3. With the SD card in your PC, double-click "Get covers and game info.bat".
+   It finds your card, downloads box art and game details, and builds the covers the launcher uses.
+   The first run downloads about 60 MB plus about 1 MB per game; later runs only fetch what's new.
+4. (Optional) Double-click "Music converter.bat", drop in MP3 or WAV files, pick your SD card and
+   press "Convert and copy to SD card". Songs play in the background, in the order you choose in Settings.
+5. Eject the SD card safely, put it in your SummerCart64 and turn the console on.
+
+Added games later? Run "Get covers and game info.bat" again.
+
+
+USING IT
+--------
+  A                Play (or Details, if Quick launch is off)
+  B                Back
+  Start            Quick menu: search, surprise me, this game's options, theme, Home style, music, Settings
+  L / R            Home and Library
+  Z (on Home)      Move a favorite
+  C buttons        Library: jump between letters or groups, change tile size
+
+Home styles: Binder, Spotlight, Cartridge, Minimal. Library layouts: Grid, Carousel, Shelf.
+17 colour themes. The original menu and file browser are under Settings > Original menu.
+
+
+UPDATING
+--------
+Replace sc64menu.n64 on the SD card with the new one. Your settings, favorites and covers stay.
+
+
+REQUIREMENTS
+------------
+  - SummerCart64 with current firmware.
+  - Analogue 3D with current firmware, or an N64 with an Expansion Pak (art loads more slowly there).
+  - Windows 10 or 11 for the PC tools.
+
+
+CREDITS
+-------
+  N64FlashcartMenu, the menu this is built on - github.com/Polprzewodnikowy/N64FlashcartMenu (AGPL-3.0)
+  libdragon, the N64 SDK it uses - libdragon.dev (Unlicense)
+  Box art and metadata - N64 Flashcart Menu metadata project, github.com/n64-tools/n64-flashcart-menu-metadata
+    (Unlicense)
+  Game details - libretro-database, github.com/libretro/libretro-database (CC BY-SA 4.0)
+  Inter typeface - Rasmus Andersson (SIL Open Font License 1.1)
+  libspng and miniz, used by the cover tool (BSD-2-Clause / MIT)
+  Python - python.org (PSF License)
+
+Box art belongs to the games' publishers; it's downloaded to your own PC by the tool and never
+included here. No games are included.
+
+Made by a motion designer with Claude Code ("vibe coded"). Free and non-profit. The source code is on
+GitHub under the AGPL-3.0, like the menu it's built on.
