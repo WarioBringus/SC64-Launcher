@@ -768,11 +768,14 @@ static void settings_library (menu_t *menu, void *arg) {
     launcher_settings_do(menu, (launcher_do_t)(uintptr_t)(arg));
 }
 
+#ifdef LAUNCHER_DEV_TOOLS
+/* The screenshot tour is a development tool: only in builds made with LAUNCHER_DEV_TOOLS=1. */
 static void settings_ask_tour (menu_t *menu, void *arg) {
     (void)menu;
     (void)arg;
     show_message_tour = true;
 }
+#endif
 
 static void settings_ask_reset (menu_t *menu, void *arg) {
     (void)menu;
@@ -869,8 +872,10 @@ static const settings_row_t system_rows[] = {
     { .label = "Menu information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_CREDITS), .does = "View" },
     { .label = "Flashcart", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_FLASHCART), .does = "View" },
     { .label = "N64 information", .action = settings_open_screen, .arg = (void *)(uintptr_t)(MENU_MODE_SYSTEM_INFO), .does = "View" },
+#ifdef LAUNCHER_DEV_TOOLS
     { .label = "Screenshot tour", .action = settings_ask_tour, .does = "Start",
       .note = "Shows every theme and style by itself, saving each screen to the SD card (about 15 minutes)" },
+#endif
     { .label = "Reset all settings", .action = settings_ask_reset, .does = "Reset",
       .note = "Puts every setting back as it was at first (asks first)" },
 };

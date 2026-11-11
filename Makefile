@@ -256,6 +256,11 @@ $(BUILD_DIR)/$(PROJECT_NAME).dfs: $(FILESYSTEM)
 
 $(BUILD_DIR)/menu/views/credits.o: .FORCE
 $(BUILD_DIR)/menu/views/credits.o: FLAGS+=-DMENU_VERSION=\"$(MENU_VERSION)\" -DBUILD_TIMESTAMP=\"$(BUILD_TIMESTAMP)\" -DLAUNCHER_BUILD=\"$(LAUNCHER_BUILD)\"
+# LAUNCHER_DEV_TOOLS=1: development tools in Settings (the screenshot tour); release builds leave them out.
+ifeq ($(LAUNCHER_DEV_TOOLS),1)
+FLAGS += -DLAUNCHER_DEV_TOOLS
+endif
+
 $(BUILD_DIR)/menu/perf_log.o: .FORCE
 $(BUILD_DIR)/menu/perf_log.o: FLAGS+=-DLAUNCHER_BUILD=\"$(LAUNCHER_BUILD)\"
 
