@@ -341,12 +341,87 @@ static void apply_fix (const char *file_name, const char **genre, const char **d
     }
 }
 
+/**
+ * @brief A title from another source's file name, tidied: underscores are spaces, the tags dump groups add at the
+ * end go ("(USA)", "(U) [!]", "(Rev 2)", "(En,Ja)", "[T+Spa]"), and a part ending in ", The" (", A", ", An") gets
+ * it at the front ("Legend of Zelda, The - Ocarina of Time" -> "The Legend of Zelda - Ocarina of Time").
+ * A name that is nothing but tags is left alone.
+ */
+static void tidy_title (char *t) {
+    for (char *p = t; *p; p++) {
+        if (*p == '_') {
+            *p = ' ';
+        }
+    }
+    size_t n = strlen(t);
+    for (;;) {
+        while (n > 0 && t[n - 1] == ' ') {
+            n--;
+        }
+        if (n < 2 || (t[n - 1] != ')' && t[n - 1] != ']')) {
+            break;
+        }
+        char open = (t[n - 1] == ')') ? '(' : '[';
+        size_t i = n - 1;
+        while (i > 0 && t[i - 1] != open) {
+            i--;
+        }
+        if (i < 2) {
+            break;      // No opening bracket, or the whole name is one tag: keep it.
+        }
+        n = i - 1;
+    }
+    while (n > 0 && t[n - 1] == ' ') {
+        n--;
+    }
+    if (n == 0) {
+        return;
+    }
+    t[n] = '\0';
+
+    // ", The" at the end of a part (parts are separated by " - ") moves to that part's front.
+    static const char *articles[] = { "The", "A", "An" };
+    char *out = malloc(n + 2);
+    if (!out) {
+        return;
+    }
+    out[0] = '\0';
+    char *part = t;
+    for (;;) {
+        char *sep = strstr(part, " - ");
+        size_t len = sep ? (size_t)(sep - part) : strlen(part);
+        const char *moved = NULL;
+        for (size_t a = 0; a < sizeof(articles) / sizeof(articles[0]) && !moved; a++) {
+            size_t al = strlen(articles[a]);
+            if (len > al + 2 && part[len - al - 2] == ',' && part[len - al - 1] == ' ' &&
+                strncmp(part + len - al, articles[a], al) == 0) {
+                moved = articles[a];
+            }
+        }
+        if (moved) {
+            strcat(out, moved);
+            strcat(out, " ");
+            strncat(out, part, len - strlen(moved) - 2);
+        } else {
+            strncat(out, part, len);
+        }
+        if (!sep) {
+            break;
+        }
+        strcat(out, " - ");
+        part = sep + 3;
+    }
+    strcpy(t, out);
+    free(out);
+}
+
 static char *title_from_file_name (const char *file_name) {
     game_fix_t *fix = fix_for(file_name);
     if (fix && fix->title) {
         return strdup(fix->title);
     }
     char *title = file_stem(file_name);
+    tidy_title(title);      // Names from other sources: "Legend of Zelda, The - Ocarina of Time (USA) (Rev 2)"
     // File names can't hold a colon, so "Castlevania - Legacy of Darkness" stands for one.
     char *dash;
     while ((dash = strstr(title, " - ")) != NULL) {
