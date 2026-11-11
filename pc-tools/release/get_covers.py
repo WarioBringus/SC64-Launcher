@@ -6,7 +6,9 @@ Python. Run it again whenever you add games.
 
 What it does, on the SD card you pick:
   1. Box art for every game: the card-sized art pack from the N64 Flashcart Menu metadata project
-     (github.com/n64-tools/n64-flashcart-menu-metadata, public domain), into menu/metadata.
+     (github.com/n64-tools/n64-flashcart-menu-metadata, public domain), into menu/metadata, plus the extras that
+     come with the launcher (tools/extras): box spines from the LaunchBox Games Database and covers from
+     libretro-thumbnails for games the pack lacks.
   2. Game details (genre, developer, year, players, publisher) from libretro-database
      (github.com/libretro/libretro-database, CC BY-SA 4.0).
   3. Full-size box fronts for your own games only, from the same metadata project, for Home's large covers.
@@ -28,6 +30,7 @@ FULL_SIZE = 'https://raw.githubusercontent.com/%s/main/' % ART_REPO
 DETAILS = 'https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/%s/Nintendo%%20-%%20Nintendo%%2064.dat'
 DETAIL_FILES = ('genre', 'developer', 'releaseyear', 'maxusers', 'publisher')
 AGENT = {'User-Agent': 'SC64-Launcher-tools'}
+BOM = chr(0xFEFF)    # A byte-order mark some consoles put before typed or piped answers
 
 
 def say(text=''):
@@ -59,11 +62,19 @@ def download(url, path, label):
         print()
 
 
+def ask(prompt):
+    """A typed answer (without stray byte-order marks some consoles add); quits if input has ended."""
+    try:
+        return input(prompt).replace(BOM, '').strip()
+    except EOFError:
+        sys.exit('\nNo answer given; stopped.')
+
+
 def find_card():
     """The SD card: a drive with the launcher (sc64menu.n64) at its root. Asks when there isn't exactly one."""
     found = [d for d in string.ascii_uppercase if os.path.isfile('%s:\\sc64menu.n64' % d)]
     if len(found) == 1:
-        answer = input('Your SD card looks like drive %s:. Use it? (Y/n) ' % found[0]).strip().lower()
+        answer = ask('Your SD card looks like drive %s:. Use it? (Y/n) ' % found[0]).lower()
         if answer in ('', 'y', 'yes'):
             return found[0] + ':\\'
     elif found:
@@ -71,7 +82,7 @@ def find_card():
     else:
         say('No drive with sc64menu.n64 on it was found. (Copy the "SD card" folder\'s files to your card first.)')
     while True:
-        letter = input('Type your SD card\'s drive letter (for example E), or Q to quit: ').strip().rstrip(':\\').upper()
+        letter = ask('Type your SD card\'s drive letter (for example E), or Q to quit: ').rstrip(':\\').upper()
         if letter == 'Q':
             sys.exit(0)
         if len(letter) == 1 and letter in string.ascii_uppercase and os.path.isdir(letter + ':\\'):
@@ -123,6 +134,24 @@ def unpack_art(zip_path, card):
             if written % 200 == 0:
                 print('\r  Copying box art to the SD card: %d files' % written, end='', flush=True)
     say('\r  Box art on the SD card: %d new or updated files.        ' % written)
+
+
+def add_extras(card):
+    """The extra art that comes with the launcher (tools/extras/metadata): box spines and covers the art pack
+    doesn't have. Added only where the card has no such file, so nothing of the pack's or yours is replaced."""
+    source = os.path.join(TOOLS, 'extras', 'metadata')
+    target = os.path.join(card, 'menu', 'metadata')
+    added = 0
+    for root, _, files in os.walk(source):
+        for name in files:
+            src = os.path.join(root, name)
+            dest = os.path.join(target, os.path.relpath(src, source))
+            if not os.path.exists(dest):
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copy2(src, dest)
+                added += 1
+    if os.path.isdir(source):
+        say('  Extra box spines and covers: %d added.' % added)
 
 
 def details():
@@ -194,6 +223,7 @@ def main():
     say()
     say('Step 1 of 4: box art')
     unpack_art(art_pack(), card)
+    add_extras(card)
     say()
     say('Step 2 of 4: game details')
     details()

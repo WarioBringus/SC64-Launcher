@@ -25,12 +25,14 @@ def main():
     ap.add_argument('--audioconv', default='C:/n64/toolchain/bin/audioconv64.exe')
     ap.add_argument('--menu', default=os.path.join(REPO, 'output', 'sc64menu.n64'))
     ap.add_argument('--fixes', default=None, help='a game-fixes.txt to include on the card')
+    ap.add_argument('--extras', default=None,
+                    help='a folder with metadata/... art the pack lacks (spines, extra covers), copied to tools/extras')
     args = ap.parse_args()
     out = args.out
     os.makedirs(out, exist_ok=True)
     keep = os.path.join(out, 'tools', 'data')     # A previous run's downloads, if any, stay.
 
-    for name in ('SD card', 'tools/python', 'tools/bin', 'tools/scripts'):
+    for name in ('SD card', 'tools/python', 'tools/bin', 'tools/scripts', 'tools/extras'):
         path = os.path.join(out, name)
         if os.path.isdir(path):
             shutil.rmtree(path)
@@ -41,6 +43,9 @@ def main():
     if args.fixes:
         os.makedirs(os.path.join(card, 'menu'), exist_ok=True)
         shutil.copy2(args.fixes, os.path.join(card, 'menu', 'game-fixes.txt'))
+
+    if args.extras:
+        shutil.copytree(os.path.join(args.extras, 'metadata'), os.path.join(out, 'tools', 'extras', 'metadata'))
 
     with zipfile.ZipFile(args.python_zip) as z:
         z.extractall(os.path.join(out, 'tools', 'python'))

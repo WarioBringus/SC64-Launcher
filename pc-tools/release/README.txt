@@ -66,8 +66,12 @@ CREDITS
   libspng and miniz, used by the cover tool (BSD-2-Clause / MIT)
   Python - python.org (PSF License)
 
-Box art belongs to the games' publishers; it's downloaded to your own PC by the tool and never
-included here. No games are included.
+  Extra art in tools\extras (box spines and covers the art pack doesn't have, gathered by the author):
+    box spines from the LaunchBox Games Database, gamesdb.launchbox-app.com; extra covers from
+    libretro-thumbnails, github.com/libretro-thumbnails
+
+Box art belongs to the games' publishers. The main art pack is downloaded by the tool; the extras
+above come with it so every game has a spine and a cover. No games are included.
 
 Made by a motion designer with Claude Code ("vibe coded"). Free and non-profit. The source code is on
 GitHub under the AGPL-3.0, like the menu it's built on.
