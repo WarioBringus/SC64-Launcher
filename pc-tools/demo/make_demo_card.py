@@ -27,7 +27,9 @@ enabled = true
 home_style = 0
 widescreen = false
 perf_log = false
+quick_launch = false
 """
+# quick_launch off: the demo holds only each game's header, so A opens the game's Details instead of trying to start it.
 
 # Shown on Home: the last played (Resume first) and favorites. Paths relative to the card.
 HISTORY = ['N64 USA/Super Mario 64.n64', 'N64 USA/Mario Kart 64.n64', 'N64 USA/Super Smash Bros..n64',
