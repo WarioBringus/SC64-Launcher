@@ -128,6 +128,10 @@ Forks are welcome: make it your own, fix the game data, add themes, port the too
 built on, this is licensed under the **GNU AGPL-3.0**, so forks must stay open source under the same licence and keep
 the credits and licence notices.
 
+**Building it yourself, or working on it with Claude Code?** [CLAUDE.md](CLAUDE.md) explains the Windows build, where
+everything is in the code, the rules that keep it fast and readable, and how to test and make a release. Claude Code
+reads it automatically when you open the project.
+
 Bug reports are most useful with:
 - the build number (Settings > System > Menu information),
 - your console (Analogue 3D or N64) and its firmware, and your SummerCart64 firmware,
