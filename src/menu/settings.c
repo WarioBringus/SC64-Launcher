@@ -20,8 +20,8 @@ static settings_t init = {
     .show_save_files = false,
     .show_cheat_files = false,
     .show_rom_configuration_files = false,
-    .soundfx_enabled = false,
-    .bgm_enabled = false,
+    .soundfx_enabled = true,      /* On from the start: a console menu is expected to make sound */
+    .bgm_enabled = true,          /* The built-in track loops until music is added */
 #ifdef FEATURE_AUTOLOAD_ROM_ENABLED
     .rom_autoload_enabled = false,
     .rom_autoload_path = "",
