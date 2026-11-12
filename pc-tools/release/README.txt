@@ -73,6 +73,12 @@ menu/game-fixes.txt on the SD card, for example:
     title = The Legend of Zelda: Majora's Mask
 ROM hacks show their file name and borrow the original game's cover and details.
 
+ROM HACKS: ONLY ONES MADE FOR REAL HARDWARE
+   Put only ROM hacks that are made to run on a real N64 (or say they're console compatible) on
+   the card. Many hacks are made for PC emulators only: they won't run on a SummerCart64 or an
+   Analogue 3D, however the launcher lists them, so please don't use or report those. Check the
+   hack's page for "console" or "real hardware" support before adding it.
+
 
 USING IT
 --------
