@@ -54,9 +54,14 @@ void view_startup_init (menu_t *menu) {
     }
 #endif
     
-    if (menu->settings.first_run) {
+    bool first_boot = menu->settings.first_run;
+    if (first_boot) {
         menu->settings.first_run = false;
         settings_save(&menu->settings);
+    }
+    // The original menu opened its credits and licences on the very first boot; with the launcher on, it starts on
+    // Home like every other boot (the credits are under Settings > System > Menu information).
+    if (first_boot && !menu->settings.launcher_enabled) {
         menu->next_mode = MENU_MODE_CREDITS;
     }
     else if (menu->settings.launcher_enabled) {
