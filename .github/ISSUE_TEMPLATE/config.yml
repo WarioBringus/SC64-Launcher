@@ -1,5 +1,8 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-    - name: GitHub Discussions
-      url: https://github.com/Polprzewodnikowy/N64FlashcartMenu/discussions
-      about: Channel for asking QUESTIONS.
+  - name: Setup instructions (README)
+    url: https://github.com/WarioBringus/SC64-Launcher#installing
+    about: How to install, with the full steps in the release's README.txt.
+  - name: The original N64FlashcartMenu
+    url: https://github.com/Polprzewodnikowy/N64FlashcartMenu
+    about: For the menu this is built on (the file browser and its own features), not this launcher.

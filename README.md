@@ -32,6 +32,10 @@ Shown in the Castle Sky theme at 16:9 (one of 17 themes; every screen also works
 | ![Library: Shelf](docs/screenshots/library-shelf.png) | |
 | **Shelf**, with real box spines | |
 
+**Quick menu** (Start): search, this game's options, theme, Home style and music, wherever you are:
+
+![Quick menu](docs/screenshots/quick-menu.png)
+
 ## Features
 
 - **Home**: Resume, Recently played and Favorites, in four styles (Binder, Spotlight, Cartridge, Minimal). Move

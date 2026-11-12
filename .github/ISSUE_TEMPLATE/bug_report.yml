@@ -1,109 +1,83 @@
 name: Bug report
-description: Create a bug report to help us improve
+description: Something in SC64 Launcher isn't working as it should
 labels:
   - "bug"
-  - "awaiting triage"
 body:
   - type: markdown
     attributes:
       value: |
-        # :warning: **Please read before raising the issue** :warning:
+        Thanks for taking the time to report this! A few details make it much easier to track down.
 
-        If you have a **question** that needs clarification on something, or need help in a particular situation, **DO NOT** open an issue here, create a discussion instead. _Otherwise it will be automatically closed!_ .
-
-        Please make sure to provide as much information as possible. 
-        Failing to do so will most likely end up on the issue being closed without discussion. Don't take offense at this, 
-        whenever an issue is raised without following the template and/or adding the required information, too much time has to be spent going back and forth to obtain the details that are outlined below.
-
-  - type: input
-    id: flashcart_firmware_version
-    attributes:
-      label: Firmware version of the flashcart
-      description: Press (Start) button on the menu, then (Check Flashcart Information).
-      placeholder: V2.20.2, N/A
-    validations:
-      required: true
+        **Before reporting:**
+        - Please don't ask for ROMs or links to them; those issues will be closed.
+        - ROM hacks made only for PC emulators won't run on real hardware, so they're not launcher bugs.
+        - Wrong game details (title, genre, year...)? You can fix them on your card with `menu/game-fixes.txt`
+          (see the release's README.txt). Reporting them here is welcome too.
 
   - type: input
-    id: menu_version
+    id: build
     attributes:
-      label: N64 Flashcart Menu revision used
-      description: Press (Start) button on the menu, then (Check Menu Information), or specify github download URL.
-      placeholder: e.g 1.2.3.456, N/A
+      label: Launcher build number
+      description: Start > Settings > System > Menu information.
+      placeholder: "build 288"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: console
+    attributes:
+      label: Console
+      options:
+        - Analogue 3D
+        - Original N64 (with Expansion Pak)
+        - Original N64 (without Expansion Pak)
+        - Other
     validations:
       required: true
 
   - type: input
-    id: n64_region
+    id: console_firmware
     attributes:
-      label: N64 console region
-      description: PAL, NTSC-U, NTSC-J, MPAL, etc.
-      placeholder: NTSC
+      label: Console firmware (Analogue 3D)
+      placeholder: "1.5.1, or N/A"
+
+  - type: input
+    id: sc64_firmware
+    attributes:
+      label: SummerCart64 firmware
+      description: Start > Settings > System > Flashcart (the "Firmware" line).
+      placeholder: "2.20.2"
     validations:
       required: true
 
-  - type: textarea
-    id: description
+  - type: dropdown
+    id: screen
     attributes:
-      label: Description
-      description: A clear and concise description of what the problem is.
+      label: Screen setting
+      description: Start > Settings > Look > Screen.
+      options:
+        - "16:9"
+        - "4:3"
+        - Not sure
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. The screen (Home, Library...), the
+        Home style or Library layout, the theme and the game help too.
     validations:
       required: true
-
-  - type: textarea
-    id: repro_steps
-    attributes:
-      label: How to reproduce
-      description: Detailed repro steps so we can see the same problem. If not already explained above.
-      placeholder: |
-        1.
-        2.
-        ...
-    validations:
-      required: false
-
-  - type: textarea
-    id: expected_behavior
-    attributes:
-      label: Expected behavior
-      description: A clear and concise description of what you expected to happen. If applicable.
-    validations:
-      required: false
 
   - type: textarea
     id: screenshots
     attributes:
-      label: Screenshots
-      description: Very helpful if you send along a few screenshots to help visualize the issue!
-      placeholder: drag and drop here, if applicable
-    validations:
-      required: false
+      label: Photos or screenshots
+      description: A photo of the TV is perfect. Drag images in here.
 
   - type: textarea
-    id: configuration_file
+    id: log
     attributes:
-      label: configuration file(s)
-      description: The text of the configuration file(s) used. If applicable.
-      placeholder: |
-        for example paste the content of the configuration file (config.ini) here.
-    validations:
-      required: false
-
-  - type: textarea
-    id: other_things
-    attributes:
-      label: Additional information
-      description: Other suggested things. If applicable/relevant.
-      placeholder: |
-        for example link to the repository with sample code
-        code snippets
-    validations:
-      required: false
-
-  - type: markdown
-    attributes:
-      value: |
-        ### Make an effort to fix the bug
-        Try using github co-pilot or other AI tools to help you further describe and/or fix the bug.
-        
-        Attempt to submit a [Pull Request (PR)](https://help.github.com/articles/about-pull-requests/) that fixes the bug. Include in this PR a test that verifies the fix. If you were not able to fix the bug, a PR that illustrates your partial progress will suffice.
+      label: Performance log (optional, for slowdowns or freezes)
+      description: In menu/config.ini on the SD card, add the line "perf_log = true" under [launcher], repeat the
+        problem, then attach menu/cache/launcher/perf-log.txt from the card.
