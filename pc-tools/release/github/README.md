@@ -51,7 +51,8 @@ Full steps are in the release's `README.txt`. In short:
 4. Optional: double-click **Music converter.bat** to add background music.
 5. Put the card in your SummerCart64 and turn the console on.
 
-Home starts empty: it fills with the games you play and the favorites you add. Added or removed games? Run the covers
+Home starts empty: it fills with the games you play and the favorites you add. Sound effects and music are on
+from the start (the menu's built-in track plays until you add your own); turn them off in **Settings > Sound**. Added or removed games? Run the covers
 tool again.
 
 **Recommended display settings**: on the Analogue 3D, set the image scaler to **Stretch**, and in the launcher set

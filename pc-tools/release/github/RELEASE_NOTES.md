@@ -1,4 +1,10 @@
-# SC64 Launcher v1.0
+# SC64 Launcher v1.0.1
+
+**New in 1.0.1:** sound effects and music are now on by default (they were off, so a new install was silent). The
+menu's built-in track plays until you add your own music; turn either off in Settings > Sound.
+
+---
+
 
 The first release of a console-style front end for the SummerCart64, made for the Analogue 3D.
 

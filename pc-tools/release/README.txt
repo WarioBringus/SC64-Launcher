@@ -59,6 +59,8 @@ Everything below happens on your actual SD card, plugged into your PC. Do the st
    The first time, Home is empty: it shows the games you've played (Resume and Recently played) and
    your favorites, so it fills up as you play. Your games are all in the Library (press R).
    To add a favorite: highlight a game, press Start, and choose "Add to favorites".
+   Sound effects and music are on: until you add your own music (step 4), the menu's built-in track
+   plays. To turn either off or change the volume: Start > Settings > Sound.
 
 ADDED OR REMOVED GAMES?
    Put the card back in your PC, open "Get covers and game info.bat" again and press the button.
