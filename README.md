@@ -1,113 +1,124 @@
-![Build](https://github.com/polprzewodnikowy/N64FlashcartMenu/actions/workflows/build.yml/badge.svg)
-![GitHub Org's stars](https://img.shields.io/github/stars/Polprzewodnikowy/N64FlashcartMenu)
-[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/Polprzewodnikowy/N64FlashcartMenu.svg)](http://isitmaintained.com/project/Polprzewodnikowy/N64FlashcartMenu "Average time to resolve an issue")
-[![Percentage of issues still open](http://isitmaintained.com/badge/open/Polprzewodnikowy/N64FlashcartMenu.svg)](http://isitmaintained.com/project/Polprzewodnikowy/N64FlashcartMenu "Percentage of issues still open")
-[![#yourfirstpr](https://img.shields.io/badge/first--timers--only-friendly-blue.svg)](https://github.com/Polprzewodnikowy/N64FlashcartMenu/blob/main/CONTRIBUTING.md)
+# SC64 Launcher
 
-# N64FlashcartMenu
-An open source menu for N64 flashcarts that aims to support as many as possible.  
-This menu is not affiliated with any particular flashcart and does not necessarily expose all possible firmware features.
+A console-style front end for the **SummerCart64**, made for the **Analogue 3D** first. Your games become a Home screen
+and a Library of box art instead of a file list, with smooth motion, themes, music and covers that grow into the
+loading screen. It's built on [N64FlashcartMenu](https://github.com/Polprzewodnikowy/N64FlashcartMenu) and also runs on an
+original N64 with an Expansion Pak.
 
-> [!TIP]
-> Help sponsor development [NetworkFusion on Ko-Fi](https://ko-fi.com/networkfusion). Or submit your Pull Request.
+<!-- Screenshots or a short video here: Home, Library, Quick menu. -->
 
-> [!TIP]
-> New users are invited to read the latest [Documentation / User Guide](./docs/00_index.md).
+**[Download the latest release](https://github.com/WarioBringus/SC64-Launcher/releases/latest)**: everything needed for the SD card plus Windows tools for box
+art, game details and music. No games are included.
 
-## Flashcart Support
-This menu aims to support as many N64 flashcarts as possible.  
-The current state of support is:
+---
 
-### Supported
-* SummerCart64
-* 64Drive
+## Features
 
-### Work in Progress
-* EverDrive-64 (X and V series)
-* ED64P (clones)
+- **Home**: Resume, Recently played and Favorites, in four styles (Binder, Spotlight, Cartridge, Minimal). Move
+  favorites around with Z.
+- **Library**: each game folder is a tab, in three layouts (Grid, Carousel, Shelf with real box spines) and three tile
+  sizes. Sort by title, genre, developer, year or players; filter, jump between groups, search, or let it pick a
+  random game.
+- **Box art everywhere**: covers, cartridge labels, box spines and large hi-res covers, pre-scaled on your PC so the
+  N64 never has to.
+- **Game details**: genre, developer, publisher, year, players and more, on screen and in sorting.
+- **17 colour themes**, each readable on every screen, in 16:9 or 4:3.
+- **Background music** from your own MP3 or WAV files.
+- **One Quick menu (Start)** for search, the selected game's options, theme, Home style and music, plus a tabbed
+  Settings page made for reading from the couch.
+- **Any ROM names**: covers and details are found from the game code inside each ROM, so dumps from any source, region
+  or byte order (.z64, .v64, .n64) work. Titles are tidied ("Legend of Zelda, The (USA) (Rev 2)" shows as "The Legend
+  of Zelda").
+- The **original menu and file browser** are still one setting away.
 
-### Not yet planned
-* Doctor V64
-* PicoCart
-* DaisyDrive
+## Requirements
 
+| | |
+|---|---|
+| **SummerCart64** | Firmware 2.17.0 or newer (tested with 2.20.2) |
+| **Console** | Analogue 3D, tested with firmware 1.5.1 (should work with that or newer); or an original N64 with an Expansion Pak (covers load more slowly there) |
+| **PC tools** | Windows 10 or 11. Nothing to install: the tools carry their own Python. |
+| **Internet** | For the first run of the covers tool (about 60 MB, plus about 1 MB per game) |
 
-## Current (notable) menu features
-* Fully Open Source.
-* Loads all known N64 games, even if they are byteswapped.
-* Fully emulates the 64DD and loads 64DD disks (SummerCart64 only).
-* Emulator support (NES, SNES, GB, GBC, SMS, GG, CHF) ROMs.
-* N64 ROM box art image support.
-* Background image (PNG) support.
-* Comprehensive ROM save database (including homebrew headers).
-* Comprehensive ROM information display.
-* Real Time Clock support.
-* Music playback (MP3).
-* Menu sound effects.
-* N64 ROM fast reboot option (on reset).
-* ROM history and favorites.  
-* ROM Datel code editor.
-* Zip archive browsing and file extraction.
-* Controller Pak backup and restore (including individual notes).
-* Game art image switching.
+## Installing
 
+Full steps are in the release's `README.txt`. In short:
 
-## Aims
-* Support as many N64 Flashcarts as possible.
-* Be open source, using permissively licensed third-party libraries.
-* Be testable in an emulated environment (Ares).
-* Encourage active development from community members and N64 FlashCart owners.
-* Support as many common mods and features as possible (flashcart dependent).
+1. Copy everything inside the release's **SD card** folder to the top level of your SD card.
+2. Put your games in the game folders **on the card** (N64 USA, N64 Europe, N64 Japan, N64 China, N64 Hacks).
+3. With the card in your PC, double-click **Get covers and game info.bat**, pick your SD card in the window, and
+   press the button.
+4. Optional: double-click **Music converter.bat** to add background music.
+5. Put the card in your SummerCart64 and turn the console on.
 
+Home starts empty: it fills with the games you play and the favorites you add. Added or removed games? Run the covers
+tool again.
 
-## Flashcart specific information
+**Recommended display settings**: on the Analogue 3D, set the image scaler to **Stretch**, and in the launcher set
+**Settings > Look > Screen** to **16:9**. That's only a recommendation; every screen is laid out for both 16:9 and 4:3,
+so use whatever combination you're comfortable with.
 
-### SummerCart64
-Download the latest `sc64menu.n64` file from the [releases](https://github.com/Polprzewodnikowy/N64FlashcartMenu/releases/) page, then put it in the root directory of your SD card.  
-  
-> [!TIP]
-> A quick video tutorial can be found here:
->
-> [![Video tutorial](https://img.youtube.com/vi/IGX0XXf0wgo/default.jpg)](https://www.youtube.com/shorts/IGX0XXf0wgo)
+**Updating**: replace `sc64menu.n64` on the card. Your settings, favorites and covers stay.
 
+**ROM hacks**: only use hacks made to run on real hardware. Hacks made for PC emulators won't run on a SummerCart64
+or an Analogue 3D; please don't report those as launcher problems.
 
-### 64drive
-* Ensure the cart has the latest [firmware](https://64drive.retroactive.be/support.php) installed.
-* Download the latest `menu.bin` file from the [releases](https://github.com/Polprzewodnikowy/N64FlashcartMenu/releases/) page, then put it in the root directory of your SD card.
+---
 
+## Disclaimers
 
-# Contributors
-The features in this project were made possible by the [contributors](https://github.com/Polprzewodnikowy/N64FlashcartMenu/graphs/contributors).
+**No games are included, and none will be provided.** This is a front end for games you supply yourself. Please use
+dumps of games you own, and don't ask for ROMs in the issues.
 
-# License
-This project is released under the [GNU AFFERO GENERAL PUBLIC LICENSE](LICENSE.md) as compatible with all other dependent project licenses.  
-Other compatible or commercial license options may be available upon request with permissions of the original `N64FlashcartMenu` project authors / maintainers.  
-* [Mateusz Faderewski / Polprzewodnikowy](https://github.com/Polprzewodnikowy)
-* [Robin Jones / NetworkFusion](https://github.com/networkfusion)
+**I don't claim ownership of anything this works with.** The games, their names, box art, cartridge art and
+trademarks belong to their respective owners (Nintendo and the games' publishers and developers). Box art comes from
+community projects (credited below) or is downloaded to your own PC by the covers tool. N64FlashcartMenu, libdragon, the
+SummerCart64 and everything else credited below belong to their authors.
 
-# Open source software and licenses used
-## Libraries
-* [libdragon](https://github.com/n64brew/libdragon/tree/preview) - [UNLICENSE License](https://github.com/n64brew/libdragon/blob/preview/LICENSE.md)
-* [libspng](https://github.com/randy408/libspng) - [BSD 2-Clause License](https://github.com/randy408/libspng/blob/master/LICENSE)
-* [minimp3](https://github.com/lieff/minimp3) - [CC0 1.0 Universal](https://github.com/lieff/minimp3/blob/master/LICENSE)
-* [miniz](https://github.com/richgel999/miniz) - [MIT License](https://github.com/richgel999/miniz/blob/master/LICENSE)
-* [dr_flac](https://github.com/mackron/dr_libs) - [MIT License](https://github.com/mackron/dr_libs/blob/master/LICENSE)
+**Not affiliated** with Nintendo, Analogue, the SummerCart64 project, the N64FlashcartMenu team, LaunchBox or
+libretro. This is an independent, free, non-profit fan project.
 
-## Sounds
-See [License](https://pixabay.com/en/service/license-summary/) for the following sounds:
-* [Cursor sound](https://pixabay.com/en/sound-effects/click-buttons-ui-menu-sounds-effects-button-7-203601/) by Skyscraper_seven (Free to use)
-* [Actions (Enter, Back) sound](https://pixabay.com/en/sound-effects/menu-button-user-interface-pack-190041/) by Liecio (Free to use)
-* [Error sound](https://pixabay.com/en/sound-effects/error-call-to-attention-129258/) by Universfield (Free to use)
+**Game information may be wrong.** Titles, genres, developers, years and other details come from community databases and
+can be incomplete or inaccurate. If you spot something wrong:
+- fix it on your own card with `menu/game-fixes.txt` (see the release's README.txt), and/or
+- let me know in the [issues](https://github.com/WarioBringus/SC64-Launcher/issues), and/or
+- fork this and make it your own. Improvements are welcome.
 
-See [License](https://creativecommons.org/licenses/by/4.0/) for the following sounds:
-* [Background Music](https://www.playonloop.com/2017-music-loops/flying-dreams/) POL-flying-dreams-short
+**Use at your own risk.** It's provided as is, without any warranty (see the licence). It never touches the
+SummerCart64's firmware or settings, but **back up your SD card and your saves** before installing anything new on it.
 
-## Emulators
-* [neon64v2](https://github.com/hcs64/neon64v2) by *hcs64* - [ISC License](https://github.com/hcs64/neon64v2/blob/master/LICENSE.txt)
-* [sodium64](https://github.com/Hydr8gon/sodium64) by *Hydr8gon* - [GPL-3.0 License](https://github.com/Hydr8gon/sodium64/blob/master/LICENSE)
-* [gb64](https://github.com/lambertjamesd/gb64) by *lambertjamesd* - [MIT License](https://github.com/lambertjamesd/gb64/blob/master/LICENSE)
-* [smsPlus64](https://github.com/fhoedemakers/smsplus64) by *fhoedmakers* - [GPL-3.0 License](https://github.com/fhoedemakers/smsplus64/blob/main/LICENSE)
-* [Press-F-Ultra](https://github.com/celerizer/Press-F-Ultra) by *celerizer* - [MIT License](https://github.com/celerizer/Press-F-Ultra/blob/master/LICENSE)
+**Made with AI.** This was "vibe coded": built with [Claude Code](https://claude.com/claude-code) by a motion designer, not
+a programmer. It has been tested on the hardware above, but it hasn't been reviewed like a professional project, so
+please report anything odd.
 
-## Fonts
-* [Firple](https://github.com/negset/Firple) by *negset* - (SIL Open Font License 1.1)
+---
+
+## Forking and contributing
+
+Forks are welcome: make it your own, fix the game data, add themes, port the tools to Mac or Linux. Like the menu it's
+built on, this is licensed under the **GNU AGPL-3.0**, so forks must stay open source under the same licence and keep
+the credits and licence notices.
+
+Bug reports are most useful with:
+- the build number (Settings > System > Menu information),
+- your console (Analogue 3D or N64) and its firmware, and your SummerCart64 firmware,
+- what you did and what happened. A photo of the screen helps.
+
+## Credits
+
+- **[N64FlashcartMenu](https://github.com/Polprzewodnikowy/N64FlashcartMenu)**: the menu this is built on (AGPL-3.0)
+- **[libdragon](https://libdragon.dev)**: the N64 development library it uses (Unlicense)
+- **[SummerCart64](https://github.com/Polprzewodnikowy/SummerCart64)**: the flashcart itself
+- **Box art and metadata**: [N64 Flashcart Menu metadata project](https://github.com/n64-tools/n64-flashcart-menu-metadata) (Unlicense)
+- **Game details**: [libretro-database](https://github.com/libretro/libretro-database) (CC BY-SA 4.0)
+- **Extra box spines**: the [LaunchBox Games Database](https://gamesdb.launchbox-app.com)
+- **Extra covers**: [libretro-thumbnails](https://github.com/libretro-thumbnails)
+- **[Inter](https://rsms.me/inter/)** typeface by Rasmus Andersson (SIL Open Font License 1.1)
+- **libspng** and **miniz**, used by the cover tool (BSD-2-Clause / MIT)
+- **[Python](https://www.python.org)**, bundled with the PC tools (PSF License)
+
+## Licence
+
+[GNU Affero General Public License v3.0](LICENSE.md), the same as N64FlashcartMenu. This project modifies
+N64FlashcartMenu: the launcher (Home, Library, Quick menu, themes, music and the restyled screens) and the PC tools are
+the changes, and the full history of what changed is in this repository's commits.

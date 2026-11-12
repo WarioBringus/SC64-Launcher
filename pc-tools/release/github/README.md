@@ -7,7 +7,7 @@ original N64 with an Expansion Pak.
 
 <!-- Screenshots or a short video here: Home, Library, Quick menu. -->
 
-**[Download the latest release](../../releases/latest)**: everything needed for the SD card plus Windows tools for box
+**[Download the latest release](https://github.com/WarioBringus/SC64-Launcher/releases/latest)**: everything needed for the SD card plus Windows tools for box
 art, game details and music. No games are included.
 
 ---
@@ -81,7 +81,7 @@ libretro. This is an independent, free, non-profit fan project.
 **Game information may be wrong.** Titles, genres, developers, years and other details come from community databases and
 can be incomplete or inaccurate. If you spot something wrong:
 - fix it on your own card with `menu/game-fixes.txt` (see the release's README.txt), and/or
-- let me know in the [issues](../../issues), and/or
+- let me know in the [issues](https://github.com/WarioBringus/SC64-Launcher/issues), and/or
 - fork this and make it your own. Improvements are welcome.
 
 **Use at your own risk.** It's provided as is, without any warranty (see the licence). It never touches the
