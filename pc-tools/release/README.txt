@@ -80,6 +80,15 @@ ROM HACKS: ONLY ONES MADE FOR REAL HARDWARE
    hack's page for "console" or "real hardware" support before adding it.
 
 
+RECOMMENDED DISPLAY SETTINGS
+----------------------------
+The launcher looks its best filling a widescreen TV:
+  - On the Analogue 3D: set the image scaler to Stretch (instead of Integer or Integer+).
+  - In the launcher: Start > Settings > Look > Screen: 16:9 (it starts at 4:3).
+That's only a recommendation. Every screen is laid out for both 16:9 and 4:3, so any combination
+you're comfortable with is fine: if you prefer Integer scaling, keep the launcher at 4:3.
+
+
 USING IT
 --------
   A                Play (turn off Quick launch in Settings to see a game's details first)
