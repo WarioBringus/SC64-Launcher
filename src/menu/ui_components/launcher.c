@@ -1052,9 +1052,9 @@ static void launch_cover_take (void) {
     // A cover already shown at that size (carousel, shelf) is read again too: in 16:9 the one on
     // screen is squeezed and can't be copied.
     bool landscape = focused_image->width >= focused_image->height;
-    // A cover shown from the hi-res pack (Home's large covers) is larger than the Large one: read it from there.
-    surface_t *large = (focused_image->width > LAUNCH_LARGE_W + 2 || focused_image->height > LAUNCH_LARGE_H + 2) ?
-        launcher_cover_larger(focused_image, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H) : NULL;
+    // 4:3 too: the hi-res cover, like every 16:9 launch (4:3 used the smaller Large cover unless the one on screen was
+    // already hi-res, so a new card, which starts at 4:3, launched its first games without the hi-res art).
+    surface_t *large = landscape ? launcher_cover_larger(focused_image, LAUNCHER_HIRES_W, LAUNCHER_HIRES_H) : NULL;
     if (!large) {
         large = launcher_cover_larger(focused_image, landscape ? LAUNCH_LARGE_W : LAUNCH_LARGE_H,
                                       landscape ? LAUNCH_LARGE_H : LAUNCH_LARGE_W);
