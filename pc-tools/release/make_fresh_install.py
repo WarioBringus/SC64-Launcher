@@ -5,11 +5,12 @@
 
   SD card/                      sc64menu.n64 (the current build), game-fixes.txt, and empty game folders
                                 (N64 China, N64 Europe, N64 Hacks, N64 Japan, N64 USA)
-  Get covers and game info.bat  runs tools/scripts/get_covers.py with tools/python
+  Get covers and game info.bat  opens tools/scripts/covers_window.ps1 (pick the card, then it runs get_covers.py)
   Music converter.bat           opens tools/scripts/music_converter.ps1
   tools/python                  the official portable Python (embeddable package)
   tools/bin                     coverimg.exe (pc-tools/coverpack/coverimg.c) and libdragon's audioconv64.exe
-  tools/scripts                 get_covers.py, coverpack.py, gamemeta.py, music_converter.ps1
+  tools/scripts                 covers_window.ps1 (opened by the .bat) running get_covers.py; coverpack.py,
+                                gamemeta.py; music_converter.ps1
   README.txt, LICENSE.md
 """
 import argparse, os, shutil, zipfile
@@ -57,7 +58,7 @@ def main():
     shutil.copy2(args.coverimg, os.path.join(out, 'tools', 'bin', 'coverimg.exe'))
     shutil.copy2(args.audioconv, os.path.join(out, 'tools', 'bin', 'audioconv64.exe'))
     scripts = os.path.join(out, 'tools', 'scripts')
-    for src in (os.path.join(HERE, 'get_covers.py'), os.path.join(HERE, 'music_converter.ps1'),
+    for src in (os.path.join(HERE, 'get_covers.py'), os.path.join(HERE, 'music_converter.ps1'), os.path.join(HERE, 'covers_window.ps1'),
                 os.path.join(REPO, 'pc-tools', 'coverpack', 'coverpack.py'),
                 os.path.join(REPO, 'pc-tools', 'coverpack', 'gamemeta.py')):
         shutil.copy2(src, scripts)

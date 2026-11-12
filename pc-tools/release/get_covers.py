@@ -1,8 +1,9 @@
 """
 SC64 Launcher: get covers and game details for the games on your SD card.
 
-Run it by double-clicking "Get covers and game info.bat". It needs nothing installed: the folder carries its own
-Python. Run it again whenever you add games.
+Double-clicking "Get covers and game info.bat" opens a window (covers_window.ps1) where you pick the SD card; it
+runs this with --card <the card> --gui. Run on its own (no --card), it asks for the card in the console. It needs
+nothing installed: the folder carries its own Python. Run it again whenever you add or remove games.
 
 What it does, on the SD card you pick:
   1. Box art for every game: the card-sized art pack from the N64 Flashcart Menu metadata project
@@ -15,7 +16,7 @@ What it does, on the SD card you pick:
   4. The launcher's cover packs (menu/cache/launcher), every cover pre-scaled so the N64 never has to.
 Downloads and caches are kept in tools/data, so later runs only fetch what's new.
 """
-import concurrent.futures, json, os, shutil, string, subprocess, sys, time, urllib.error, urllib.request, zipfile
+import argparse, concurrent.futures, json, os, shutil, string, subprocess, sys, time, urllib.error, urllib.request, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))          # tools/scripts
 TOOLS = os.path.dirname(HERE)                               # tools
@@ -33,8 +34,28 @@ AGENT = {'User-Agent': 'SC64-Launcher-tools'}
 BOM = chr(0xFEFF)    # A byte-order mark some consoles put before typed or piped answers
 
 
+GUI = False            # Run from the window: progress as '@@ <percent> <text>' lines, no questions
+STAGE = (0, 100)       # The share of the whole run (in percent) the current step takes
+
+
 def say(text=''):
-    print(text, flush=True)
+    print(text.lstrip('\r') if GUI else text, flush=True)
+
+
+def status(text, frac=None):
+    """A progress line: overwritten in place in a console; for the window, its bar's percent and status text."""
+    if GUI:
+        lo, hi = STAGE
+        pct = lo if frac is None else lo + int((hi - lo) * min(max(frac, 0.0), 1.0))
+        print('@@ %d %s' % (pct, text), flush=True)
+    else:
+        print('\r  ' + text, end='', flush=True)
+
+
+def stage(lo, hi, text):
+    global STAGE
+    STAGE = (lo, hi)
+    status(text)
 
 
 def fetch(url, timeout=60):
@@ -56,9 +77,9 @@ def download(url, path, label):
             pct = done * 100 // total if total else -1
             if total and pct != shown and (total > 2e6 or pct == 100):    # Small files: just the end.
                 shown = pct
-                print('\r  %s: %d%% of %.0f MB' % (label, pct, total / 1e6), end='', flush=True)
+                status('%s: %d%% of %.0f MB' % (label, pct, total / 1e6), done / total)
     os.replace(tmp, path)
-    if total:
+    if total and not GUI:
         print()
 
 
@@ -131,8 +152,8 @@ def unpack_art(zip_path, card):
             with z.open(info) as src, open(dest, 'wb') as out:
                 shutil.copyfileobj(src, out)
             written += 1
-            if written % 200 == 0:
-                print('\r  Copying box art to the SD card: %d files' % written, end='', flush=True)
+            if written % 100 == 0:
+                status('Copying box art to the SD card: %d files' % written, written / max(len(names), 1))
     say('\r  Box art on the SD card: %d new or updated files.        ' % written)
 
 
@@ -205,16 +226,30 @@ def full_size_fronts(card, hires):
     with concurrent.futures.ThreadPoolExecutor(6) as pool:
         for i, ok in enumerate(pool.map(one, covers), 1):
             got += ok
-            print('\r  Large covers: %d of %d' % (i, len(covers)), end='', flush=True)
+            status('Large covers: %d of %d' % (i, len(covers)), i / len(covers))
     say('\r  Large covers: %d downloaded (%d not available; those use the card art enlarged).' % (got, len(covers) - got))
 
 
 def main():
+    global GUI
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--card', help='the SD card (its top level, where sc64menu.n64 is); asked for when left out')
+    ap.add_argument('--gui', action='store_true', help='progress lines for the window, no questions')
+    args = ap.parse_args()
+    GUI = args.gui
     os.system('')   # Lets the console show progress lines on older Windows.
     say('SC64 Launcher - get covers and game info')
     say('=' * 41)
     say()
-    card = find_card()
+    if args.card:
+        card = os.path.join(args.card, '')
+        if not os.path.isfile(os.path.join(card, 'sc64menu.n64')):
+            say('%s isn\'t the SD card: sc64menu.n64 isn\'t there. Copy the "SD card" folder\'s contents to it first.'
+                % card)
+            sys.exit(2)
+        say('SD card: %s' % card)
+    else:
+        card = find_card()
     os.makedirs(os.path.join(card, 'menu'), exist_ok=True)
     os.makedirs(DATA, exist_ok=True)
     hires = os.path.join(DATA, 'hires')
@@ -222,20 +257,28 @@ def main():
 
     say()
     say('Step 1 of 4: box art')
-    unpack_art(art_pack(), card)
+    stage(0, 30, 'Box art: downloading')
+    path = art_pack()
+    stage(30, 38, 'Box art: copying to the SD card')
+    unpack_art(path, card)
     add_extras(card)
     say()
     say('Step 2 of 4: game details')
+    stage(38, 42, 'Game details: downloading')
     details()
     say()
     say('Step 3 of 4: matching your games to their covers')
+    stage(42, 70, 'Matching your games to their covers (this takes a moment)')
     if run_coverpack(card, hires) != 0:
         sys.exit('\nSomething went wrong building the covers (see above).')
     say()
     say('Step 4 of 4: large covers for Home')
+    stage(70, 88, 'Large covers: downloading')
     full_size_fronts(card, hires)
+    stage(88, 100, 'Building the covers the launcher uses')
     if run_coverpack(card, hires) != 0:
         sys.exit('\nSomething went wrong building the covers (see above).')
+    stage(100, 100, 'Done')
 
     say()
     say('All done in %d s. Eject the SD card safely, put it back in your SummerCart64 and turn the console on.' %

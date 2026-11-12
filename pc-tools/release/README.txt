@@ -11,7 +11,8 @@ WHAT'S IN THIS FOLDER
   SD card\                       A template: copy everything in here to the root of your SD card (the
                                  launcher, and empty game folders: N64 USA, N64 Europe, N64 Japan,
                                  N64 China, N64 Hacks). Don't put games in this folder itself.
-  Get covers and game info.bat   Double-click: box art and game details for your games.
+  Get covers and game info.bat   Double-click: opens a window that adds box art and game details for
+                                 the games on your SD card.
   Music converter.bat            Double-click: turn MP3/WAV files into background music.
   tools\                         What those two use. Nothing to install; leave it next to them.
 
@@ -40,9 +41,14 @@ Everything below happens on your actual SD card, plugged into your PC. Do the st
 
 3. GET COVERS AND GAME INFO
    Leave the SD card plugged in and double-click "Get covers and game info.bat" (in this folder).
-   It finds your SD card by itself (it asks you to confirm the drive letter), downloads box art and
-   game details, and builds the covers the launcher uses, writing them straight onto the card.
-   The first run downloads about 60 MB plus about 1 MB per game; later runs only fetch what's new.
+   A window opens:
+     - Choose your SD card from the list (a drive with the launcher on it is marked), or click
+       Browse and pick the top level of the card. The window checks it's really the card, shows how
+       many games it found in each folder, and lists exactly where everything will be saved.
+     - Press "Get covers and game info" and wait for "Done!" (a few minutes the first time).
+   The first run copies the complete box-art library to the card (about 2,200 small images, ~60 MB),
+   so games you add later already have art; then it downloads large covers for your own games only
+   (about 1 MB each). Later runs only fetch what's new.
 
 4. MUSIC (OPTIONAL)
    Double-click "Music converter.bat", drop in MP3 or WAV files, pick your SD card and press
@@ -50,8 +56,13 @@ Everything below happens on your actual SD card, plugged into your PC. Do the st
 
 5. PLAY
    Eject the SD card safely, put it in your SummerCart64 and turn the console on.
+   The first time, Home is empty: it shows the games you've played (Resume and Recently played) and
+   your favorites, so it fills up as you play. Your games are all in the Library (press R).
+   To add a favorite: highlight a game, press Start, and choose "Add to favorites".
 
-Added games later? Run "Get covers and game info.bat" again.
+ADDED OR REMOVED GAMES?
+   Put the card back in your PC, open "Get covers and game info.bat" again and press the button.
+   New games won't show their covers and details until you do.
 
 Your file names don't matter. Covers and details are found from the game's own code inside the ROM, so
 .z64, .v64 and .n64 files from any source and region all work, however they're named. Titles on screen
@@ -65,7 +76,7 @@ ROM hacks show their file name and borrow the original game's cover and details.
 
 USING IT
 --------
-  A                Play (or Details, if Quick launch is off)
+  A                Play (turn off Quick launch in Settings to see a game's details first)
   B                Back
   Start            Quick menu: search, surprise me, this game's options, theme, Home style, music, Settings
   L / R            Home and Library
