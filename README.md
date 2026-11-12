@@ -87,6 +87,11 @@ tool again.
 **Settings > Look > Screen** to **16:9**. That's only a recommendation; every screen is laid out for both 16:9 and 4:3,
 so use whatever combination you're comfortable with.
 
+**Getting back to the launcher from a game**: on the Analogue 3D, press the star button on the controller and
+choose **Reset**; on an original N64, press the console's Reset button. You land on Home, with the game under
+Resume. This needs **Settings > Games > Fast reboot** set to **Off** (the default); with it on, Reset starts the
+same game again.
+
 **Updating**: replace `sc64menu.n64` on the card. Your settings, favorites and covers stay.
 
 **ROM hacks**: only use hacks made to run on real hardware. Hacks made for PC emulators won't run on a SummerCart64

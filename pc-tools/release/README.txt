@@ -100,6 +100,11 @@ USING IT
   Z (on Home)      Move a favorite
   C buttons        Library: jump between letters or groups, change tile size
 
+Getting back to the launcher from a game: on the Analogue 3D, press the star button on the
+controller and choose Reset; on an original N64, press the console's Reset button. You land on
+Home, with the game under Resume. This needs Settings > Games > Fast reboot set to Off (the
+default); with it on, Reset starts the same game again.
+
 Home styles: Binder, Spotlight, Cartridge, Minimal. Library layouts: Grid, Carousel, Shelf.
 17 colour themes. The original menu and file browser are under Settings > Original menu.
 
