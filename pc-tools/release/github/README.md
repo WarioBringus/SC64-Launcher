@@ -5,6 +5,10 @@ and a Library of box art instead of a file list, with smooth motion, themes, mus
 loading screen. It's built on [N64FlashcartMenu](https://github.com/Polprzewodnikowy/N64FlashcartMenu) and also runs on an
 original N64 with an Expansion Pak.
 
+[![Watch the SC64 Launcher demo video](docs/screenshots/video-thumbnail.png)](https://youtu.be/wUVdsapzvcc)
+
+**[▶ Watch the demo video](https://youtu.be/wUVdsapzvcc)**
+
 **[Download the latest release](https://github.com/WarioBringus/SC64-Launcher/releases/latest)**: everything needed for the SD card plus Windows tools for box
 art, game details and music. No games are included.
 
