@@ -5,12 +5,32 @@ and a Library of box art instead of a file list, with smooth motion, themes, mus
 loading screen. It's built on [N64FlashcartMenu](https://github.com/Polprzewodnikowy/N64FlashcartMenu) and also runs on an
 original N64 with an Expansion Pak.
 
-<!-- Screenshots or a short video here: Home, Library, Quick menu. -->
-
 **[Download the latest release](https://github.com/WarioBringus/SC64-Launcher/releases/latest)**: everything needed for the SD card plus Windows tools for box
 art, game details and music. No games are included.
 
 ---
+
+## Screenshots
+
+Shown in the Castle Sky theme at 16:9 (one of 17 themes; every screen also works at 4:3).
+
+**Home**, in four styles:
+
+| | |
+|---|---|
+| ![Home: Binder](docs/screenshots/home-binder.png) | ![Home: Spotlight](docs/screenshots/home-spotlight.png) |
+| **Binder**: your lists as tabs, the selected game large | **Spotlight**: the selected game on a slanted panel |
+| ![Home: Cartridge](docs/screenshots/home-cartridge.png) | ![Home: Minimal](docs/screenshots/home-minimal.png) |
+| **Cartridge**: cartridge labels on a band in the label's colour | **Minimal**: the game names are the menu |
+
+**Library**, in three layouts:
+
+| | |
+|---|---|
+| ![Library: Grid](docs/screenshots/library-grid.png) | ![Library: Carousel](docs/screenshots/library-carousel.png) |
+| **Grid**, in three tile sizes | **Carousel** |
+| ![Library: Shelf](docs/screenshots/library-shelf.png) | |
+| **Shelf**, with real box spines | |
 
 ## Features
 
