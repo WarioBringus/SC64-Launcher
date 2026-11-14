@@ -16,7 +16,7 @@ art, game details and music. No games are included.
 
 ## Screenshots
 
-Shown in the Castle Sky theme at 16:9 (one of 17 themes; every screen also works at 4:3).
+Shown in the Castle Sky theme at 16:9 (every screen also works at 4:3).
 
 **Home**, in four styles:
 
@@ -39,6 +39,15 @@ Shown in the Castle Sky theme at 16:9 (one of 17 themes; every screen also works
 **Quick menu** (Start): search, this game's options, theme, Home style and music, wherever you are:
 
 ![Quick menu](docs/screenshots/quick-menu.png)
+
+**Themes**: 17 in all, each readable on every screen. Here are four of them, on Home in the Spotlight style:
+
+| | |
+|---|---|
+| ![Theme: Midnight](docs/screenshots/theme-midnight.png) | ![Theme: Peach Castle](docs/screenshots/theme-peach-castle.png) |
+| **Midnight** | **Peach Castle** |
+| ![Theme: Pocket Green](docs/screenshots/theme-pocket-green.png) | ![Theme: Arcade](docs/screenshots/theme-arcade.png) |
+| **Pocket Green** | **Arcade** |
 
 ## Features
 
