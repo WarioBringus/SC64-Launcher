@@ -44,8 +44,8 @@ Shown in the Castle Sky theme at 16:9 (every screen also works at 4:3).
 
 | | |
 |---|---|
-| ![Theme: Midnight](docs/screenshots/theme-midnight.png) | ![Theme: Peach Castle](docs/screenshots/theme-peach-castle.png) |
-| **Midnight** | **Peach Castle** |
+| ![Theme: Midnight](docs/screenshots/theme-midnight.png) | ![Theme: Lava](docs/screenshots/theme-lava.png) |
+| **Midnight** | **Lava** |
 | ![Theme: Pocket Green](docs/screenshots/theme-pocket-green.png) | ![Theme: Arcade](docs/screenshots/theme-arcade.png) |
 | **Pocket Green** | **Arcade** |
 
