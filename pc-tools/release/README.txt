@@ -52,7 +52,10 @@ Everything below happens on your actual SD card, plugged into your PC. Do the st
 
 4. MUSIC (OPTIONAL)
    Double-click "Music converter.bat", drop in MP3 or WAV files, pick your SD card and press
-   "Convert and copy to SD card". Songs play in the background; the order is set in Settings.
+   "Convert and copy to SD card". Add as many songs as you like. The music starts on a random
+   song and shuffles to the next, showing "Now playing" with the song's name (its file name) as
+   each one starts. Pause or skip a song from the Quick menu (Start); to play them in order or
+   repeat one, see Settings > Sound > Music order.
 
 5. PLAY
    Eject the SD card safely, put it in your SummerCart64 and turn the console on.

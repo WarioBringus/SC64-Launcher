@@ -60,7 +60,9 @@ Shown in the Castle Sky theme at 16:9 (every screen also works at 4:3).
   N64 never has to.
 - **Game details**: genre, developer, publisher, year, players and more, on screen and in sorting.
 - **17 colour themes**, each readable on every screen, in 16:9 or 4:3.
-- **Background music** from your own MP3 or WAV files.
+- **Background music** from your own MP3 or WAV files, as many tracks as you like. It starts on a random track
+  and shuffles to the next (or plays them in order, or repeats one), showing "Now playing" with the track's
+  name as each one starts. Pause or skip a track from the Quick menu.
 - **One Quick menu (Start)** for search, the selected game's options, theme, Home style and music, plus a tabbed
   Settings page made for reading from the couch.
 - **Any ROM names**: covers and details are found from the game code inside each ROM, so dumps from any source, region
