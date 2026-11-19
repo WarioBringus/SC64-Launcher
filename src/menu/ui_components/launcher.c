@@ -1399,6 +1399,12 @@ void launcher_draw_arrow (int cx, int cy, int size, bool right, color_t color) {
 
 void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t color) {
     int straight = (x_top < x_bottom) ? x_top : x_bottom;
+    // The two parts are drawn two ways: fill mode truncates the colour to the 16-bit screen, the triangle's mode
+    // dithers it. Snapped to a 16-bit level (low 3 bits clear), both give the same shade, so the slant shows no
+    // strip of a slightly different colour (it showed on Midnight's dark grey).
+    color.r &= 0xF8;
+    color.g &= 0xF8;
+    color.b &= 0xF8;
     // The large straight part in fill mode, which the RDP draws about four times faster (Spotlight's panel is
     // half the screen; in the performance log the blended fill cost ~2 ms a frame).
     rdpq_mode_push();
