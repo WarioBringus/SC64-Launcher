@@ -29,18 +29,18 @@ static const theme_t themes[] = {
         .text = HEX(0xF0EEE7), .text_muted = HEX(0xA9B4D0), BRIGHT_TEXT_STYLES,
     },
     {
-        .name = "Midnight",
-        .bg = HEX(0x1A1A1D), .panel = HEX(0x26262A), .line = HEX(0x35353A), .highlight = HEX(0x43434A),
-        .accent = HEX(0xEEEEEE), .accent2 = HEX(0xF2A93B), .on_accent = HEX(0x1A1A1D),
-        .feature = HEX(0x4C7BE0), .on_feature = HEX(0xFFFFFF),
+        .name = "Midnight",     /* The dark theme: greys only, an amber tab */
+        .bg = HEX(0x17171A), .panel = HEX(0x242428), .line = HEX(0x333338), .highlight = HEX(0x404046),
+        .accent = HEX(0xEEEEEE), .accent2 = HEX(0xF2A93B), .on_accent = HEX(0x17171A),
+        .feature = HEX(0x36363C), .on_feature = HEX(0xEDEDED),
         .text = HEX(0xEDEDED), .text_muted = HEX(0x8E8E93), BRIGHT_TEXT_STYLES,
     },
     {
-        .name = "Daylight",
-        .bg = HEX(0xE4E0D5), .panel = HEX(0xFBFAF7), .line = HEX(0xC9C4B6), .highlight = HEX(0xDCE6F7),
-        .accent = HEX(0x2F6FD6), .accent2 = HEX(0xE0302A), .on_accent = HEX(0xFFFFFF),
-        .feature = HEX(0x2F6FD6), .on_feature = HEX(0xFFFFFF),
-        .text = HEX(0x1E1E1E), .text_muted = HEX(0x5E5E5E), DEEP_TEXT_STYLES,
+        .name = "Daylight",     /* The light theme, Midnight inverted: muted whites, no bright white */
+        .bg = HEX(0xC8C8C5), .panel = HEX(0xDADAD7), .line = HEX(0xADADA9), .highlight = HEX(0xEAEAE7),
+        .accent = HEX(0x2A2A2D), .accent2 = HEX(0x7F4A0E), .on_accent = HEX(0xEEEEEE),
+        .feature = HEX(0xB2B2AE), .on_feature = HEX(0x1E1E20),
+        .text = HEX(0x1E1E20), .text_muted = HEX(0x4C4C4E), DEEP_TEXT_STYLES,
     },
     {
         .name = "Console Grey",
