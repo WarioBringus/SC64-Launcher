@@ -127,7 +127,7 @@ REQUIREMENTS
 
 CREDITS
 -------
-  N64FlashcartMenu, the menu this is built on - github.com/Polprzewodnikowy/N64FlashcartMenu (AGPL-3.0)
+  N64FlashcartMenu, the menu this is built on - github.com/n64brew/N64FlashcartMenu (AGPL-3.0)
   libdragon, the N64 SDK it uses - libdragon.dev (Unlicense)
   Box art and metadata - N64 Flashcart Menu metadata project, github.com/n64-tools/n64-flashcart-menu-metadata
     (Unlicense)

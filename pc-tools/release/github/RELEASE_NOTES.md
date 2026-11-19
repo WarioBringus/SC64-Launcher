@@ -3,6 +3,9 @@
 **New in 1.0.1:** sound effects and music are now on by default (they were off, so a new install was silent). The
 menu's built-in track plays until you add your own music; turn either off in Settings > Sound.
 
+*Updated 19 November 2026: the download's README.txt now also covers getting back to the launcher from a game and
+how music plays. The launcher itself is unchanged.*
+
 ---
 
 
@@ -39,10 +42,21 @@ No games are included.
 Recommended: Analogue 3D image scaler set to **Stretch**, and the launcher's **Settings > Look > Screen** set to
 **16:9**. Any combination you're comfortable with works.
 
+## Tips
+
+- **Getting back to the launcher from a game**: on the Analogue 3D, press the star button and choose **Reset**
+  (on an N64, press Reset). You land on Home with the game under Resume. Keep **Settings > Games > Fast reboot**
+  off (the default), or Reset starts the same game again.
+- **Favorites**: highlight a game, press **Start**, choose **Add to favorites**.
+- **Music**: add as many songs as you like. They shuffle from a random first track, with "Now playing" showing
+  each one's name; pause or skip from the Quick menu.
+- **Your own tabs**: every folder of games on the card becomes a Library tab.
+
 ## Known limitations
 
 - Home is empty until you play games or add favorites.
-- A ROM with a meaningless file name (like `zelda.z64`) shows that name; rename it in `menu/game-fixes.txt`.
+- A ROM with a meaningless file name (like `zelda.z64`) shows that name; give it a proper title in
+  `menu/game-fixes.txt`.
 - ROM hacks made only for PC emulators won't run on real hardware.
 - Very large libraries reload some art while you scroll far through the Library (the N64 has limited memory for
   covers).

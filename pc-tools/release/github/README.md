@@ -2,7 +2,7 @@
 
 A console-style front end for the **SummerCart64**, made for the **Analogue 3D** first. Your games become a Home screen
 and a Library of box art instead of a file list, with smooth motion, themes, music and covers that grow into the
-loading screen. It's built on [N64FlashcartMenu](https://github.com/Polprzewodnikowy/N64FlashcartMenu) and also runs on an
+loading screen. It's built on [N64FlashcartMenu](https://github.com/n64brew/N64FlashcartMenu) and also runs on an
 original N64 with an Expansion Pak.
 
 [![Watch the SC64 Launcher demo video](docs/screenshots/video-thumbnail.png)](https://youtu.be/wUVdsapzvcc)
@@ -36,7 +36,8 @@ Shown in the Castle Sky theme at 16:9 (every screen also works at 4:3).
 | ![Library: Shelf](docs/screenshots/library-shelf.png) | |
 | **Shelf**, with real box spines | |
 
-**Quick menu** (Start): search, this game's options, theme, Home style and music, wherever you are:
+**Quick menu** (Start): everything in one place, wherever you are: search, surprise me, this game (favorite, hide,
+details), sort, filter and layout, theme, Home style, music and Settings:
 
 ![Quick menu](docs/screenshots/quick-menu.png)
 
@@ -51,9 +52,9 @@ Shown in the Castle Sky theme at 16:9 (every screen also works at 4:3).
 
 ## Features
 
-- **Home**: Resume, Recently played and Favorites, in four styles (Binder, Spotlight, Cartridge, Minimal). Move
-  favorites around with Z.
-- **Library**: each game folder is a tab, in three layouts (Grid, Carousel, Shelf with real box spines) and three tile
+- **Home**: Resume (the last game you played), Recently played (the ones before it) and your Favorites, in four
+  styles (Binder, Spotlight, Cartridge, Minimal). Move favorites around with Z.
+- **Library**: each game folder on the card is a tab (add your own folders for your own tabs), in three layouts (Grid, Carousel, Shelf with real box spines) and three tile
   sizes. Sort by title, genre, developer, year or players; filter, jump between groups, search, or let it pick a
   random game.
 - **Box art everywhere**: covers, cartridge labels, box spines and large hi-res covers, pre-scaled on your PC so the
@@ -63,20 +64,23 @@ Shown in the Castle Sky theme at 16:9 (every screen also works at 4:3).
 - **Background music** from your own MP3 or WAV files, as many tracks as you like. It starts on a random track
   and shuffles to the next (or plays them in order, or repeats one), showing "Now playing" with the track's
   name as each one starts. Pause or skip a track from the Quick menu.
-- **One Quick menu (Start)** for search, the selected game's options, theme, Home style and music, plus a tabbed
-  Settings page made for reading from the couch.
+- **One Quick menu (Start)** with everything: search, surprise me, the selected game's options, sort, filter,
+  layout, theme, Home style and music, plus a tabbed Settings page made for reading from the couch.
 - **Any ROM names**: covers and details are found from the game code inside each ROM, so dumps from any source, region
   or byte order (.z64, .v64, .n64) work. Titles are tidied ("Legend of Zelda, The (USA) (Rev 2)" shows as "The Legend
   of Zelda").
-- The **original menu and file browser** are still one setting away.
+- **N64 games only**: the launcher lists .z64, .v64 and .n64 games. For anything else the original menu can open,
+  use its file browser.
+- The **original menu and file browser** are still one setting away (Settings > Original menu).
 
 ## Requirements
 
 | | |
 |---|---|
-| **SummerCart64** | Firmware 2.17.0 or newer (tested with 2.20.2) |
+| **SummerCart64** | Firmware 2.17.0 or newer (tested with 2.20.2). Other flashcarts that N64FlashcartMenu supports haven't been tested. |
 | **Console** | Analogue 3D, tested with firmware 1.5.1 (should work with that or newer); or an original N64 with an Expansion Pak (covers load more slowly there) |
 | **PC tools** | Windows 10 or 11. Nothing to install: the tools carry their own Python. |
+| **SD card** | Room for your games, plus about 1 MB per game for covers and game details |
 | **Internet** | For the first run of the covers tool (about 60 MB, plus about 1 MB per game) |
 
 ## Installing
@@ -98,15 +102,38 @@ tool again.
 **Settings > Look > Screen** to **16:9**. That's only a recommendation; every screen is laid out for both 16:9 and 4:3,
 so use whatever combination you're comfortable with.
 
+**Updating**: replace `sc64menu.n64` on the card. Your settings, favorites and covers stay.
+
+**ROM hacks**: only use hacks made to run on real hardware. Hacks made for PC emulators won't run on a SummerCart64
+or an Analogue 3D; please don't report those as launcher problems.
+
+## Using it
+
+| Button | What it does |
+|---|---|
+| **A** | Play (turn off Quick launch in Settings to see a game's details first) |
+| **B** | Back |
+| **Start** | Quick menu |
+| **L / R** | Home and Library |
+| **Z** | On Home: move a favorite |
+| **C buttons** | In the Library: jump between letters or groups (left/right), change the tile size (up/down) |
+
+**Favorites**: highlight a game anywhere, press **Start**, and choose **Add to favorites**. They show on Home, where
+**Z** moves them around.
+
+**Home**: **Resume** is the last game you played; **Recently played** is the ones before it.
+
+**Your own tabs**: every folder on the card with games in it becomes a Library tab. Rename the starter folders or add
+your own ("Party games", "To finish"), then run the covers tool again.
+
 **Getting back to the launcher from a game**: on the Analogue 3D, press the star button on the controller and
 choose **Reset**; on an original N64, press the console's Reset button. You land on Home, with the game under
 Resume. This needs **Settings > Games > Fast reboot** set to **Off** (the default); with it on, Reset starts the
 same game again.
 
-**Updating**: replace `sc64menu.n64` on the card. Your settings, favorites and covers stay.
-
-**ROM hacks**: only use hacks made to run on real hardware. Hacks made for PC emulators won't run on a SummerCart64
-or an Analogue 3D; please don't report those as launcher problems.
+**Saves** go in a `saves` folder inside each game folder (for example `N64 USA/saves`), the same as the original
+menu. Controller Pak backups made in **Settings > Games > Controller Pak** go in `cpak_saves`. Back up both now and
+then.
 
 ---
 
@@ -148,14 +175,16 @@ the credits and licence notices.
 everything is in the code, the rules that keep it fast and readable, and how to test and make a release. Claude Code
 reads it automatically when you open the project.
 
-Bug reports are most useful with:
+**Questions, ideas, or want to show off your setup?** Post in
+[Discussions](https://github.com/WarioBringus/SC64-Launcher/discussions). Found a bug? Open an
+[issue](https://github.com/WarioBringus/SC64-Launcher/issues). Bug reports are most useful with:
 - the build number (Settings > System > Menu information),
 - your console (Analogue 3D or N64) and its firmware, and your SummerCart64 firmware,
 - what you did and what happened. A photo of the screen helps.
 
 ## Credits
 
-- **[N64FlashcartMenu](https://github.com/Polprzewodnikowy/N64FlashcartMenu)**: the menu this is built on (AGPL-3.0)
+- **[N64FlashcartMenu](https://github.com/n64brew/N64FlashcartMenu)**: the menu this is built on (AGPL-3.0)
 - **[libdragon](https://libdragon.dev)**: the N64 development library it uses (Unlicense)
 - **[SummerCart64](https://github.com/Polprzewodnikowy/SummerCart64)**: the flashcart itself
 - **Box art and metadata**: [N64 Flashcart Menu metadata project](https://github.com/n64-tools/n64-flashcart-menu-metadata) (Unlicense)
