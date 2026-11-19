@@ -333,10 +333,11 @@ void launcher_draw_background(void);
 
 
 /**
- * @brief This frame's background also has a slanted band from the left edge (x_top wide at the top, x_bottom at y1)
- * with an edge_w wide brighter edge; set before the header, which then sits on it.
+ * @brief This frame's background also has a slanted band from the left edge, from y0 down to y1 (x_top wide at y0,
+ * x_bottom at y1), with an edge_w wide brighter edge; set before the header. From y0 = 0 the header sits on it (header
+ * notes then start past its slant); from below the header, the header is on the plain background.
  */
-void launcher_set_background_band(int x_top, int x_bottom, int y1, color_t color, color_t edge, int edge_w);
+void launcher_set_background_band(int x_top, int x_bottom, int y0, int y1, color_t color, color_t edge, int edge_w);
 
 /**
  * @brief A cover's main colour: its most colourful pixels averaged (white, black and greys left out), from a grid of

@@ -842,6 +842,7 @@ static void eased_color_from (eased_color_t *e, surface_t *image, bool pending, 
 #define CART_ZOOM           (1.0f)  /* The label at the showcase pack's own size: drawn 1:1, the fast way */
 #define CART_PAD            (14)    /* Cartridge body around its label */
 #define CART_GRIP           (34)    /* The cartridge's lower part, under the label */
+#define CART_BAND_Y0        (58)    /* The band's top, below the header and its notes */
 #define CART_BAND_Y1        (296)   /* The band's foot, above the row */
 #define CART_BAND_TOP_W     (150)   /* How far past the cartridge the band reaches, at the top and at its foot */
 #define CART_BAND_FOOT_W    (70)
@@ -889,8 +890,11 @@ static void cart_background (void) {
     want = (want > max_foot) ? max_foot : want;
     cart_band_reach = (cart_band_reach < 0.0f || motion_snap) ? (float)want : launcher_ease(cart_band_reach, (float)want);
     int foot = (int)lroundf(cart_band_reach);
-    launcher_set_background_band(foot + (CART_BAND_TOP_W - CART_BAND_FOOT_W) + dx, foot + dx, CART_BAND_Y1, band, edge,
-        CART_BAND_EDGE);
+    // From below the header (the header and its notes on the plain background, as on the Library), at the slant's
+    // same angle: its top is where the full-height band would cross that line.
+    int top = foot + (CART_BAND_TOP_W - CART_BAND_FOOT_W);
+    top -= (CART_BAND_TOP_W - CART_BAND_FOOT_W) * CART_BAND_Y0 / CART_BAND_Y1;
+    launcher_set_background_band(top + dx, foot + dx, CART_BAND_Y0, CART_BAND_Y1, band, edge, CART_BAND_EDGE);
 }
 
 static void draw_cartridge (menu_t *menu, int *lookups_left) {
@@ -1262,7 +1266,7 @@ static void set_style_chrome (int style) {
             // The panel under the header: Home / Library sit on it in its text colour.
             const theme_t *t = theme_current();
             launcher_set_background_band(LAUNCHER_SCREEN_W * SPOT_TOP_SHARE / 100, LAUNCHER_SCREEN_W * SPOT_BOTTOM_SHARE / 100,
-                display_get_height(), t->feature, t->feature, 0);
+                0, display_get_height(), t->feature, t->feature, 0);
             launcher_set_header_on_feature(true);
             launcher_hide_footer_line();
             break;

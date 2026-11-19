@@ -855,13 +855,14 @@ void launcher_draw_page_title (const char *title) {
 
 
 static bool band_set = false;
-static int band_x_top, band_x_bottom, band_y1, band_edge_w;
+static int band_x_top, band_x_bottom, band_y0, band_y1, band_edge_w;
 static color_t band_color, band_edge;
 
-void launcher_set_background_band (int x_top, int x_bottom, int y1, color_t color, color_t edge, int edge_w) {
+void launcher_set_background_band (int x_top, int x_bottom, int y0, int y1, color_t color, color_t edge, int edge_w) {
     band_set = true;
     band_x_top = x_top;
     band_x_bottom = x_bottom;
+    band_y0 = y0;
     band_y1 = y1;
     band_color = color;
     band_edge = edge;
@@ -877,11 +878,14 @@ void launcher_draw_background (void) {
     ui_components_background_draw();
     header_band_right = -1;
     if (band_set) {
-        int below = band_x_top + (band_x_bottom - band_x_top) * LAUNCHER_SUBHEADER_Y / (band_y1 > 0 ? band_y1 : 1);
-        header_band_right = ((band_x_top > below) ? band_x_top : below) + band_edge_w;
+        if (band_y0 < LAUNCHER_SUBHEADER_Y - 4) {     // It reaches into the header (notes go down to ~54)
+            int span = (band_y1 > band_y0) ? band_y1 - band_y0 : 1;
+            int below = band_x_top + (band_x_bottom - band_x_top) * (LAUNCHER_SUBHEADER_Y - band_y0) / span;
+            header_band_right = ((band_x_top > below) ? band_x_top : below) + band_edge_w;
+        }
         band_set = false;
-        launcher_fill_slanted(band_x_top + band_edge_w, band_x_bottom + band_edge_w, 0, band_y1, band_edge);
-        launcher_fill_slanted(band_x_top, band_x_bottom, 0, band_y1, band_color);
+        launcher_fill_slanted(band_x_top + band_edge_w, band_x_bottom + band_edge_w, band_y0, band_y1, band_edge);
+        launcher_fill_slanted(band_x_top, band_x_bottom, band_y0, band_y1, band_color);
     }
     perf_log_add(PERF_BACKGROUND, (uint32_t)(get_ticks_us() - started));
 }
