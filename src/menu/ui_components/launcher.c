@@ -868,10 +868,17 @@ void launcher_set_background_band (int x_top, int x_bottom, int y1, color_t colo
     band_edge_w = edge_w;
 }
 
+/* How far right a slanted band (Spotlight's panel, Cartridge's band) reaches across the header this frame, in logical
+   pixels; -1 with none. Header notes start past it, so they never sit across the slant. */
+static int header_band_right = -1;
+
 void launcher_draw_background (void) {
     uint64_t started = get_ticks_us();
     ui_components_background_draw();
+    header_band_right = -1;
     if (band_set) {
+        int below = band_x_top + (band_x_bottom - band_x_top) * LAUNCHER_SUBHEADER_Y / (band_y1 > 0 ? band_y1 : 1);
+        header_band_right = ((band_x_top > below) ? band_x_top : below) + band_edge_w;
         band_set = false;
         launcher_fill_slanted(band_x_top + band_edge_w, band_x_bottom + band_edge_w, 0, band_y1, band_edge);
         launcher_fill_slanted(band_x_top, band_x_bottom, 0, band_y1, band_color);
@@ -1189,17 +1196,11 @@ static uint32_t now_playing_generation = 0;
 static uint64_t now_playing_until_ms = 0;
 
 /**
- * @brief "Now playing: ..." in the header between the tabs and the clock, for a few seconds when a track starts.
+ * @brief "Now playing: ..." on one line at a given spot (wallpaper mode, Settings), for a few seconds when a track
+ * starts. The launcher's header uses draw_header_notes instead.
  *
  * @return Whether it was drawn.
  */
-static bool draw_now_playing_at (int x, int y, int width, rdpq_align_t align);
-
-static bool draw_now_playing (void) {
-    return draw_now_playing_at(LAUNCHER_X0 + HEADER_NOTE_X, LAUNCHER_HEADER_Y + 2,
-        LAUNCHER_WIDTH - HEADER_NOTE_X - HEADER_CLOCK_W, ALIGN_RIGHT);
-}
-
 static bool draw_now_playing_at (int x, int y, int width, rdpq_align_t align) {
     uint32_t generation = sound_bgm_track_generation();
     if (generation != now_playing_generation) {
@@ -1228,6 +1229,61 @@ static void draw_new_games_notice_at (int x, int y, int width, rdpq_align_t alig
 
 void launcher_draw_now_playing (int x, int y, int width, rdpq_align_t align) {
     draw_now_playing_at(x, y, width, align);
+}
+
+#define HEADER_NOTE_GAP     (16)    /* Between a header note and the tabs or a slanted band */
+#define HEADER_NOTE_Y       (LAUNCHER_HEADER_Y - 8)     /* A two-line note's first line... */
+#define HEADER_NOTE_LINE    (16)                        /* ...and the step to its second */
+
+/**
+ * @brief A note in the header between x0 and x1, right-aligned, never past either: on one line when it fits; else
+ * label (if any) above the text; else the text alone wrapped by whole words onto two lines.
+ * text must stay in memory (its layout is remembered).
+ */
+static void draw_header_note (int x0, int x1, const char *label, const char *text, menu_font_style_t style) {
+    int w = x1 - x0;
+    if (w < 40 || !text || !text[0]) {
+        return;
+    }
+    uint8_t font = font_for(text, FNT_SMALL);
+    int tw = text_width_font(font, text);
+    if (!label && tw <= w) {
+        text_box_font(font, x0, LAUNCHER_HEADER_Y + 2, w, HINT_TEXT_HEIGHT, ALIGN_RIGHT, VALIGN_TOP, style, text);
+    } else if (label && tw <= w) {
+        text_box_font(font_for(label, FNT_SMALL), x0, HEADER_NOTE_Y, w, HINT_TEXT_HEIGHT, ALIGN_RIGHT, VALIGN_TOP,
+            STL_GRAY, label);
+        text_box_font(font, x0, HEADER_NOTE_Y + HEADER_NOTE_LINE, w, HINT_TEXT_HEIGHT, ALIGN_RIGHT, VALIGN_TOP, style,
+            text);
+    } else {
+        text_box_wrapped(font, x0, HEADER_NOTE_Y, w, HEADER_NOTE_LINE * 2 + 4, ALIGN_RIGHT, VALIGN_TOP, style, text);
+    }
+}
+
+/**
+ * @brief The header's notes, right of the tabs (and of a slanted band): a new track's name takes the clock's place
+ * for its few seconds, with the whole right side to itself; else the clock, and the new games notice between it and
+ * the tabs. Returns whether the clock should be drawn.
+ */
+static bool draw_header_notes (int x0) {
+    uint32_t generation = sound_bgm_track_generation();
+    if (generation != now_playing_generation) {
+        now_playing_generation = generation;
+        now_playing_until_ms = get_ticks_ms() + NOW_PLAYING_MS;
+    }
+    const char *name = sound_bgm_track_name();
+    if (name && sound_bgm_is_playing() && get_ticks_ms() <= now_playing_until_ms) {
+        static char escaped[160];   // Kept in memory: its layout is remembered
+        escape_text_codes(name, escaped, sizeof(escaped));
+        draw_header_note(x0, LAUNCHER_X1, "Now playing", escaped, STL_DEFAULT);
+        return false;
+    }
+    int count = library_new_game_count();
+    if (count > 0) {
+        static char text[64];
+        snprintf(text, sizeof(text), "%d new game%s: run the cover tool", count, count == 1 ? "" : "s");
+        draw_header_note(x0, LAUNCHER_X1 - HEADER_CLOCK_W, NULL, text, STL_ACCENT);
+    }
+    return true;
 }
 
 void launcher_draw_notes (int x, int y, int width, rdpq_align_t align) {
@@ -1496,14 +1552,15 @@ static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
     launcher_fill_rounded(lx, HEADER_UNDERLINE_Y, lx + (int)lroundf(tab_line_w), HEADER_UNDERLINE_Y + 3, 1,
         tab_line_color());
 
-    if (menu->current_time >= 0) {
+    // Notes start right of the tabs, and of a slanted band reaching into the header (Spotlight's panel).
+    int note_x0 = x;
+    if (header_band_right >= 0 && header_band_right + HEADER_NOTE_GAP > note_x0) {
+        note_x0 = header_band_right + HEADER_NOTE_GAP;
+    }
+    if (draw_header_notes(note_x0) && menu->current_time >= 0) {
         char clock[16];
         launcher_clock_text(menu, clock, sizeof(clock));
         launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, LAUNCHER_WIDTH, ALIGN_RIGHT, STL_GRAY, "%s", clock);
-    }
-    // The music note takes the spot for its few seconds; the new games notice comes back after.
-    if (!draw_now_playing()) {
-        launcher_draw_new_games_notice();
     }
 }
 
