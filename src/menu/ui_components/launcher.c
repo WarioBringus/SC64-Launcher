@@ -1400,28 +1400,29 @@ void launcher_draw_arrow (int cx, int cy, int size, bool right, color_t color) {
 }
 
 void launcher_fill_slanted (int x_top, int x_bottom, int y0, int y1, color_t color) {
-    int straight = (x_top < x_bottom) ? x_top : x_bottom;
-    // The two parts are drawn two ways: fill mode truncates the colour to the 16-bit screen, the triangle's mode
-    // dithers it. Snapped to a 16-bit level (low 3 bits clear), both give the same shade, so the slant shows no
-    // strip of a slightly different colour (it showed on Midnight's dark grey).
-    color.r &= 0xF8;
-    color.g &= 0xF8;
-    color.b &= 0xF8;
-    // The large straight part in fill mode, which the RDP draws about four times faster (Spotlight's panel is
-    // half the screen; in the performance log the blended fill cost ~2 ms a frame).
+    // All of it in fill mode, the RDP's fastest (Spotlight's panel is half the screen; a blended fill cost ~2 ms a
+    // frame), and all of it the same way: the slant is a staircase of rectangles, one per step of its edge, as a
+    // triangle's edge steps anyway. A triangle needs another mode, which gives the colour a slightly different shade
+    // on the 16-bit screen; that showed as a strip along the slant in every theme.
+    if (y1 <= y0) {
+        return;
+    }
+    float xt = (float)px(x_top), xb = (float)px(x_bottom);
     rdpq_mode_push();
     rdpq_set_mode_fill(color);
-    rdpq_fill_rectangle(0, y0, px(straight), y1);
-    rdpq_mode_pop();
-    flat_begin(color);
-    // The slanted part: a triangle between the two right ends.
-    float a[] = { px(straight), y0 }, b[] = { px(x_top), y0 }, c[] = { px(x_bottom), y1 }, d[] = { px(straight), y1 };
-    if (x_top > x_bottom) {
-        rdpq_triangle(&TRIFMT_FILL, a, b, d);
-    } else if (x_bottom > x_top) {
-        rdpq_triangle(&TRIFMT_FILL, a, c, d);
+    int run_y = y0;
+    int run_x = (int)lroundf(xt + (xb - xt) * 0.5f / (float)(y1 - y0));
+    for (int y = y0 + 1; y <= y1; y++) {
+        int x = (y < y1) ? (int)lroundf(xt + (xb - xt) * ((float)(y - y0) + 0.5f) / (float)(y1 - y0)) : -1;
+        if (x != run_x) {
+            if (run_x > 0) {
+                rdpq_fill_rectangle(0, run_y, run_x, y);
+            }
+            run_y = y;
+            run_x = x;
+        }
     }
-    flat_end();
+    rdpq_mode_pop();
 }
 
 void launcher_set_header_on_feature (bool on) {
