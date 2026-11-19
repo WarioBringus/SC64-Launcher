@@ -846,9 +846,11 @@ static void mask_corners (int x0, int y0, int x1, int y1, int radius, color_t be
     perf_log_add(PERF_SHAPES, (uint32_t)(get_ticks_us() - perf_started));
 }
 
+static color_t tab_line_color(void);
+
 void launcher_draw_page_title (const char *title) {
     int w = launcher_text(LAUNCHER_X0, LAUNCHER_HEADER_Y, 0, ALIGN_LEFT, STL_DEFAULT, "%s", title);
-    launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, theme_current()->accent2);
+    launcher_fill_rounded(LAUNCHER_X0, HEADER_UNDERLINE_Y, LAUNCHER_X0 + w, HEADER_UNDERLINE_Y + 3, 1, tab_line_color());
 }
 
 
@@ -1430,6 +1432,42 @@ void launcher_set_header_on_feature (bool on) {
  * @brief Home / Library with the underline, the clock, and the music note or new games notice. ease: move the underline
  * on (false when drawn a second time in a frame, over a full-screen fade).
  */
+static float color_contrast(color_t a, color_t b);
+
+/**
+ * @brief The Home / Library underline's one colour per theme, the same on every screen: it sits on the background in
+ * the Library and on the feature colour on Spotlight's Home, so it must show on both. The theme's tab colour when it
+ * does, else its other colours in turn, else (panel and background far apart, nothing reads on both) a mid-tone
+ * between the two.
+ */
+static color_t tab_line_color (void) {
+    static const theme_t *cached_for = NULL;
+    static color_t cached;
+    const theme_t *t = theme_current();
+    if (t == cached_for) {
+        return cached;
+    }
+    color_t mid = RGBA32((t->feature.r + t->bg.r) / 2, (t->feature.g + t->bg.g) / 2, (t->feature.b + t->bg.b) / 2, 0xFF);
+    color_t pool[] = { t->accent2, t->accent, t->on_feature, t->text, mid };
+    int best = 0;
+    float best_score = -1.0f;
+    for (int i = 0; i < (int)(sizeof(pool) / sizeof(pool[0])); i++) {
+        float a = color_contrast(pool[i], t->feature), b = color_contrast(pool[i], t->bg);
+        float score = (a < b) ? a : b;
+        if (score >= 2.0f) {
+            best = i;
+            break;
+        }
+        if (score > best_score) {
+            best = i;
+            best_score = score;
+        }
+    }
+    cached_for = t;
+    cached = pool[best];
+    return cached;
+}
+
 static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
     static const char *tabs[] = { "Home", "Library" };
     bool on_feature = header_on_feature;
@@ -1455,7 +1493,7 @@ static void draw_tabs (menu_t *menu, launcher_tab_t active, bool ease) {
     }
     int lx = (int)lroundf(tab_line_x);
     launcher_fill_rounded(lx, HEADER_UNDERLINE_Y, lx + (int)lroundf(tab_line_w), HEADER_UNDERLINE_Y + 3, 1,
-        on_feature ? theme_current()->on_feature : theme_current()->accent2);
+        tab_line_color());
 
     if (menu->current_time >= 0) {
         char clock[16];
