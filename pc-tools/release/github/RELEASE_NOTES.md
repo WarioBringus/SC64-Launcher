@@ -1,15 +1,30 @@
-# SC64 Launcher v1.0.1
+# SC64 Launcher v1.0.2
 
-**New in 1.0.1:** sound effects and music are now on by default (they were off, so a new install was silent). The
-menu's built-in track plays until you add your own music; turn either off in Settings > Sound.
+A polish update: nicer light and dark themes, and a few visual fixes. To update, replace `sc64menu.n64` on your SD
+card with the one in the download; your settings, favorites and covers stay.
 
-*Updated 19 November 2026: the download's README.txt now also covers getting back to the launcher from a game and
-how music plays. The launcher itself is unchanged.*
+## What's new
+
+- **Midnight and Daylight are now a matched dark and light pair.** Midnight is all greys with an amber accent (no more
+  blue). Daylight is its light twin: soft off-whites and greys instead of bright white, so it no longer glares on a
+  TV.
+- **"Now playing" has its own spot.** When a song starts, its name takes the clock's place in the top right for a few
+  seconds, with "Now playing" above it, the same on every screen. It never runs over Spotlight's slanted panel, and
+  long song names wrap onto two lines instead of being cut off.
+- **Cartridge style:** the coloured band now starts just below the Home / Library row, leaving the header clear.
+- **Fixed:** a strip of slightly different colour along the edge of Spotlight's slanted panel (and the Binder and
+  Cartridge slants), in every theme.
+- **Fixed:** the line under Home / Library changed colour between screens. Each theme now has one underline colour,
+  everywhere.
+- **Fixed (Cartridge, 4:3):** the clock and "Now playing" could disappear from the header.
+
+**Earlier, in 1.0.1:** sound effects and music are on by default (the menu's built-in track plays until you add your
+own music).
 
 ---
 
 
-The first release of a console-style front end for the SummerCart64, made for the Analogue 3D.
+A console-style front end for the SummerCart64, made for the Analogue 3D.
 
 ## What's in the download
 
